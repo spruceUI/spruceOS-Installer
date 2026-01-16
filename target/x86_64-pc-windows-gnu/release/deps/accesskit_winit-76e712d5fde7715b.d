@@ -1,0 +1,9 @@
+/home/sundownersport/claude-projects/SpruceOS Installer/target/x86_64-pc-windows-gnu/release/deps/accesskit_winit-76e712d5fde7715b.d: /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_winit-0.22.4/src/lib.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_winit-0.22.4/src/platform_impl/mod.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_winit-0.22.4/src/platform_impl/windows.rs
+
+/home/sundownersport/claude-projects/SpruceOS Installer/target/x86_64-pc-windows-gnu/release/deps/libaccesskit_winit-76e712d5fde7715b.rlib: /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_winit-0.22.4/src/lib.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_winit-0.22.4/src/platform_impl/mod.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_winit-0.22.4/src/platform_impl/windows.rs
+
+/home/sundownersport/claude-projects/SpruceOS Installer/target/x86_64-pc-windows-gnu/release/deps/libaccesskit_winit-76e712d5fde7715b.rmeta: /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_winit-0.22.4/src/lib.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_winit-0.22.4/src/platform_impl/mod.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_winit-0.22.4/src/platform_impl/windows.rs
+
+/home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_winit-0.22.4/src/lib.rs:
+/home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_winit-0.22.4/src/platform_impl/mod.rs:
+/home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/accesskit_winit-0.22.4/src/platform_impl/windows.rs:

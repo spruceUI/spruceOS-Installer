@@ -1,0 +1,10 @@
+/home/sundownersport/claude-projects/SpruceOS Installer/target/x86_64-pc-windows-gnu/release/deps/arboard-ebc32fabbe6044ce.d: /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/lib.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/common.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/mod.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/windows.rs
+
+/home/sundownersport/claude-projects/SpruceOS Installer/target/x86_64-pc-windows-gnu/release/deps/libarboard-ebc32fabbe6044ce.rlib: /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/lib.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/common.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/mod.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/windows.rs
+
+/home/sundownersport/claude-projects/SpruceOS Installer/target/x86_64-pc-windows-gnu/release/deps/libarboard-ebc32fabbe6044ce.rmeta: /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/lib.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/common.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/mod.rs /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/windows.rs
+
+/home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/lib.rs:
+/home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/common.rs:
+/home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/mod.rs:
+/home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/arboard-3.6.1/src/platform/windows.rs:

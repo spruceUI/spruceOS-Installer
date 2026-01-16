@@ -1,0 +1,11 @@
+/home/sundownersport/claude-projects/SpruceOS Installer/target/x86_64-pc-windows-gnu/release/deps/glutin_wgl_sys-3b3395365fff1ba9.d: /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/glutin_wgl_sys-0.6.1/src/lib.rs /home/sundownersport/claude-projects/SpruceOS\ Installer/target/x86_64-pc-windows-gnu/release/build/glutin_wgl_sys-2777705ef00cea39/out/wgl_bindings.rs /home/sundownersport/claude-projects/SpruceOS\ Installer/target/x86_64-pc-windows-gnu/release/build/glutin_wgl_sys-2777705ef00cea39/out/wgl_extra_bindings.rs
+
+/home/sundownersport/claude-projects/SpruceOS Installer/target/x86_64-pc-windows-gnu/release/deps/libglutin_wgl_sys-3b3395365fff1ba9.rlib: /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/glutin_wgl_sys-0.6.1/src/lib.rs /home/sundownersport/claude-projects/SpruceOS\ Installer/target/x86_64-pc-windows-gnu/release/build/glutin_wgl_sys-2777705ef00cea39/out/wgl_bindings.rs /home/sundownersport/claude-projects/SpruceOS\ Installer/target/x86_64-pc-windows-gnu/release/build/glutin_wgl_sys-2777705ef00cea39/out/wgl_extra_bindings.rs
+
+/home/sundownersport/claude-projects/SpruceOS Installer/target/x86_64-pc-windows-gnu/release/deps/libglutin_wgl_sys-3b3395365fff1ba9.rmeta: /home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/glutin_wgl_sys-0.6.1/src/lib.rs /home/sundownersport/claude-projects/SpruceOS\ Installer/target/x86_64-pc-windows-gnu/release/build/glutin_wgl_sys-2777705ef00cea39/out/wgl_bindings.rs /home/sundownersport/claude-projects/SpruceOS\ Installer/target/x86_64-pc-windows-gnu/release/build/glutin_wgl_sys-2777705ef00cea39/out/wgl_extra_bindings.rs
+
+/home/sundownersport/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/glutin_wgl_sys-0.6.1/src/lib.rs:
+/home/sundownersport/claude-projects/SpruceOS\ Installer/target/x86_64-pc-windows-gnu/release/build/glutin_wgl_sys-2777705ef00cea39/out/wgl_bindings.rs:
+/home/sundownersport/claude-projects/SpruceOS\ Installer/target/x86_64-pc-windows-gnu/release/build/glutin_wgl_sys-2777705ef00cea39/out/wgl_extra_bindings.rs:
+
+# env-dep:OUT_DIR=/home/sundownersport/claude-projects/SpruceOS Installer/target/x86_64-pc-windows-gnu/release/build/glutin_wgl_sys-2777705ef00cea39/out
