@@ -214,36 +214,61 @@ fn find_linux_mount_info(device_path: &str, device_name: &str) -> (Option<PathBu
 pub fn get_removable_drives() -> Vec<DriveInfo> {
     use std::process::Command;
     use std::collections::HashSet;
+    use std::io::Write;
+
+    let log_path = std::env::temp_dir().join("spruce_installer_debug.txt");
+
+    // Helper to append to log file
+    fn write_log(path: &std::path::Path, msg: &str) {
+        use std::io::Write;
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
+            let _ = writeln!(f, "{}", msg);
+        }
+    }
+
+    // Clear and start fresh
+    let _ = std::fs::write(&log_path, "");
+
+    write_log(&log_path, "=== SpruceOS Installer Debug Log ===");
+    write_log(&log_path, &format!("Log file: {:?}", log_path));
+    write_log(&log_path, &format!("Timestamp: {:?}", std::time::SystemTime::now()));
+    write_log(&log_path, "");
+    write_log(&log_path, "macOS get_removable_drives starting...");
 
     let mut drives = Vec::new();
     let mut disk_ids: HashSet<String> = HashSet::new();
 
-    // Try listing external disks first
-    if let Ok(output) = Command::new("diskutil")
-        .args(["list", "-plist", "external"])
-        .output()
-    {
-        if output.status.success() {
-            parse_diskutil_plist(&String::from_utf8_lossy(&output.stdout), &mut disk_ids);
-        }
-    }
-
-    // Also try listing all disks (for built-in SD card readers)
+    // List all disks and let get_macos_disk_info filter appropriately
     if let Ok(output) = Command::new("diskutil")
         .args(["list", "-plist"])
         .output()
     {
         if output.status.success() {
-            parse_diskutil_plist(&String::from_utf8_lossy(&output.stdout), &mut disk_ids);
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            parse_diskutil_plist(&stdout, &mut disk_ids);
+            write_log(&log_path, &format!("Found disk IDs: {:?}", disk_ids));
+        } else {
+            write_log(&log_path, "diskutil list -plist failed");
         }
+    } else {
+        write_log(&log_path, "Failed to run diskutil");
     }
 
     // Get info for each disk
-    for disk_id in disk_ids {
-        if let Some(drive_info) = get_macos_disk_info(&disk_id) {
+    for disk_id in &disk_ids {
+        write_log(&log_path, &format!("\nChecking disk: {}", disk_id));
+        if let Some(drive_info) = get_macos_disk_info(disk_id, &log_path) {
+            write_log(&log_path, &format!(">>> ACCEPTED: {} - {} ({} bytes)",
+                drive_info.name, drive_info.label, drive_info.size_bytes));
             drives.push(drive_info);
         }
     }
+
+    write_log(&log_path, &format!("\nTotal drives found: {}", drives.len()));
+    write_log(&log_path, "\n=== End Debug Log ===");
+
+    // Print location for user
+    eprintln!("Debug log written to: {:?}", log_path);
 
     drives
 }
@@ -274,8 +299,15 @@ fn parse_diskutil_plist(stdout: &str, disk_ids: &mut std::collections::HashSet<S
 }
 
 #[cfg(target_os = "macos")]
-fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
+fn get_macos_disk_info(disk_id: &str, log_path: &std::path::Path) -> Option<DriveInfo> {
     use std::process::Command;
+    use std::io::Write;
+
+    let log = |msg: &str| {
+        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(log_path) {
+            let _ = writeln!(f, "{}", msg);
+        }
+    };
 
     let output = Command::new("diskutil")
         .args(["info", disk_id])
@@ -283,6 +315,7 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
         .ok()?;
 
     if !output.status.success() {
+        log(&format!("{} - diskutil info failed", disk_id));
         return None;
     }
 
@@ -295,6 +328,8 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
     let mut is_ejectable = false;
     let mut is_internal = false;
     let mut is_physical = false;
+    let mut protocol = String::new();
+    let mut media_type = String::new();
 
     for line in info.lines() {
         let line = line.trim();
@@ -327,9 +362,10 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
             let value = line.replace("Ejectable:", "").trim().to_lowercase();
             is_ejectable = value.contains("yes");
         } else if line.starts_with("Protocol:") {
+            protocol = line.replace("Protocol:", "").trim().to_string();
             // USB and SD card protocols indicate removable media
-            let protocol = line.to_lowercase();
-            if protocol.contains("usb") || protocol.contains("secure digital") || protocol.contains("sd") {
+            let proto_lower = protocol.to_lowercase();
+            if proto_lower.contains("usb") || proto_lower.contains("secure digital") || proto_lower.contains("sd") {
                 is_removable = true;
             }
         } else if line.starts_with("Device Location:") {
@@ -344,27 +380,41 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
                 is_physical = true;
             }
         } else if line.starts_with("Media Type:") {
+            media_type = line.replace("Media Type:", "").trim().to_string();
             // SD cards often show as "SD Card" or similar
-            let media_type = line.to_lowercase();
-            if media_type.contains("sd") || media_type.contains("card") {
+            let mt_lower = media_type.to_lowercase();
+            if mt_lower.contains("sd") || mt_lower.contains("card") {
                 is_removable = true;
             }
         }
     }
 
+    // Debug output
+    log(&format!("  label: '{}'", label));
+    log(&format!("  size_bytes: {}", size_bytes));
+    log(&format!("  protocol: '{}'", protocol));
+    log(&format!("  media_type: '{}'", media_type));
+    log(&format!("  is_removable: {}", is_removable));
+    log(&format!("  is_ejectable: {}", is_ejectable));
+    log(&format!("  is_internal: {}", is_internal));
+    log(&format!("  is_physical: {}", is_physical));
+
     // A disk is considered usable if:
     // 1. It's explicitly removable, OR
-    // 2. It's ejectable (like SD cards in built-in readers), OR
-    // 3. It's internal + physical + ejectable (built-in SD card readers)
-    let is_usable = is_removable || is_ejectable || (is_internal && is_physical && is_ejectable);
+    // 2. It's ejectable (like SD cards in built-in readers)
+    let is_usable = is_removable || is_ejectable;
+
+    log(&format!("  is_usable: {}", is_usable));
 
     // Skip if it's internal, not ejectable, and not removable (system drives)
     if is_internal && !is_ejectable && !is_removable {
+        log("  REJECTED: internal and not ejectable/removable");
         return None;
     }
 
     // Only return if it's usable and has a size
     if is_usable && size_bytes > 0 {
+        log("  ACCEPTED");
         Some(DriveInfo {
             name: disk_id.to_string(),
             device_path: format!("/dev/{}", disk_id),
@@ -373,6 +423,7 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
             size_bytes,
         })
     } else {
+        log(&format!("  REJECTED: not usable (usable={}, size={})", is_usable, size_bytes));
         None
     }
 }
