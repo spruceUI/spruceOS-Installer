@@ -2,6 +2,11 @@ fn main() {
     let target = std::env::var("TARGET").unwrap_or_default();
 
     if target.contains("windows") {
+        // Tell cargo to rerun if these files change
+        println!("cargo:rerun-if-changed=app.rc");
+        println!("cargo:rerun-if-changed=app.manifest");
+        println!("cargo:rerun-if-changed=assets/Icons/icon.ico");
+
         // Try to use windres from mingw for cross-compilation
         let out_dir = std::env::var("OUT_DIR").unwrap();
         let res_path = format!("{}/app.res", out_dir);
@@ -20,13 +25,11 @@ fn main() {
         if let Ok(status) = status {
             if status.success() {
                 println!("cargo:rustc-link-arg={}", res_path);
-                println!("cargo:rerun-if-changed=app.rc");
-                println!("cargo:rerun-if-changed=app.manifest");
                 return;
             }
         }
 
-        // Fallback: try embed-resource (works on native Windows)
+        // Fallback: use embed-resource (works on native Windows/MSVC)
         #[cfg(target_os = "windows")]
         {
             embed_resource::compile("app.rc", embed_resource::NONE);

@@ -131,6 +131,19 @@ pub fn setup_theme(ctx: &egui::Context) {
     visuals.extreme_bg_color = COLOR_BG_DARK;
     visuals.faint_bg_color = COLOR_BG_MEDIUM;
 
+    // Window styling (for popup dialogs)
+    visuals.window_shadow = egui::epaint::Shadow {
+        offset: egui::vec2(0.0, 2.0),
+        blur: 8.0,
+        spread: 0.0,
+        color: egui::Color32::from_black_alpha(100),
+    };
+    visuals.window_stroke = egui::Stroke::new(1.0, COLOR_ACCENT_DIM);
+    visuals.window_rounding = egui::Rounding::same(8.0);
+
+    // Popup menu styling
+    visuals.popup_shadow = visuals.window_shadow;
+
     // Widget colors
     visuals.widgets.noninteractive.bg_fill = COLOR_BG_MEDIUM;
     visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, COLOR_TEXT_DIM);
