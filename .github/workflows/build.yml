@@ -64,3 +64,35 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Beta Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: beta
+          name: Beta Build
+          body: |
+            Automated beta build from the latest code.
+
+            **Warning:** This is a pre-release build and may contain bugs.
+
+            ## Downloads
+            - **Windows:** `spruceos-installer-windows.exe`
+            - **Linux:** `spruceos-installer-linux`
+            - **macOS (Apple Silicon):** `spruceos-installer-macos-arm64`
+            - **macOS (Intel):** `spruceos-installer-macos-x64`
+          prerelease: true
+          files: artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
