@@ -80,10 +80,10 @@ jobs:
       - name: Create Beta Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: beta
-          name: Beta Build
+          tag_name: beta-${{ github.ref_name }}
+          name: Beta Build (${{ github.ref_name }})
           body: |
-            Automated beta build from the latest code.
+            Automated beta build from the `${{ github.ref_name }}` branch.
 
             **Warning:** This is a pre-release build and may contain bugs.
 
