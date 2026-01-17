@@ -80,15 +80,43 @@ pub const WINDOW_MIN_SIZE: (f32, f32) = (400.0, 300.0);
 // ----------------------------------------------------------------------------
 // ICON CONFIGURATION
 // ----------------------------------------------------------------------------
-// To add a custom icon:
-// 1. Place your .ico file in the assets/ folder (e.g., assets/icon.ico)
-// 2. Update app.rc to include: IDI_ICON1 ICON "assets/icon.ico"
-// 3. Rebuild the application
+// To customize the application icon:
 //
-// Icon requirements:
-// - Format: .ico (Windows icon format)
-// - Recommended sizes: 16x16, 32x32, 48x48, 256x256 (multi-resolution .ico)
+// 1. Window icon (title bar, taskbar - all platforms):
+//    - Place your icon at: assets/Icons/icon.png
+//    - Recommended: 64x64 or 128x128 PNG with transparency
+//
+// 2. Windows executable icon (file explorer, taskbar):
+//    - Place your icon at: assets/Icons/icon.ico
+//    - Uncomment the IDI_ICON1 line in app.rc
+//    - Recommended: Multi-resolution .ico (16x16, 32x32, 48x48, 256x256)
+//
+// 3. Rebuild the application
 // ----------------------------------------------------------------------------
+
+/// Embedded window icon (PNG format)
+/// Change this path to use a different icon file
+#[cfg(feature = "icon")]
+pub const APP_ICON_PNG: &[u8] = include_bytes!("../assets/Icons/icon.png");
+
+/// Load the application icon for the window
+/// Returns None if no icon is configured or if loading fails
+pub fn load_app_icon() -> Option<egui::IconData> {
+    #[cfg(feature = "icon")]
+    {
+        let image = image::load_from_memory(APP_ICON_PNG).ok()?.into_rgba8();
+        let (width, height) = image.dimensions();
+        Some(egui::IconData {
+            rgba: image.into_raw(),
+            width,
+            height,
+        })
+    }
+    #[cfg(not(feature = "icon"))]
+    {
+        None
+    }
+}
 
 // ============================================================================
 // THEME SETUP (internal use)

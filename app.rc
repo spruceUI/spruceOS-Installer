@@ -1,9 +1,6 @@
 // Windows Resource File
-// To add a custom application icon:
-// 1. Place your .ico file in the assets/ folder (e.g., assets/icon.ico)
-// 2. Uncomment the line below and update the path if needed
-// 3. Rebuild the application
+// Application icon
+IDI_ICON1 ICON "assets/Icons/icon.ico"
 
-// IDI_ICON1 ICON "assets/icon.ico"
-
+// Application manifest (for UAC elevation)
 1 24 "app.manifest"

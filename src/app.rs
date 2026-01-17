@@ -3,6 +3,7 @@ use crate::config::{
     COLOR_SUCCESS, COLOR_TEXT, COLOR_WARNING, DEFAULT_REPO_INDEX, REPO_OPTIONS, VOLUME_LABEL,
 };
 use crate::drives::{get_removable_drives, DriveInfo};
+use crate::eject::eject_drive;
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
 use crate::github::{download_asset, find_7z_asset, get_latest_release, DownloadProgress, Release};
@@ -21,6 +22,7 @@ enum AppState {
     Formatting,
     Extracting,
     Complete,
+    Ejected,
     Error,
 }
 
@@ -48,6 +50,9 @@ pub struct InstallerApp {
 
     // Temp file for downloads
     temp_download_path: Option<PathBuf>,
+
+    // Drive that was installed to (for eject)
+    installed_drive: Option<DriveInfo>,
 }
 
 impl InstallerApp {
@@ -71,6 +76,7 @@ impl InstallerApp {
             })),
             log_messages: Arc::new(Mutex::new(Vec::new())),
             temp_download_path: None,
+            installed_drive: None,
         };
 
         app.refresh_drives();
@@ -113,6 +119,9 @@ impl InstallerApp {
             self.log("Invalid drive selection");
             return;
         };
+
+        // Store the drive for later ejection
+        self.installed_drive = Some(drive.clone());
 
         self.state = AppState::FetchingRelease;
         let (repo_name, repo_url) = REPO_OPTIONS[self.selected_repo_idx];
@@ -688,6 +697,24 @@ impl eframe::App for InstallerApp {
                 match self.state {
                     AppState::Complete => {
                         ui.colored_label(COLOR_SUCCESS, "Installation complete!");
+                        ui.add_space(5.0);
+                        if ui.button("Safely Eject SD Card").clicked() {
+                            if let Some(ref drive) = self.installed_drive {
+                                match eject_drive(drive) {
+                                    Ok(()) => {
+                                        self.log("SD card safely ejected. You may now remove it.");
+                                        self.state = AppState::Ejected;
+                                    }
+                                    Err(e) => {
+                                        self.log(&format!("Eject warning: {}. The card should still be safe to remove.", e));
+                                        self.state = AppState::Ejected;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    AppState::Ejected => {
+                        ui.colored_label(COLOR_SUCCESS, "SD card ejected! You may safely remove it.");
                     }
                     AppState::Error => {
                         ui.colored_label(COLOR_ERROR, "Installation failed. See log for details.");
