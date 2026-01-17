@@ -292,7 +292,9 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
     let mut label = String::new();
     let mut mount_point: Option<PathBuf> = None;
     let mut is_removable = false;
+    let mut is_ejectable = false;
     let mut is_internal = false;
+    let mut is_physical = false;
 
     for line in info.lines() {
         let line = line.trim();
@@ -320,6 +322,10 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
             // Can be "Removable", "Yes", or "Fixed"/"No"
             let value = line.replace("Removable Media:", "").trim().to_lowercase();
             is_removable = value.contains("removable") || value.contains("yes");
+        } else if line.starts_with("Ejectable:") {
+            // Ejectable media (like SD cards in built-in readers)
+            let value = line.replace("Ejectable:", "").trim().to_lowercase();
+            is_ejectable = value.contains("yes");
         } else if line.starts_with("Protocol:") {
             // USB and SD card protocols indicate removable media
             let protocol = line.to_lowercase();
@@ -327,9 +333,15 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
                 is_removable = true;
             }
         } else if line.starts_with("Device Location:") {
-            // Check if it's internal (we want to skip main system drives)
+            // Check if it's internal
             if line.to_lowercase().contains("internal") {
                 is_internal = true;
+            }
+        } else if line.starts_with("Virtual:") {
+            // Physical (non-virtual) disks
+            let value = line.replace("Virtual:", "").trim().to_lowercase();
+            if value.contains("no") {
+                is_physical = true;
             }
         } else if line.starts_with("Media Type:") {
             // SD cards often show as "SD Card" or similar
@@ -340,14 +352,19 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
         }
     }
 
-    // Skip internal non-removable drives (like the system SSD)
-    // But allow internal SD card readers (is_removable would be true for those)
-    if is_internal && !is_removable {
+    // A disk is considered usable if:
+    // 1. It's explicitly removable, OR
+    // 2. It's ejectable (like SD cards in built-in readers), OR
+    // 3. It's internal + physical + ejectable (built-in SD card readers)
+    let is_usable = is_removable || is_ejectable || (is_internal && is_physical && is_ejectable);
+
+    // Skip if it's internal, not ejectable, and not removable (system drives)
+    if is_internal && !is_ejectable && !is_removable {
         return None;
     }
 
-    // Only return if it's removable and has a size
-    if is_removable && size_bytes > 0 {
+    // Only return if it's usable and has a size
+    if is_usable && size_bytes > 0 {
         Some(DriveInfo {
             name: disk_id.to_string(),
             device_path: format!("/dev/{}", disk_id),
