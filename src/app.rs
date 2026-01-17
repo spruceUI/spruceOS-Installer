@@ -494,8 +494,8 @@ async fn get_mount_path_after_format(drive: &DriveInfo, volume_label: &str) -> R
     let _ = std::fs::create_dir_all(&mount_point);
 
     // Mount the partition
-    let output = Command::new("pkexec")
-        .args(["mount", &partition_path, mount_point.to_str().unwrap()])
+    let output = Command::new("mount")
+        .args([&partition_path, mount_point.to_str().unwrap()])
         .output()
         .await
         .map_err(|e| format!("Failed to mount partition: {}", e))?;

@@ -329,8 +329,8 @@ pub async fn format_drive_fat32(
 
     // Create a new partition table and partition using parted
     // First, create a new msdos partition table
-    let output = Command::new("sudo")
-        .args(["parted", "-s", device_path, "mklabel", "msdos"])
+    let output = Command::new("parted")
+        .args(["-s", device_path, "mklabel", "msdos"])
         .output()
         .await
         .map_err(|e| format!("Failed to run parted: {}", e))?;
@@ -346,9 +346,9 @@ pub async fn format_drive_fat32(
     crate::debug::log("Creating primary partition...");
 
     // Create a primary partition spanning the entire disk
-    let output = Command::new("sudo")
+    let output = Command::new("parted")
         .args([
-            "parted", "-s", device_path, "mkpart", "primary", "fat32", "1MiB", "100%",
+            "-s", device_path, "mkpart", "primary", "fat32", "1MiB", "100%",
         ])
         .output()
         .await
@@ -363,15 +363,15 @@ pub async fn format_drive_fat32(
 
     // Set the partition as bootable
     crate::debug::log("Setting boot flag...");
-    let _ = Command::new("sudo")
-        .args(["parted", "-s", device_path, "set", "1", "boot", "on"])
+    let _ = Command::new("parted")
+        .args(["-s", device_path, "set", "1", "boot", "on"])
         .output()
         .await;
 
     // Wait for the kernel to recognize the new partition
     crate::debug::log("Running partprobe...");
-    let _ = Command::new("sudo")
-        .args(["partprobe", device_path])
+    let _ = Command::new("partprobe")
+        .args([device_path])
         .output()
         .await;
 
@@ -389,8 +389,8 @@ pub async fn format_drive_fat32(
 
     // Format the partition as FAT32
     crate::debug::log("Running mkfs.vfat...");
-    let output = Command::new("sudo")
-        .args(["mkfs.vfat", "-F", "32", "-n", volume_label, &partition_path])
+    let output = Command::new("mkfs.vfat")
+        .args(["-F", "32", "-n", volume_label, &partition_path])
         .output()
         .await
         .map_err(|e| format!("Failed to run mkfs.vfat: {}", e))?;
@@ -415,8 +415,8 @@ async fn unmount_linux_device(device_path: &str) -> Result<(), String> {
         let parts: Vec<&str> = line.split_whitespace().collect();
         if parts.len() >= 2 && parts[0].starts_with(device_path) {
             let mount_point = parts[1];
-            let _ = Command::new("sudo")
-                .args(["umount", mount_point])
+            let _ = Command::new("umount")
+                .args([mount_point])
                 .output()
                 .await;
         }
