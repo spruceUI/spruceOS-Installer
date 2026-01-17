@@ -30,7 +30,7 @@ jobs:
             target: aarch64-apple-darwin
             artifact: spruceos-installer-macos-arm64
             binary: spruceos-installer
-          - os: macos-13
+          - os: macos-15
             target: x86_64-apple-darwin
             artifact: spruceos-installer-macos-x64
             binary: spruceos-installer
@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-action@stable
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
