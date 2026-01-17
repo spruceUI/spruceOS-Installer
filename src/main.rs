@@ -24,7 +24,29 @@ fn check_and_request_privileges() {
 
         if let Ok(current_exe) = std::env::current_exe() {
             let mut relaunch_command = if cfg!(target_os = "linux") {
+                // pkexec doesn't preserve environment variables needed for GUI apps
+                // We need to pass display-related env vars through via env command
                 let mut cmd = std::process::Command::new("pkexec");
+                cmd.arg("env");
+
+                // Pass X11 variables
+                if let Ok(display) = std::env::var("DISPLAY") {
+                    cmd.arg(format!("DISPLAY={}", display));
+                }
+                if let Ok(xauth) = std::env::var("XAUTHORITY") {
+                    cmd.arg(format!("XAUTHORITY={}", xauth));
+                } else if let Ok(home) = std::env::var("HOME") {
+                    cmd.arg(format!("XAUTHORITY={}/.Xauthority", home));
+                }
+
+                // Pass Wayland variables if present
+                if let Ok(wayland) = std::env::var("WAYLAND_DISPLAY") {
+                    cmd.arg(format!("WAYLAND_DISPLAY={}", wayland));
+                }
+                if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR") {
+                    cmd.arg(format!("XDG_RUNTIME_DIR={}", xdg_runtime));
+                }
+
                 cmd.arg(current_exe);
                 cmd
             } else if cfg!(target_os = "macos") {
