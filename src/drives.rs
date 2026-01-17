@@ -1,6 +1,3 @@
-use std::ffi::OsString;
-use std::os::windows::ffi::OsStringExt;
-
 #[derive(Debug, Clone)]
 pub struct DriveInfo {
     pub letter: char,
@@ -23,6 +20,8 @@ impl DriveInfo {
 
 #[cfg(windows)]
 pub fn get_removable_drives() -> Vec<DriveInfo> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
     use windows::Win32::Storage::FileSystem::{
         GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW,
     };
