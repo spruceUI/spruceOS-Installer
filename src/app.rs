@@ -1,6 +1,7 @@
 use crate::config::{
-    setup_theme, APP_NAME, COLOR_ACCENT, COLOR_BG_DARK, COLOR_BG_LIGHT, COLOR_ERROR,
-    COLOR_SUCCESS, COLOR_TEXT, COLOR_WARNING, DEFAULT_REPO_INDEX, REPO_OPTIONS, VOLUME_LABEL,
+    setup_theme, APP_NAME, COLOR_ACCENT, COLOR_ACCENT_DIM, COLOR_BG_DARK, COLOR_BG_LIGHT,
+    COLOR_ERROR, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARNING, DEFAULT_REPO_INDEX, REPO_OPTIONS,
+    VOLUME_LABEL,
 };
 use crate::drives::{get_removable_drives, DriveInfo};
 use crate::eject::eject_drive;
@@ -509,10 +510,15 @@ impl eframe::App for InstallerApp {
 
         // Show confirmation dialog if awaiting confirmation
         if self.state == AppState::AwaitingConfirmation {
+            let window_frame = egui::Frame::window(&ctx.style())
+                .fill(COLOR_BG_DARK)
+                .stroke(egui::Stroke::new(1.0, COLOR_ACCENT_DIM));
+
             egui::Window::new("Confirm Installation")
                 .collapsible(false)
                 .resizable(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(window_frame)
                 .show(ctx, |ui| {
                     ui.vertical_centered(|ui| {
                         ui.add_space(10.0);
