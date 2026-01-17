@@ -2,6 +2,7 @@
 
 mod app;
 mod config;
+mod debug;
 mod drives;
 mod eject;
 mod extract;

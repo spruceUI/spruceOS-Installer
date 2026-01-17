@@ -32,18 +32,26 @@ pub async fn extract_7z(
     dest_dir: &Path,
     progress_tx: mpsc::UnboundedSender<ExtractProgress>,
 ) -> Result<(), String> {
+    crate::debug::log_section("7z Extraction");
+    crate::debug::log(&format!("Archive: {:?}", archive_path));
+    crate::debug::log(&format!("Destination: {:?}", dest_dir));
+
     let _ = progress_tx.send(ExtractProgress::Started);
 
     // Verify archive exists
     if !archive_path.exists() {
+        crate::debug::log("ERROR: Archive not found");
         return Err(format!("Archive not found: {:?}", archive_path));
     }
+    crate::debug::log("Archive file exists");
 
     // Ensure destination directory exists
     if !dest_dir.exists() {
+        crate::debug::log("Creating destination directory...");
         std::fs::create_dir_all(dest_dir)
             .map_err(|e| format!("Failed to create destination directory: {}", e))?;
     }
+    crate::debug::log("Destination directory ready");
 
     let _ = progress_tx.send(ExtractProgress::Extracting);
 
@@ -57,8 +65,10 @@ pub async fn extract_7z(
     let seven_zip_path = temp_dir.join("7zr_spruce");
 
     // Write the embedded 7z executable to temp
+    crate::debug::log(&format!("Extracting 7z binary to: {:?}", seven_zip_path));
     std::fs::write(&seven_zip_path, SEVEN_ZIP_EXE)
         .map_err(|e| format!("Failed to extract 7z tool: {}", e))?;
+    crate::debug::log("7z binary extracted successfully");
 
     // On Unix, make the binary executable
     #[cfg(unix)]
@@ -75,6 +85,7 @@ pub async fn extract_7z(
     // Run 7z to extract the archive
     // Command: 7zr x archive.7z -oDestination -y
     let output_arg = format!("-o{}", dest_dir.display());
+    crate::debug::log(&format!("Running 7z extraction command with output arg: {}", output_arg));
 
     #[cfg(target_os = "windows")]
     let result = Command::new(&seven_zip_path)
@@ -101,26 +112,33 @@ pub async fn extract_7z(
 
     // Clean up the temp 7z executable
     let _ = std::fs::remove_file(&seven_zip_path);
+    crate::debug::log("Cleaned up temp 7z binary");
 
     match result {
         Ok(output) => {
+            crate::debug::log(&format!("7z exit status: {:?}", output.status));
             if output.status.success() {
+                crate::debug::log("7z extraction completed successfully");
                 let _ = progress_tx.send(ExtractProgress::Completed);
                 Ok(())
             } else {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 let stdout = String::from_utf8_lossy(&output.stdout);
+                crate::debug::log(&format!("7z stdout: {}", stdout));
+                crate::debug::log(&format!("7z stderr: {}", stderr));
                 let err_msg = format!(
                     "7z extraction failed:\n{}\n{}",
                     stdout.trim(),
                     stderr.trim()
                 );
+                crate::debug::log(&format!("ERROR: {}", err_msg));
                 let _ = progress_tx.send(ExtractProgress::Error(err_msg.clone()));
                 Err(err_msg)
             }
         }
         Err(e) => {
             let err_msg = format!("Failed to run 7z: {}", e);
+            crate::debug::log(&format!("ERROR: {}", err_msg));
             let _ = progress_tx.send(ExtractProgress::Error(err_msg.clone()));
             Err(err_msg)
         }

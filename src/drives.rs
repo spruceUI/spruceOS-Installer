@@ -39,8 +39,11 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
 
     const DRIVE_REMOVABLE: u32 = 2;
 
+    crate::debug::log_section("Windows Drive Detection");
+
     let mut drives = Vec::new();
     let drive_bits = unsafe { GetLogicalDrives() };
+    crate::debug::log(&format!("Drive bitmask: 0x{:08X}", drive_bits));
 
     for i in 0..26u8 {
         if (drive_bits >> i) & 1 == 1 {
@@ -51,6 +54,8 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
                 .collect();
 
             let drive_type = unsafe { GetDriveTypeW(windows::core::PCWSTR(root_path.as_ptr())) };
+
+            crate::debug::log(&format!("Drive {}: type={}", letter, drive_type));
 
             if drive_type == DRIVE_REMOVABLE {
                 let mut label_buf = [0u16; 261];
@@ -90,6 +95,11 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
                     );
                 }
 
+                crate::debug::log(&format!(
+                    "  ACCEPTED: {}: label='{}' size={} bytes",
+                    letter, label, total_bytes
+                ));
+
                 drives.push(DriveInfo {
                     name: format!("{}:", letter),
                     device_path: format!("{}:", letter),
@@ -101,6 +111,7 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
         }
     }
 
+    crate::debug::log(&format!("Total removable drives found: {}", drives.len()));
     drives
 }
 
@@ -110,10 +121,13 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
 
 #[cfg(target_os = "linux")]
 pub fn get_removable_drives() -> Vec<DriveInfo> {
+    crate::debug::log_section("Linux Drive Detection");
+
     let mut drives = Vec::new();
 
     // Read block devices from /sys/block/
     let Ok(entries) = std::fs::read_dir("/sys/block") else {
+        crate::debug::log("Failed to read /sys/block");
         return drives;
     };
 
@@ -129,13 +143,18 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
             continue;
         }
 
+        crate::debug::log(&format!("Checking device: {}", name));
+
         // Check if it's removable
         let removable_path = format!("/sys/block/{}/removable", name);
         let is_removable = std::fs::read_to_string(&removable_path)
             .map(|s| s.trim() == "1")
             .unwrap_or(false);
 
+        crate::debug::log(&format!("  is_removable: {}", is_removable));
+
         if !is_removable {
+            crate::debug::log("  SKIPPED: not removable");
             continue;
         }
 
@@ -147,8 +166,11 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
             .map(|sectors| sectors * 512)
             .unwrap_or(0);
 
+        crate::debug::log(&format!("  size_bytes: {}", size_bytes));
+
         // Skip if size is 0 (no media inserted)
         if size_bytes == 0 {
+            crate::debug::log("  SKIPPED: size is 0");
             continue;
         }
 
@@ -156,6 +178,10 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
 
         // Try to find mount point and label
         let (mount_path, label) = find_linux_mount_info(&device_path, &name);
+
+        crate::debug::log(&format!("  label: '{}'", label));
+        crate::debug::log(&format!("  mount_path: {:?}", mount_path));
+        crate::debug::log("  ACCEPTED");
 
         drives.push(DriveInfo {
             name: name.clone(),
@@ -166,6 +192,7 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
         });
     }
 
+    crate::debug::log(&format!("Total removable drives found: {}", drives.len()));
     drives
 }
 
@@ -214,26 +241,8 @@ fn find_linux_mount_info(device_path: &str, device_name: &str) -> (Option<PathBu
 pub fn get_removable_drives() -> Vec<DriveInfo> {
     use std::process::Command;
     use std::collections::HashSet;
-    use std::io::Write;
 
-    let log_path = std::env::temp_dir().join("spruce_installer_debug.txt");
-
-    // Helper to append to log file
-    fn write_log(path: &std::path::Path, msg: &str) {
-        use std::io::Write;
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
-            let _ = writeln!(f, "{}", msg);
-        }
-    }
-
-    // Clear and start fresh
-    let _ = std::fs::write(&log_path, "");
-
-    write_log(&log_path, "=== SpruceOS Installer Debug Log ===");
-    write_log(&log_path, &format!("Log file: {:?}", log_path));
-    write_log(&log_path, &format!("Timestamp: {:?}", std::time::SystemTime::now()));
-    write_log(&log_path, "");
-    write_log(&log_path, "macOS get_removable_drives starting...");
+    crate::debug::log_section("macOS Drive Detection");
 
     let mut drives = Vec::new();
     let mut disk_ids: HashSet<String> = HashSet::new();
@@ -246,30 +255,25 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
         if output.status.success() {
             let stdout = String::from_utf8_lossy(&output.stdout);
             parse_diskutil_plist(&stdout, &mut disk_ids);
-            write_log(&log_path, &format!("Found disk IDs: {:?}", disk_ids));
+            crate::debug::log(&format!("Found disk IDs: {:?}", disk_ids));
         } else {
-            write_log(&log_path, "diskutil list -plist failed");
+            crate::debug::log("diskutil list -plist failed");
         }
     } else {
-        write_log(&log_path, "Failed to run diskutil");
+        crate::debug::log("Failed to run diskutil");
     }
 
     // Get info for each disk
     for disk_id in &disk_ids {
-        write_log(&log_path, &format!("\nChecking disk: {}", disk_id));
-        if let Some(drive_info) = get_macos_disk_info(disk_id, &log_path) {
-            write_log(&log_path, &format!(">>> ACCEPTED: {} - {} ({} bytes)",
+        crate::debug::log(&format!("\nChecking disk: {}", disk_id));
+        if let Some(drive_info) = get_macos_disk_info(disk_id) {
+            crate::debug::log(&format!(">>> ACCEPTED: {} - {} ({} bytes)",
                 drive_info.name, drive_info.label, drive_info.size_bytes));
             drives.push(drive_info);
         }
     }
 
-    write_log(&log_path, &format!("\nTotal drives found: {}", drives.len()));
-    write_log(&log_path, "\n=== End Debug Log ===");
-
-    // Print location for user
-    eprintln!("Debug log written to: {:?}", log_path);
-
+    crate::debug::log(&format!("\nTotal drives found: {}", drives.len()));
     drives
 }
 
@@ -299,15 +303,8 @@ fn parse_diskutil_plist(stdout: &str, disk_ids: &mut std::collections::HashSet<S
 }
 
 #[cfg(target_os = "macos")]
-fn get_macos_disk_info(disk_id: &str, log_path: &std::path::Path) -> Option<DriveInfo> {
+fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
     use std::process::Command;
-    use std::io::Write;
-
-    let log = |msg: &str| {
-        if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(log_path) {
-            let _ = writeln!(f, "{}", msg);
-        }
-    };
 
     let output = Command::new("diskutil")
         .args(["info", disk_id])
@@ -315,7 +312,7 @@ fn get_macos_disk_info(disk_id: &str, log_path: &std::path::Path) -> Option<Driv
         .ok()?;
 
     if !output.status.success() {
-        log(&format!("{} - diskutil info failed", disk_id));
+        crate::debug::log(&format!("{} - diskutil info failed", disk_id));
         return None;
     }
 
@@ -390,31 +387,31 @@ fn get_macos_disk_info(disk_id: &str, log_path: &std::path::Path) -> Option<Driv
     }
 
     // Debug output
-    log(&format!("  label: '{}'", label));
-    log(&format!("  size_bytes: {}", size_bytes));
-    log(&format!("  protocol: '{}'", protocol));
-    log(&format!("  media_type: '{}'", media_type));
-    log(&format!("  is_removable: {}", is_removable));
-    log(&format!("  is_ejectable: {}", is_ejectable));
-    log(&format!("  is_internal: {}", is_internal));
-    log(&format!("  is_physical: {}", is_physical));
+    crate::debug::log(&format!("  label: '{}'", label));
+    crate::debug::log(&format!("  size_bytes: {}", size_bytes));
+    crate::debug::log(&format!("  protocol: '{}'", protocol));
+    crate::debug::log(&format!("  media_type: '{}'", media_type));
+    crate::debug::log(&format!("  is_removable: {}", is_removable));
+    crate::debug::log(&format!("  is_ejectable: {}", is_ejectable));
+    crate::debug::log(&format!("  is_internal: {}", is_internal));
+    crate::debug::log(&format!("  is_physical: {}", is_physical));
 
     // A disk is considered usable if:
     // 1. It's explicitly removable, OR
     // 2. It's ejectable (like SD cards in built-in readers)
     let is_usable = is_removable || is_ejectable;
 
-    log(&format!("  is_usable: {}", is_usable));
+    crate::debug::log(&format!("  is_usable: {}", is_usable));
 
     // Skip if it's internal, not ejectable, and not removable (system drives)
     if is_internal && !is_ejectable && !is_removable {
-        log("  REJECTED: internal and not ejectable/removable");
+        crate::debug::log("  REJECTED: internal and not ejectable/removable");
         return None;
     }
 
     // Only return if it's usable and has a size
     if is_usable && size_bytes > 0 {
-        log("  ACCEPTED");
+        crate::debug::log("  ACCEPTED");
         Some(DriveInfo {
             name: disk_id.to_string(),
             device_path: format!("/dev/{}", disk_id),
@@ -423,7 +420,7 @@ fn get_macos_disk_info(disk_id: &str, log_path: &std::path::Path) -> Option<Driv
             size_bytes,
         })
     } else {
-        log(&format!("  REJECTED: not usable (usable={}, size={})", is_usable, size_bytes));
+        crate::debug::log(&format!("  REJECTED: not usable (usable={}, size={})", is_usable, size_bytes));
         None
     }
 }

@@ -131,6 +131,13 @@ impl InstallerApp {
             drive.name, repo_name
         ));
 
+        // Log installation start to debug log
+        crate::debug::log_section("Installation Started");
+        crate::debug::log(&format!("Drive: {} ({})", drive.name, drive.device_path));
+        crate::debug::log(&format!("Drive size: {} bytes", drive.size_bytes));
+        crate::debug::log(&format!("Mount path: {:?}", drive.mount_path));
+        crate::debug::log(&format!("Repository: {} ({})", repo_name, repo_url));
+
         let repo_url = repo_url.to_string();
         let progress = self.progress.clone();
         let log_messages = self.log_messages.clone();
@@ -163,12 +170,15 @@ impl InstallerApp {
 
             // Step 1: Fetch release
             log("Fetching latest release from GitHub...");
+            crate::debug::log_section("Fetching Release");
+            crate::debug::log(&format!("Repository URL: {}", repo_url));
             set_progress(0, 100, "Fetching release info...");
 
             let release = match get_latest_release(&repo_url).await {
                 Ok(r) => r,
                 Err(e) => {
                     log(&format!("Error: {}", e));
+                    crate::debug::log(&format!("ERROR fetching release: {}", e));
                     let _ = state_tx_clone.send(AppState::Error);
                     return;
                 }
@@ -178,6 +188,7 @@ impl InstallerApp {
                 Some(a) => a,
                 None => {
                     log("Error: No .7z file found in release");
+                    crate::debug::log("ERROR: No .7z asset found in release");
                     let _ = state_tx_clone.send(AppState::Error);
                     return;
                 }
@@ -187,13 +198,17 @@ impl InstallerApp {
                 "Found release: {} ({})",
                 release.tag_name, asset.name
             ));
+            crate::debug::log(&format!("Release: {}", release.tag_name));
+            crate::debug::log(&format!("Asset: {} ({} bytes)", asset.name, asset.size));
 
             // Step 2: Download
             let _ = state_tx_clone.send(AppState::Downloading);
             log("Downloading release...");
+            crate::debug::log_section("Downloading Release");
 
             let temp_dir = std::env::temp_dir();
             let download_path = temp_dir.join(&asset.name);
+            crate::debug::log(&format!("Download path: {:?}", download_path));
 
             let (dl_tx, mut dl_rx) = mpsc::unbounded_channel::<DownloadProgress>();
 
@@ -244,10 +259,12 @@ impl InstallerApp {
 
             let _ = dl_handle.await;
             log("Download complete");
+            crate::debug::log("Download complete");
 
             // Step 3: Format drive
             let _ = state_tx_clone.send(AppState::Formatting);
             log(&format!("Formatting {}...", drive.name));
+            crate::debug::log_section("Formatting Drive");
             set_progress(0, 100, "Formatting drive...");
 
             let (fmt_tx, mut fmt_rx) = mpsc::unbounded_channel::<FormatProgress>();
@@ -286,18 +303,22 @@ impl InstallerApp {
 
             let _ = fmt_handle.await;
             log("Format complete");
+            crate::debug::log("Format complete");
 
             // Get the destination path for extraction (platform-specific)
+            crate::debug::log("Getting mount path after format...");
             let dest_path = match get_mount_path_after_format(&drive, &volume_label).await {
                 Ok(path) => path,
                 Err(e) => {
                     log(&format!("Error getting mount path: {}", e));
+                    crate::debug::log(&format!("ERROR getting mount path: {}", e));
                     let _ = state_tx_clone.send(AppState::Error);
                     return;
                 }
             };
 
             log(&format!("Destination: {}", dest_path.display()));
+            crate::debug::log(&format!("Mount path: {:?}", dest_path));
 
             // Create a log file on the SD card for debugging
             let log_file_path = dest_path.join("install_log.txt");
@@ -321,6 +342,7 @@ impl InstallerApp {
             // Step 4: Extract
             let _ = state_tx_clone.send(AppState::Extracting);
             log("Extracting files to SD card...");
+            crate::debug::log_section("Extracting Files");
             set_progress(0, 100, "Extracting files...");
 
             let (ext_tx, mut ext_rx) = mpsc::unbounded_channel::<ExtractProgress>();
@@ -373,13 +395,30 @@ impl InstallerApp {
             let _ = ext_handle.await;
             log("Extraction complete");
             write_card_log("Extraction complete");
+            crate::debug::log("Extraction complete");
 
             // Cleanup temp file
             let _ = tokio::fs::remove_file(&download_path).await;
             write_card_log("Cleaned up temp download file");
+            crate::debug::log("Cleaned up temp download file");
+
+            // Copy debug log to SD card
+            log("Writing debug log to SD card...");
+            crate::debug::log("Copying debug log to SD card...");
+            match crate::debug::copy_log_to(&dest_path) {
+                Ok(log_path) => {
+                    log(&format!("Debug log saved to: {}", log_path.display()));
+                    crate::debug::log(&format!("Debug log copied to: {:?}", log_path));
+                }
+                Err(e) => {
+                    log(&format!("Warning: Could not copy debug log: {}", e));
+                    crate::debug::log(&format!("Failed to copy debug log: {}", e));
+                }
+            }
 
             log("Installation complete! You can now safely eject the SD card.");
             write_card_log("Installation complete!");
+            crate::debug::log("Installation complete!");
             let _ = state_tx_clone.send(AppState::Complete);
         });
 

@@ -38,6 +38,10 @@ pub async fn format_drive_fat32(
     use windows::Win32::System::IO::DeviceIoControl;
     use windows::Win32::System::Ioctl::{IOCTL_DISK_GET_LENGTH_INFO, IOCTL_STORAGE_GET_DEVICE_NUMBER};
 
+    crate::debug::log_section("Windows Format Operation");
+    crate::debug::log(&format!("Device path: {}", device_path));
+    crate::debug::log(&format!("Volume label: {}", volume_label));
+
     let _ = progress_tx.send(FormatProgress::Started);
 
     // Extract drive letter from device path (e.g., "E:" -> 'E')
@@ -88,6 +92,7 @@ pub async fn format_drive_fat32(
     }
 
     let disk_number = device_number.device_number;
+    crate::debug::log(&format!("Disk number: {}", disk_number));
     drop(file);
 
     // Get the disk size from the physical disk
@@ -127,9 +132,11 @@ pub async fn format_drive_fat32(
         get_drive_size_windows(drive_letter).unwrap_or(32u64 * 1024 * 1024 * 1024)
     };
 
+    crate::debug::log(&format!("Disk size: {} bytes ({:.2} GB)", disk_size, disk_size as f64 / 1_073_741_824.0));
     drop(disk_file);
 
     let _ = progress_tx.send(FormatProgress::CleaningDisk);
+    crate::debug::log("Running diskpart to clean and partition disk...");
 
     // Create diskpart script for partitioning only (no format)
     let script = create_partition_script(disk_number);
@@ -159,29 +166,39 @@ pub async fn format_drive_fat32(
 
     // Check for errors
     let stdout = String::from_utf8_lossy(&output.stdout);
+    crate::debug::log(&format!("Diskpart output:\n{}", stdout));
+
     if stdout.contains("DiskPart has encountered an error")
         || stdout.contains("Virtual Disk Service error")
         || stdout.contains("Access is denied")
     {
+        crate::debug::log(&format!("Diskpart error detected"));
         return Err(format!("Diskpart error:\n{}", stdout));
     }
+
+    crate::debug::log("Diskpart completed successfully");
 
     // Wait for diskpart to finish and Windows to settle
     tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     let _ = progress_tx.send(FormatProgress::Formatting);
+    crate::debug::log("Locking and dismounting volume before FAT32 format...");
 
     // Lock and dismount the volume to prevent Windows from interfering
     // The new partition will likely be mounted on the same drive letter
     lock_and_dismount_volume(drive_letter).await;
+    crate::debug::log("Volume locked/dismounted");
 
     // Use our custom FAT32 formatter with disk number (writes to PhysicalDrive directly)
+    crate::debug::log("Starting custom FAT32 format...");
     crate::fat32::format_fat32_large(disk_number, volume_label, disk_size, progress_tx.clone())
         .await?;
 
+    crate::debug::log("FAT32 format completed, waiting for Windows to recognize filesystem...");
     // Wait for Windows to recognize the new filesystem
     tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
 
+    crate::debug::log("Windows format operation completed successfully");
     Ok(())
 }
 
@@ -295,13 +312,20 @@ pub async fn format_drive_fat32(
     volume_label: &str,
     progress_tx: mpsc::UnboundedSender<FormatProgress>,
 ) -> Result<(), String> {
+    crate::debug::log_section("Linux Format Operation");
+    crate::debug::log(&format!("Device path: {}", device_path));
+    crate::debug::log(&format!("Volume label: {}", volume_label));
+
     let _ = progress_tx.send(FormatProgress::Started);
 
     // Unmount any mounted partitions on this device
     let _ = progress_tx.send(FormatProgress::Unmounting);
+    crate::debug::log("Unmounting device partitions...");
     unmount_linux_device(device_path).await?;
+    crate::debug::log("Unmount complete");
 
     let _ = progress_tx.send(FormatProgress::CleaningDisk);
+    crate::debug::log("Creating msdos partition table with parted...");
 
     // Create a new partition table and partition using parted
     // First, create a new msdos partition table
@@ -313,10 +337,13 @@ pub async fn format_drive_fat32(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        crate::debug::log(&format!("Parted mklabel failed: {}", stderr));
         return Err(format!("Failed to create partition table: {}", stderr));
     }
+    crate::debug::log("Partition table created");
 
     let _ = progress_tx.send(FormatProgress::CreatingPartition);
+    crate::debug::log("Creating primary partition...");
 
     // Create a primary partition spanning the entire disk
     let output = Command::new("sudo")
@@ -329,16 +356,20 @@ pub async fn format_drive_fat32(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        crate::debug::log(&format!("Parted mkpart failed: {}", stderr));
         return Err(format!("Failed to create partition: {}", stderr));
     }
+    crate::debug::log("Primary partition created");
 
     // Set the partition as bootable
+    crate::debug::log("Setting boot flag...");
     let _ = Command::new("sudo")
         .args(["parted", "-s", device_path, "set", "1", "boot", "on"])
         .output()
         .await;
 
     // Wait for the kernel to recognize the new partition
+    crate::debug::log("Running partprobe...");
     let _ = Command::new("sudo")
         .args(["partprobe", device_path])
         .output()
@@ -354,8 +385,10 @@ pub async fn format_drive_fat32(
     } else {
         format!("{}1", device_path)
     };
+    crate::debug::log(&format!("Partition path: {}", partition_path));
 
     // Format the partition as FAT32
+    crate::debug::log("Running mkfs.vfat...");
     let output = Command::new("sudo")
         .args(["mkfs.vfat", "-F", "32", "-n", volume_label, &partition_path])
         .output()
@@ -364,9 +397,11 @@ pub async fn format_drive_fat32(
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
+        crate::debug::log(&format!("mkfs.vfat failed: {}", stderr));
         return Err(format!("Failed to format partition: {}", stderr));
     }
 
+    crate::debug::log("Linux format operation completed successfully");
     let _ = progress_tx.send(FormatProgress::Completed);
     Ok(())
 }
@@ -403,14 +438,20 @@ pub async fn format_drive_fat32(
     volume_label: &str,
     progress_tx: mpsc::UnboundedSender<FormatProgress>,
 ) -> Result<(), String> {
+    crate::debug::log_section("macOS Format Operation");
+    crate::debug::log(&format!("Device path: {}", device_path));
+    crate::debug::log(&format!("Volume label: {}", volume_label));
+
     let _ = progress_tx.send(FormatProgress::Started);
 
     // Extract disk identifier from device path (e.g., "/dev/disk2" -> "disk2")
     let disk_id = device_path
         .strip_prefix("/dev/")
         .unwrap_or(device_path);
+    crate::debug::log(&format!("Disk ID: {}", disk_id));
 
     let _ = progress_tx.send(FormatProgress::Unmounting);
+    crate::debug::log("Unmounting disk...");
 
     // Unmount the disk first
     let output = Command::new("diskutil")
@@ -424,11 +465,14 @@ pub async fn format_drive_fat32(
         let stderr = String::from_utf8_lossy(&output.stderr);
         if !stderr.contains("was already unmounted") && !stderr.contains("not mounted") {
             // Log but continue
-            eprintln!("Warning: unmount returned: {}", stderr);
+            crate::debug::log(&format!("Unmount warning: {}", stderr));
         }
+    } else {
+        crate::debug::log("Disk unmounted successfully");
     }
 
     let _ = progress_tx.send(FormatProgress::Formatting);
+    crate::debug::log("Running diskutil eraseDisk...");
 
     // Use diskutil to erase and format the disk as FAT32 with MBR
     // diskutil eraseDisk FAT32 LABEL MBRFormat /dev/diskN
@@ -444,9 +488,15 @@ pub async fn format_drive_fat32(
         .await
         .map_err(|e| format!("Failed to format disk: {}", e))?;
 
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    crate::debug::log(&format!("diskutil stdout: {}", stdout));
+    if !stderr.is_empty() {
+        crate::debug::log(&format!("diskutil stderr: {}", stderr));
+    }
+
     if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        crate::debug::log("diskutil eraseDisk failed");
         return Err(format!(
             "Failed to format disk: {}\n{}",
             stderr.trim(),
@@ -454,6 +504,7 @@ pub async fn format_drive_fat32(
         ));
     }
 
+    crate::debug::log("macOS format operation completed successfully");
     let _ = progress_tx.send(FormatProgress::Completed);
     Ok(())
 }
