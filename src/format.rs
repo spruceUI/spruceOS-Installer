@@ -166,10 +166,14 @@ pub async fn format_drive_fat32(
         return Err(format!("Diskpart error:\n{}", stdout));
     }
 
-    // Wait a moment for diskpart to finish
-    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    // Wait for diskpart to finish and Windows to settle
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     let _ = progress_tx.send(FormatProgress::Formatting);
+
+    // Lock and dismount the volume to prevent Windows from interfering
+    // The new partition will likely be mounted on the same drive letter
+    lock_and_dismount_volume(drive_letter).await;
 
     // Use our custom FAT32 formatter with disk number (writes to PhysicalDrive directly)
     crate::fat32::format_fat32_large(disk_number, volume_label, disk_size, progress_tx.clone())
@@ -221,6 +225,64 @@ exit
 "#,
         disk_number
     )
+}
+
+#[cfg(target_os = "windows")]
+async fn lock_and_dismount_volume(drive_letter: char) {
+    use std::fs::OpenOptions;
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::IO::DeviceIoControl;
+
+    const FSCTL_LOCK_VOLUME: u32 = 0x00090018;
+    const FSCTL_DISMOUNT_VOLUME: u32 = 0x00090020;
+
+    let volume_path = format!("\\\\.\\{}:", drive_letter);
+
+    // Try to open and lock the volume
+    let file = match OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&volume_path)
+    {
+        Ok(f) => f,
+        Err(_) => return, // Volume might not exist yet, that's okay
+    };
+
+    let handle = HANDLE(file.as_raw_handle() as *mut std::ffi::c_void);
+    let mut bytes_returned = 0u32;
+
+    // Try to lock the volume
+    let _ = unsafe {
+        DeviceIoControl(
+            handle,
+            FSCTL_LOCK_VOLUME,
+            None,
+            0,
+            None,
+            0,
+            Some(&mut bytes_returned),
+            None,
+        )
+    };
+
+    // Dismount the volume
+    let _ = unsafe {
+        DeviceIoControl(
+            handle,
+            FSCTL_DISMOUNT_VOLUME,
+            None,
+            0,
+            None,
+            0,
+            Some(&mut bytes_returned),
+            None,
+        )
+    };
+
+    // Keep the handle open briefly to maintain the lock
+    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    drop(file);
 }
 
 // =============================================================================
