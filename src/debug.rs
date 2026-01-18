@@ -1,6 +1,7 @@
-// Centralized debug logging for SpruceOS Installer
+// Centralized debug logging for the installer
 // Logs are written to a temp file and can be copied to SD card after installation
 
+use crate::config::{APP_NAME, TEMP_PREFIX};
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -16,11 +17,12 @@ pub struct DebugLog {
 
 impl DebugLog {
     fn new() -> Self {
-        let path = std::env::temp_dir().join("spruce_installer_debug.txt");
+        let log_filename = format!("{}_debug.txt", TEMP_PREFIX);
+        let path = std::env::temp_dir().join(&log_filename);
 
         // Clear existing log and write header
         if let Ok(mut f) = std::fs::File::create(&path) {
-            let _ = writeln!(f, "=== SpruceOS Installer Debug Log ===");
+            let _ = writeln!(f, "=== {} Installer Debug Log ===", APP_NAME);
             let _ = writeln!(f, "Log file: {:?}", path);
             let _ = writeln!(f, "Timestamp: {:?}", std::time::SystemTime::now());
             let _ = writeln!(f, "Platform: {}", std::env::consts::OS);
@@ -64,7 +66,8 @@ pub fn get_log_path() -> PathBuf {
     if let Ok(debug_log) = DEBUG_LOG.lock() {
         debug_log.path.clone()
     } else {
-        std::env::temp_dir().join("spruce_installer_debug.txt")
+        let log_filename = format!("{}_debug.txt", TEMP_PREFIX);
+        std::env::temp_dir().join(log_filename)
     }
 }
 

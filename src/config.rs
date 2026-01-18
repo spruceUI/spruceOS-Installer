@@ -2,6 +2,18 @@
 // INSTALLER CONFIGURATION
 // ============================================================================
 // Edit this file to customize the installer for your OS project.
+//
+// QUICK START - To rebrand this installer, change these values:
+//   1. APP_NAME        - Your OS name (e.g., "MuOS", "Onion", "MinUI")
+//   2. VOLUME_LABEL    - SD card label, max 11 chars uppercase (e.g., "MUOS")
+//   3. REPO_OPTIONS    - Your GitHub repositories
+//
+// ALSO UPDATE THESE EXTERNAL FILES:
+//   - Cargo.toml: name, description, authors fields
+//   - assets/Mac/Info.plist: CFBundleName, CFBundleDisplayName, CFBundleIdentifier
+//   - assets/Icons/icon.png and icon.ico: Your app icons
+//   - .github/workflows/*.yml: Artifact names (optional, cosmetic only)
+//
 // ============================================================================
 
 use eframe::egui;
@@ -11,13 +23,26 @@ use eframe::egui;
 // ----------------------------------------------------------------------------
 
 /// The name of your OS (displayed in window title and UI)
+/// Examples: "SpruceOS", "MuOS", "Onion", "MinUI"
 pub const APP_NAME: &str = "SpruceOS";
 
-/// Window title
-pub const WINDOW_TITLE: &str = "SpruceOS Installer";
-
 /// Volume label applied to formatted SD cards (max 11 characters, uppercase)
+/// This is what the SD card will be named in file explorers
 pub const VOLUME_LABEL: &str = "SPRUCEOS";
+
+// ----------------------------------------------------------------------------
+// INTERNAL IDENTIFIERS (auto-generated from APP_NAME)
+// You generally don't need to change these unless you want custom values
+// ----------------------------------------------------------------------------
+
+/// Window title (displayed in title bar)
+pub const WINDOW_TITLE: &str = concat!(env!("CARGO_PKG_NAME"), " Installer");
+
+/// User-Agent string for HTTP requests to GitHub
+pub const USER_AGENT: &str = env!("CARGO_PKG_NAME");
+
+/// Prefix for temporary folders and files
+pub const TEMP_PREFIX: &str = env!("CARGO_PKG_NAME");
 
 // ----------------------------------------------------------------------------
 // REPOSITORY OPTIONS

@@ -1,3 +1,4 @@
+use crate::config::TEMP_PREFIX;
 use std::path::Path;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, BufReader};
@@ -70,10 +71,10 @@ pub async fn extract_7z(
     let temp_dir = std::env::temp_dir();
 
     #[cfg(target_os = "windows")]
-    let seven_zip_path = temp_dir.join("7zr_spruce.exe");
+    let seven_zip_path = temp_dir.join(format!("7zr_{}.exe", TEMP_PREFIX));
 
     #[cfg(not(target_os = "windows"))]
-    let seven_zip_path = temp_dir.join("7zr_spruce");
+    let seven_zip_path = temp_dir.join(format!("7zr_{}", TEMP_PREFIX));
 
     // Write the embedded 7z executable to temp
     crate::debug::log(&format!("Extracting 7z binary to: {:?}", seven_zip_path));
@@ -94,17 +95,16 @@ pub async fn extract_7z(
     }
 
     // Run 7z to extract the archive with -bsp1 for progress output
-    // Command: 7zr x archive.7z -oDestination -y -bsp1
     let output_arg = format!("-o{}", dest_dir.display());
     crate::debug::log(&format!("Running 7z extraction command with output arg: {}", output_arg));
 
     #[cfg(target_os = "windows")]
     let mut child = Command::new(&seven_zip_path)
-        .arg("x")                           // Extract with full paths
-        .arg(archive_path)                  // Archive to extract
-        .arg(&output_arg)                   // Output directory
-        .arg("-y")                          // Yes to all prompts
-        .arg("-bsp1")                       // Output progress to stdout
+        .arg("x")
+        .arg(archive_path)
+        .arg(&output_arg)
+        .arg("-y")
+        .arg("-bsp1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .creation_flags(CREATE_NO_WINDOW)
@@ -117,7 +117,7 @@ pub async fn extract_7z(
         .arg(archive_path)
         .arg(&output_arg)
         .arg("-y")
-        .arg("-bsp1")                       // Output progress to stdout
+        .arg("-bsp1")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -136,7 +136,6 @@ pub async fn extract_7z(
         tokio::select! {
             _ = cancel_token.cancelled() => {
                 crate::debug::log("Extraction cancelled by user");
-                // Kill the 7z process
                 let _ = child.kill().await;
                 let _ = std::fs::remove_file(&seven_zip_path);
                 let _ = progress_tx.send(ExtractProgress::Cancelled);
@@ -193,11 +192,8 @@ pub async fn extract_7z(
 /// 7z with -bsp1 outputs progress like " 45% 12 - filename" or just " 45%"
 fn parse_7z_percentage(line: &str) -> Option<u8> {
     // Look for pattern like "45%" anywhere in the line
-    // Find the position of '%' and extract the number before it
     if let Some(percent_pos) = line.find('%') {
-        // Get the substring before '%'
         let before_percent = &line[..percent_pos];
-        // Extract digits from the end of this substring
         let num_str: String = before_percent
             .chars()
             .rev()

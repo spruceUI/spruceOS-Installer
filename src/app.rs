@@ -1,7 +1,7 @@
 use crate::config::{
     setup_theme, APP_NAME, COLOR_ACCENT, COLOR_ACCENT_DIM, COLOR_BG_DARK, COLOR_BG_LIGHT,
     COLOR_ERROR, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARNING, DEFAULT_REPO_INDEX, REPO_OPTIONS,
-    VOLUME_LABEL,
+    TEMP_PREFIX, VOLUME_LABEL,
 };
 use crate::copy::{copy_directory_with_progress, CopyProgress};
 use crate::drives::{get_removable_drives, DriveInfo};
@@ -396,7 +396,7 @@ impl InstallerApp {
 
             // Step 4: Extract to temp folder on local PC
             let _ = state_tx_clone.send(AppState::Extracting);
-            let temp_extract_dir = temp_dir.join("spruce_extract");
+            let temp_extract_dir = temp_dir.join(format!("{}_extract", TEMP_PREFIX));
             log("Extracting files to local temp folder...");
             crate::debug::log_section("Extracting Files");
             crate::debug::log(&format!("Temp extract dir: {:?}", temp_extract_dir));
@@ -650,7 +650,7 @@ async fn get_mount_path_after_format(drive: &DriveInfo, volume_label: &str) -> R
     };
 
     // Create a mount point
-    let mount_point = PathBuf::from(format!("/tmp/spruce_installer_{}", volume_label));
+    let mount_point = PathBuf::from(format!("/tmp/{}_{}", TEMP_PREFIX, volume_label));
 
     // Create the mount directory if it doesn't exist
     let _ = std::fs::create_dir_all(&mount_point);

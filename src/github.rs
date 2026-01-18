@@ -1,3 +1,4 @@
+use crate::config::USER_AGENT;
 use futures_util::StreamExt;
 use serde::Deserialize;
 use std::path::Path;
@@ -36,7 +37,7 @@ pub async fn get_latest_release(repo_url: &str) -> Result<Release, String> {
     let client = reqwest::Client::new();
     let response = client
         .get(&api_url)
-        .header("User-Agent", "SpruceOS-Installer")
+        .header("User-Agent", USER_AGENT)
         .header("Accept", "application/vnd.github.v3+json")
         .send()
         .await
@@ -71,7 +72,7 @@ pub async fn download_asset(
     let client = reqwest::Client::new();
     let response = client
         .get(&asset.browser_download_url)
-        .header("User-Agent", "SpruceOS-Installer")
+        .header("User-Agent", USER_AGENT)
         .send()
         .await
         .map_err(|e| format!("Failed to start download: {}", e))?;
