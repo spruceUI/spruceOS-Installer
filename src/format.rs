@@ -1,5 +1,6 @@
 use tokio::process::Command;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 #[cfg(target_os = "windows")]
 use std::process::Stdio;
@@ -18,7 +19,9 @@ pub enum FormatProgress {
     CleaningDisk,
     CreatingPartition,
     Formatting,
+    Progress { percent: u8 },
     Completed,
+    Cancelled,
     Error(String),
 }
 
@@ -33,6 +36,7 @@ pub async fn format_drive_fat32(
     device_path: &str,
     volume_label: &str,
     progress_tx: mpsc::UnboundedSender<FormatProgress>,
+    cancel_token: CancellationToken,
 ) -> Result<(), String> {
     use std::fs::OpenOptions;
     use std::os::windows::io::AsRawHandle;
@@ -44,7 +48,14 @@ pub async fn format_drive_fat32(
     crate::debug::log(&format!("Device path: {}", device_path));
     crate::debug::log(&format!("Volume label: {}", volume_label));
 
+    // Check for cancellation before starting
+    if cancel_token.is_cancelled() {
+        let _ = progress_tx.send(FormatProgress::Cancelled);
+        return Err("Format cancelled".to_string());
+    }
+
     let _ = progress_tx.send(FormatProgress::Started);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 0 });
 
     // Extract drive letter from device path (e.g., "E:" -> 'E')
     let drive_letter = device_path
@@ -97,6 +108,8 @@ pub async fn format_drive_fat32(
     crate::debug::log(&format!("Disk number: {}", disk_number));
     drop(file);
 
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 10 });
+
     // Get the disk size from the physical disk
     let disk_path = format!("\\\\.\\PhysicalDrive{}", disk_number);
     let disk_file = OpenOptions::new()
@@ -137,7 +150,14 @@ pub async fn format_drive_fat32(
     crate::debug::log(&format!("Disk size: {} bytes ({:.2} GB)", disk_size, disk_size as f64 / 1_073_741_824.0));
     drop(disk_file);
 
+    // Check for cancellation before destructive operation
+    if cancel_token.is_cancelled() {
+        let _ = progress_tx.send(FormatProgress::Cancelled);
+        return Err("Format cancelled".to_string());
+    }
+
     let _ = progress_tx.send(FormatProgress::CleaningDisk);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 20 });
     crate::debug::log("Running diskpart to clean and partition disk...");
 
     // Create diskpart script for partitioning only (no format)
@@ -160,6 +180,7 @@ pub async fn format_drive_fat32(
     }
 
     let _ = progress_tx.send(FormatProgress::CreatingPartition);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 40 });
 
     let output = child
         .wait_with_output()
@@ -179,11 +200,19 @@ pub async fn format_drive_fat32(
     }
 
     crate::debug::log("Diskpart completed successfully");
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 50 });
+
+    // Check for cancellation before format
+    if cancel_token.is_cancelled() {
+        let _ = progress_tx.send(FormatProgress::Cancelled);
+        return Err("Format cancelled".to_string());
+    }
 
     // Wait for diskpart to finish and Windows to settle
     tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
     let _ = progress_tx.send(FormatProgress::Formatting);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 60 });
     crate::debug::log("Locking and dismounting volume before FAT32 format...");
 
     // Lock and dismount the volume to prevent Windows from interfering
@@ -191,15 +220,20 @@ pub async fn format_drive_fat32(
     lock_and_dismount_volume(drive_letter).await;
     crate::debug::log("Volume locked/dismounted");
 
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 70 });
+
     // Use our custom FAT32 formatter with disk number (writes to PhysicalDrive directly)
     crate::debug::log("Starting custom FAT32 format...");
     crate::fat32::format_fat32_large(disk_number, volume_label, disk_size, progress_tx.clone())
         .await?;
 
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 95 });
     crate::debug::log("FAT32 format completed, waiting for Windows to recognize filesystem...");
     // Wait for Windows to recognize the new filesystem
     tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
 
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 100 });
+    let _ = progress_tx.send(FormatProgress::Completed);
     crate::debug::log("Windows format operation completed successfully");
     Ok(())
 }
@@ -313,20 +347,36 @@ pub async fn format_drive_fat32(
     device_path: &str,
     volume_label: &str,
     progress_tx: mpsc::UnboundedSender<FormatProgress>,
+    cancel_token: CancellationToken,
 ) -> Result<(), String> {
     crate::debug::log_section("Linux Format Operation");
     crate::debug::log(&format!("Device path: {}", device_path));
     crate::debug::log(&format!("Volume label: {}", volume_label));
 
+    // Check for cancellation before starting
+    if cancel_token.is_cancelled() {
+        let _ = progress_tx.send(FormatProgress::Cancelled);
+        return Err("Format cancelled".to_string());
+    }
+
     let _ = progress_tx.send(FormatProgress::Started);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 0 });
 
     // Unmount any mounted partitions on this device
     let _ = progress_tx.send(FormatProgress::Unmounting);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 10 });
     crate::debug::log("Unmounting device partitions...");
     unmount_linux_device(device_path).await?;
     crate::debug::log("Unmount complete");
 
+    // Check for cancellation before destructive operation
+    if cancel_token.is_cancelled() {
+        let _ = progress_tx.send(FormatProgress::Cancelled);
+        return Err("Format cancelled".to_string());
+    }
+
     let _ = progress_tx.send(FormatProgress::CleaningDisk);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 20 });
     crate::debug::log("Creating msdos partition table with parted...");
 
     // Create a new partition table and partition using parted
@@ -345,6 +395,7 @@ pub async fn format_drive_fat32(
     crate::debug::log("Partition table created");
 
     let _ = progress_tx.send(FormatProgress::CreatingPartition);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 40 });
     crate::debug::log("Creating primary partition...");
 
     // Create a primary partition spanning the entire disk
@@ -363,6 +414,8 @@ pub async fn format_drive_fat32(
     }
     crate::debug::log("Primary partition created");
 
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 50 });
+
     // Set the partition as bootable
     crate::debug::log("Setting boot flag...");
     let _ = Command::new("parted")
@@ -379,7 +432,14 @@ pub async fn format_drive_fat32(
 
     tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
 
+    // Check for cancellation before format
+    if cancel_token.is_cancelled() {
+        let _ = progress_tx.send(FormatProgress::Cancelled);
+        return Err("Format cancelled".to_string());
+    }
+
     let _ = progress_tx.send(FormatProgress::Formatting);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 60 });
 
     // Determine the partition path (e.g., /dev/sdb1 or /dev/mmcblk0p1)
     let partition_path = if device_path.contains("mmcblk") || device_path.contains("nvme") {
@@ -403,6 +463,7 @@ pub async fn format_drive_fat32(
         return Err(format!("Failed to format partition: {}", stderr));
     }
 
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 100 });
     crate::debug::log("Linux format operation completed successfully");
     let _ = progress_tx.send(FormatProgress::Completed);
     Ok(())
@@ -439,12 +500,20 @@ pub async fn format_drive_fat32(
     device_path: &str,
     volume_label: &str,
     progress_tx: mpsc::UnboundedSender<FormatProgress>,
+    cancel_token: CancellationToken,
 ) -> Result<(), String> {
     crate::debug::log_section("macOS Format Operation");
     crate::debug::log(&format!("Device path: {}", device_path));
     crate::debug::log(&format!("Volume label: {}", volume_label));
 
+    // Check for cancellation before starting
+    if cancel_token.is_cancelled() {
+        let _ = progress_tx.send(FormatProgress::Cancelled);
+        return Err("Format cancelled".to_string());
+    }
+
     let _ = progress_tx.send(FormatProgress::Started);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 0 });
 
     // Extract disk identifier from device path (e.g., "/dev/disk2" -> "disk2")
     let disk_id = device_path
@@ -453,6 +522,7 @@ pub async fn format_drive_fat32(
     crate::debug::log(&format!("Disk ID: {}", disk_id));
 
     let _ = progress_tx.send(FormatProgress::Unmounting);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 10 });
     crate::debug::log("Unmounting disk...");
 
     // Unmount the disk first
@@ -473,7 +543,14 @@ pub async fn format_drive_fat32(
         crate::debug::log("Disk unmounted successfully");
     }
 
+    // Check for cancellation before destructive format
+    if cancel_token.is_cancelled() {
+        let _ = progress_tx.send(FormatProgress::Cancelled);
+        return Err("Format cancelled".to_string());
+    }
+
     let _ = progress_tx.send(FormatProgress::Formatting);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 30 });
     crate::debug::log("Running diskutil eraseDisk...");
 
     // Use diskutil to erase and format the disk as FAT32 with MBR
@@ -506,6 +583,7 @@ pub async fn format_drive_fat32(
         ));
     }
 
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 100 });
     crate::debug::log("macOS format operation completed successfully");
     let _ = progress_tx.send(FormatProgress::Completed);
     Ok(())
@@ -520,6 +598,7 @@ pub async fn format_drive_fat32(
     _device_path: &str,
     _volume_label: &str,
     progress_tx: mpsc::UnboundedSender<FormatProgress>,
+    _cancel_token: CancellationToken,
 ) -> Result<(), String> {
     let _ = progress_tx.send(FormatProgress::Error(
         "Formatting not supported on this platform".to_string(),

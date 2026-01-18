@@ -4,6 +4,7 @@ use std::path::Path;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Deserialize)]
 pub struct Release {
@@ -12,7 +13,7 @@ pub struct Release {
     pub assets: Vec<Asset>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Asset {
     pub name: String,
     pub size: u64,
@@ -24,6 +25,7 @@ pub enum DownloadProgress {
     Started { total_bytes: u64 },
     Progress { downloaded: u64, total: u64 },
     Completed,
+    Cancelled,
     Error(String),
 }
 
@@ -58,7 +60,14 @@ pub async fn download_asset(
     asset: &Asset,
     dest_path: &Path,
     progress_tx: mpsc::UnboundedSender<DownloadProgress>,
+    cancel_token: CancellationToken,
 ) -> Result<(), String> {
+    // Check for cancellation before starting
+    if cancel_token.is_cancelled() {
+        let _ = progress_tx.send(DownloadProgress::Cancelled);
+        return Err("Download cancelled".to_string());
+    }
+
     let client = reqwest::Client::new();
     let response = client
         .get(&asset.browser_download_url)
@@ -81,17 +90,38 @@ pub async fn download_asset(
     let mut downloaded: u64 = 0;
     let mut stream = response.bytes_stream();
 
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|e| format!("Download error: {}", e))?;
-        file.write_all(&chunk)
-            .await
-            .map_err(|e| format!("Write error: {}", e))?;
+    loop {
+        tokio::select! {
+            _ = cancel_token.cancelled() => {
+                // Clean up partial file
+                drop(file);
+                let _ = tokio::fs::remove_file(dest_path).await;
+                let _ = progress_tx.send(DownloadProgress::Cancelled);
+                return Err("Download cancelled".to_string());
+            }
+            chunk_result = stream.next() => {
+                match chunk_result {
+                    Some(Ok(chunk)) => {
+                        file.write_all(&chunk)
+                            .await
+                            .map_err(|e| format!("Write error: {}", e))?;
 
-        downloaded += chunk.len() as u64;
-        let _ = progress_tx.send(DownloadProgress::Progress {
-            downloaded,
-            total: total_size,
-        });
+                        downloaded += chunk.len() as u64;
+                        let _ = progress_tx.send(DownloadProgress::Progress {
+                            downloaded,
+                            total: total_size,
+                        });
+                    }
+                    Some(Err(e)) => {
+                        return Err(format!("Download error: {}", e));
+                    }
+                    None => {
+                        // Stream complete
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     file.flush().await.map_err(|e| format!("Flush error: {}", e))?;

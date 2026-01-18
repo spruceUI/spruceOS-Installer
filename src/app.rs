@@ -13,6 +13,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone, PartialEq)]
 enum AppState {
@@ -23,8 +24,9 @@ enum AppState {
     Formatting,
     Extracting,
     Complete,
-    Ejecting, // New state for async ejection
+    Ejecting,
     Ejected,
+    Cancelling,
     Error,
 }
 
@@ -55,6 +57,9 @@ pub struct InstallerApp {
 
     // Drive that was installed to (for eject)
     installed_drive: Option<DriveInfo>,
+
+    // Cancellation token for aborting installation
+    cancel_token: Option<CancellationToken>,
 }
 
 impl InstallerApp {
@@ -76,9 +81,10 @@ impl InstallerApp {
                 total: 100,
                 message: String::new(),
             })),
-            log_messages: Arc::new(Mutex::new(Vec::new())) ,
+            log_messages: Arc::new(Mutex::new(Vec::new())),
             temp_download_path: None,
             installed_drive: None,
+            cancel_token: None,
         };
 
         app.refresh_drives();
@@ -108,6 +114,14 @@ impl InstallerApp {
             if logs.len() > 100 {
                 logs.remove(0);
             }
+        }
+    }
+
+    fn cancel_installation(&mut self) {
+        if let Some(token) = &self.cancel_token {
+            self.log("Cancelling installation...");
+            token.cancel();
+            self.state = AppState::Cancelling;
         }
     }
 
@@ -145,11 +159,16 @@ impl InstallerApp {
         let ctx_clone = ctx.clone();
         let volume_label = VOLUME_LABEL.to_string();
 
+        // Create cancellation token
+        let cancel_token = CancellationToken::new();
+        self.cancel_token = Some(cancel_token.clone());
+
         // Channel for state updates
         let (state_tx, mut state_rx) = mpsc::unbounded_channel::<AppState>();
 
         // Clone values for the async block
         let state_tx_clone = state_tx.clone();
+        let cancel_token_clone = cancel_token.clone();
 
         // Spawn the installation task
         self.runtime.spawn(async move {
@@ -242,6 +261,11 @@ impl InstallerApp {
                                 p.message = "Download complete".to_string();
                             }
                         }
+                        DownloadProgress::Cancelled => {
+                            if let Ok(mut p) = progress_clone.lock() {
+                                p.message = "Download cancelled".to_string();
+                            }
+                        }
                         DownloadProgress::Error(e) => {
                             if let Ok(mut p) = progress_clone.lock() {
                                 p.message = format!("Download error: {}", e);
@@ -252,7 +276,12 @@ impl InstallerApp {
                 }
             });
 
-            if let Err(e) = download_asset(&asset_clone, &download_path_clone, dl_tx).await {
+            if let Err(e) = download_asset(&asset_clone, &download_path_clone, dl_tx, cancel_token_clone.clone()).await {
+                if e.contains("cancelled") {
+                    log("Download cancelled");
+                    let _ = state_tx_clone.send(AppState::Idle);
+                    return;
+                }
                 log(&format!("Download error: {}", e));
                 let _ = state_tx_clone.send(AppState::Error);
                 return;
@@ -275,28 +304,51 @@ impl InstallerApp {
             // Spawn format progress handler
             let fmt_handle = tokio::spawn(async move {
                 while let Some(prog) = fmt_rx.recv().await {
-                    let msg = match prog {
-                        FormatProgress::Started => "Starting format...",
-                        FormatProgress::Unmounting => "Unmounting drive...",
-                        FormatProgress::CleaningDisk => "Cleaning disk...",
-                        FormatProgress::CreatingPartition => "Creating partition...",
-                        FormatProgress::Formatting => "Formatting to FAT32...",
-                        FormatProgress::Completed => "Format complete",
-                        FormatProgress::Error(ref e) => {
-                            if let Ok(mut p) = progress_fmt.lock() {
+                    if let Ok(mut p) = progress_fmt.lock() {
+                        match prog {
+                            FormatProgress::Started => {
+                                p.message = "Starting format...".to_string();
+                            }
+                            FormatProgress::Unmounting => {
+                                p.message = "Unmounting drive...".to_string();
+                            }
+                            FormatProgress::CleaningDisk => {
+                                p.message = "Cleaning disk...".to_string();
+                            }
+                            FormatProgress::CreatingPartition => {
+                                p.message = "Creating partition...".to_string();
+                            }
+                            FormatProgress::Formatting => {
+                                p.message = "Formatting to FAT32...".to_string();
+                            }
+                            FormatProgress::Progress { percent } => {
+                                p.current = percent as u64;
+                                p.total = 100;
+                                p.message = format!("Formatting... {}%", percent);
+                            }
+                            FormatProgress::Completed => {
+                                p.current = 100;
+                                p.total = 100;
+                                p.message = "Format complete".to_string();
+                            }
+                            FormatProgress::Cancelled => {
+                                p.message = "Format cancelled".to_string();
+                            }
+                            FormatProgress::Error(ref e) => {
                                 p.message = format!("Format error: {}", e);
                             }
-                            continue;
                         }
-                    };
-                    if let Ok(mut p) = progress_fmt.lock() {
-                        p.message = msg.to_string();
                     }
                     ctx_fmt.request_repaint();
                 }
             });
 
-            if let Err(e) = format_drive_fat32(&drive.device_path, &volume_label, fmt_tx).await {
+            if let Err(e) = format_drive_fat32(&drive.device_path, &volume_label, fmt_tx, cancel_token_clone.clone()).await {
+                if e.contains("cancelled") {
+                    log("Format cancelled");
+                    let _ = state_tx_clone.send(AppState::Idle);
+                    return;
+                }
                 log(&format!("Format error: {}", e));
                 let _ = state_tx_clone.send(AppState::Error);
                 return;
@@ -353,24 +405,28 @@ impl InstallerApp {
             // Spawn extract progress handler
             let ext_handle = tokio::spawn(async move {
                 while let Some(prog) = ext_rx.recv().await {
-                    match prog {
-                        ExtractProgress::Started => {
-                            if let Ok(mut p) = progress_ext.lock() {
+                    if let Ok(mut p) = progress_ext.lock() {
+                        match prog {
+                            ExtractProgress::Started => {
                                 p.message = "Starting extraction...".to_string();
                             }
-                        }
-                        ExtractProgress::Extracting => {
-                            if let Ok(mut p) = progress_ext.lock() {
+                            ExtractProgress::Extracting => {
                                 p.message = "Extracting files...".to_string();
                             }
-                        }
-                        ExtractProgress::Completed => {
-                            if let Ok(mut p) = progress_ext.lock() {
+                            ExtractProgress::Progress { percent } => {
+                                p.current = percent as u64;
+                                p.total = 100;
+                                p.message = format!("Extracting... {}%", percent);
+                            }
+                            ExtractProgress::Completed => {
+                                p.current = 100;
+                                p.total = 100;
                                 p.message = "Extraction complete".to_string();
                             }
-                        }
-                        ExtractProgress::Error(e) => {
-                            if let Ok(mut p) = progress_ext.lock() {
+                            ExtractProgress::Cancelled => {
+                                p.message = "Extraction cancelled".to_string();
+                            }
+                            ExtractProgress::Error(e) => {
                                 p.message = format!("Extract error: {}", e);
                             }
                         }
@@ -384,7 +440,13 @@ impl InstallerApp {
                 download_path, dest_path
             ));
 
-            if let Err(e) = extract_7z_with_progress(&download_path, &dest_path, ext_tx).await {
+            if let Err(e) = extract_7z_with_progress(&download_path, &dest_path, ext_tx, cancel_token_clone.clone()).await {
+                if e.contains("cancelled") {
+                    write_card_log("Extraction cancelled");
+                    log("Extraction cancelled");
+                    let _ = state_tx_clone.send(AppState::Idle);
+                    return;
+                }
                 write_card_log(&format!("Extract error: {}", e));
                 log(&format!("Extract error: {}", e));
                 let _ = state_tx_clone.send(AppState::Error);
@@ -438,6 +500,7 @@ impl InstallerApp {
                         AppState::Extracting => "Extracting...".to_string(),
                         AppState::Complete => "COMPLETE".to_string(),
                         AppState::Error => "ERROR".to_string(),
+                        AppState::Idle => "CANCELLED".to_string(),
                         _ => p.message.clone(),
                     };
                 }
@@ -533,9 +596,15 @@ impl eframe::App for InstallerApp {
         if let Ok(mut progress) = self.progress.lock() {
             if progress.message == "COMPLETE" {
                 self.state = AppState::Complete;
+                self.cancel_token = None;
                 progress.message.clear();
             } else if progress.message == "ERROR" {
                 self.state = AppState::Error;
+                self.cancel_token = None;
+                progress.message.clear();
+            } else if progress.message == "CANCELLED" {
+                self.state = AppState::Idle;
+                self.cancel_token = None;
                 progress.message.clear();
             } else if self.state == AppState::Idle || self.state == AppState::AwaitingConfirmation {
                 // Only update state if we are not already in a process
@@ -564,6 +633,7 @@ impl eframe::App for InstallerApp {
                 | AppState::Formatting
                 | AppState::Extracting
                 | AppState::Ejecting
+                | AppState::Cancelling
         );
         if is_busy {
             ctx.request_repaint();
@@ -685,6 +755,7 @@ impl eframe::App for InstallerApp {
                         | AppState::Extracting
                         | AppState::AwaitingConfirmation
                         | AppState::Ejecting
+                        | AppState::Cancelling
                 );
 
                 ui.add_enabled_ui(!is_busy && self.selected_drive_idx.is_some(), |ui| {
@@ -703,6 +774,7 @@ impl eframe::App for InstallerApp {
                         | AppState::Downloading
                         | AppState::Formatting
                         | AppState::Extracting
+                        | AppState::Cancelling
                 );
 
                 if show_progress {
@@ -711,10 +783,11 @@ impl eframe::App for InstallerApp {
                         (p.current, p.total, p.message.clone())
                     };
 
-                    // Check if we're in a phase with indeterminate progress
+                    // Only FetchingRelease has indeterminate progress
+                    // Downloading, Formatting, and Extracting now report percentages
                     let is_indeterminate = matches!(
                         self.state,
-                        AppState::Extracting | AppState::Formatting | AppState::FetchingRelease
+                        AppState::FetchingRelease
                     );
 
                     if is_indeterminate {
@@ -761,6 +834,28 @@ impl eframe::App for InstallerApp {
 
                     ui.add_space(5.0);
                     ui.colored_label(COLOR_TEXT, &message);
+
+                    // Cancel button (only show during cancellable operations)
+                    let can_cancel = matches!(
+                        self.state,
+                        AppState::FetchingRelease
+                            | AppState::Downloading
+                            | AppState::Formatting
+                            | AppState::Extracting
+                    ) && self.cancel_token.is_some();
+
+                    if can_cancel {
+                        ui.add_space(10.0);
+                        if ui.button("Cancel").clicked() {
+                            self.cancel_installation();
+                        }
+                    }
+
+                    // Show cancelling message
+                    if self.state == AppState::Cancelling {
+                        ui.add_space(5.0);
+                        ui.colored_label(COLOR_WARNING, "Cancelling...");
+                    }
                 }
 
                 // Status

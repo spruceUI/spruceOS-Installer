@@ -1,7 +1,9 @@
 use std::path::Path;
 use std::process::Stdio;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::mpsc;
+use tokio_util::sync::CancellationToken;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -23,7 +25,9 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 pub enum ExtractProgress {
     Started,
     Extracting,
+    Progress { percent: u8 },
     Completed,
+    Cancelled,
     Error(String),
 }
 
@@ -31,10 +35,17 @@ pub async fn extract_7z(
     archive_path: &Path,
     dest_dir: &Path,
     progress_tx: mpsc::UnboundedSender<ExtractProgress>,
+    cancel_token: CancellationToken,
 ) -> Result<(), String> {
     crate::debug::log_section("7z Extraction");
     crate::debug::log(&format!("Archive: {:?}", archive_path));
     crate::debug::log(&format!("Destination: {:?}", dest_dir));
+
+    // Check for cancellation before starting
+    if cancel_token.is_cancelled() {
+        let _ = progress_tx.send(ExtractProgress::Cancelled);
+        return Err("Extraction cancelled".to_string());
+    }
 
     let _ = progress_tx.send(ExtractProgress::Started);
 
@@ -82,74 +93,127 @@ pub async fn extract_7z(
             .map_err(|e| format!("Failed to set executable permission: {}", e))?;
     }
 
-    // Run 7z to extract the archive
-    // Command: 7zr x archive.7z -oDestination -y
+    // Run 7z to extract the archive with -bsp1 for progress output
+    // Command: 7zr x archive.7z -oDestination -y -bsp1
     let output_arg = format!("-o{}", dest_dir.display());
     crate::debug::log(&format!("Running 7z extraction command with output arg: {}", output_arg));
 
     #[cfg(target_os = "windows")]
-    let result = Command::new(&seven_zip_path)
+    let mut child = Command::new(&seven_zip_path)
         .arg("x")                           // Extract with full paths
         .arg(archive_path)                  // Archive to extract
         .arg(&output_arg)                   // Output directory
         .arg("-y")                          // Yes to all prompts
+        .arg("-bsp1")                       // Output progress to stdout
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .creation_flags(CREATE_NO_WINDOW)
-        .output()
-        .await;
+        .spawn()
+        .map_err(|e| format!("Failed to start 7z: {}", e))?;
 
     #[cfg(not(target_os = "windows"))]
-    let result = Command::new(&seven_zip_path)
+    let mut child = Command::new(&seven_zip_path)
         .arg("x")
         .arg(archive_path)
         .arg(&output_arg)
         .arg("-y")
+        .arg("-bsp1")                       // Output progress to stdout
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .output()
-        .await;
+        .spawn()
+        .map_err(|e| format!("Failed to start 7z: {}", e))?;
+
+    // Take stdout for progress parsing
+    let stdout = child.stdout.take()
+        .ok_or_else(|| "Failed to capture 7z stdout".to_string())?;
+
+    let mut reader = BufReader::new(stdout).lines();
+    let mut last_percent: u8 = 0;
+
+    // Read stdout line by line, looking for percentage
+    loop {
+        tokio::select! {
+            _ = cancel_token.cancelled() => {
+                crate::debug::log("Extraction cancelled by user");
+                // Kill the 7z process
+                let _ = child.kill().await;
+                let _ = std::fs::remove_file(&seven_zip_path);
+                let _ = progress_tx.send(ExtractProgress::Cancelled);
+                return Err("Extraction cancelled".to_string());
+            }
+            line_result = reader.next_line() => {
+                match line_result {
+                    Ok(Some(line)) => {
+                        // Parse percentage from 7z output (looks like " 45%" or "45%")
+                        if let Some(percent) = parse_7z_percentage(&line) {
+                            if percent != last_percent {
+                                last_percent = percent;
+                                let _ = progress_tx.send(ExtractProgress::Progress { percent });
+                            }
+                        }
+                    }
+                    Ok(None) => {
+                        // EOF - process finished output
+                        break;
+                    }
+                    Err(e) => {
+                        crate::debug::log(&format!("Error reading 7z output: {}", e));
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // Wait for process to complete
+    let status = child.wait().await
+        .map_err(|e| format!("Failed to wait for 7z: {}", e))?;
 
     // Clean up the temp 7z executable
     let _ = std::fs::remove_file(&seven_zip_path);
     crate::debug::log("Cleaned up temp 7z binary");
 
-    match result {
-        Ok(output) => {
-            crate::debug::log(&format!("7z exit status: {:?}", output.status));
-            if output.status.success() {
-                crate::debug::log("7z extraction completed successfully");
-                let _ = progress_tx.send(ExtractProgress::Completed);
-                Ok(())
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                crate::debug::log(&format!("7z stdout: {}", stdout));
-                crate::debug::log(&format!("7z stderr: {}", stderr));
-                let err_msg = format!(
-                    "7z extraction failed:\n{}\n{}",
-                    stdout.trim(),
-                    stderr.trim()
-                );
-                crate::debug::log(&format!("ERROR: {}", err_msg));
-                let _ = progress_tx.send(ExtractProgress::Error(err_msg.clone()));
-                Err(err_msg)
-            }
-        }
-        Err(e) => {
-            let err_msg = format!("Failed to run 7z: {}", e);
-            crate::debug::log(&format!("ERROR: {}", err_msg));
-            let _ = progress_tx.send(ExtractProgress::Error(err_msg.clone()));
-            Err(err_msg)
-        }
+    if status.success() {
+        crate::debug::log("7z extraction completed successfully");
+        let _ = progress_tx.send(ExtractProgress::Completed);
+        Ok(())
+    } else {
+        let err_msg = format!("7z extraction failed with exit code: {:?}", status.code());
+        crate::debug::log(&format!("ERROR: {}", err_msg));
+        let _ = progress_tx.send(ExtractProgress::Error(err_msg.clone()));
+        Err(err_msg)
     }
 }
 
-/// Alias for backward compatibility with app.rs
+/// Parse percentage from 7z output line
+/// 7z with -bsp1 outputs lines like " 45%" or "100%"
+fn parse_7z_percentage(line: &str) -> Option<u8> {
+    let line = line.trim();
+    // Look for pattern like "45%" at the end or standalone
+    if line.ends_with('%') {
+        // Find the number before the %
+        let num_str: String = line.chars()
+            .rev()
+            .skip(1)  // Skip the %
+            .take_while(|c| c.is_ascii_digit())
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
+
+        if let Ok(percent) = num_str.parse::<u8>() {
+            return Some(percent.min(100));
+        }
+    }
+    None
+}
+
+/// Main entry point for extraction with cancellation support
 pub async fn extract_7z_with_progress(
     archive_path: &Path,
     dest_dir: &Path,
     progress_tx: mpsc::UnboundedSender<ExtractProgress>,
+    cancel_token: CancellationToken,
 ) -> Result<(), String> {
-    extract_7z(archive_path, dest_dir, progress_tx).await
+    extract_7z(archive_path, dest_dir, progress_tx, cancel_token).await
 }
