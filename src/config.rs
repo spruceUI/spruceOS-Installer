@@ -9,7 +9,7 @@
 //   3. REPO_OPTIONS    - Your GitHub repositories
 //
 // ALSO UPDATE THESE EXTERNAL FILES:
-//   - Cargo.toml: name, description
+//   - Cargo.toml: name, description, authors fields
 //   - assets/Mac/Info.plist: CFBundleName, CFBundleDisplayName, CFBundleIdentifier
 //   - assets/Icons/icon.png and icon.ico: Your app icons
 //   - .github/workflows/*.yml: Artifact names (optional, cosmetic only)
@@ -171,9 +171,11 @@ pub fn setup_theme(ctx: &egui::Context) {
     visuals.popup_shadow = visuals.window_shadow;
 
     // Widget colors
+    // noninteractive = labels, text, and other non-clickable elements
     visuals.widgets.noninteractive.bg_fill = COLOR_BG_MEDIUM;
-    visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, COLOR_TEXT_DIM);
+    visuals.widgets.noninteractive.fg_stroke = egui::Stroke::new(1.0, COLOR_TEXT);
 
+    // inactive = buttons and interactive elements when not hovered
     visuals.widgets.inactive.bg_fill = COLOR_BG_LIGHT;
     visuals.widgets.inactive.fg_stroke = egui::Stroke::new(1.0, COLOR_TEXT);
 
