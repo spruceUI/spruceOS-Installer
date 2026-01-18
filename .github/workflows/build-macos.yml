@@ -48,44 +48,50 @@ jobs:
 
       - name: Create ARM64 App Bundle
         run: |
-          # Create .app bundle structure
-          mkdir -p "SpruceOS Installer.app/Contents/MacOS"
-          mkdir -p "SpruceOS Installer.app/Contents/Resources"
+          # Create .app bundle structure (no spaces in name)
+          mkdir -p "SpruceOSInstaller.app/Contents/MacOS"
+          mkdir -p "SpruceOSInstaller.app/Contents/Resources"
 
           # Copy binary
-          cp "target/aarch64-apple-darwin/release/spruceos-installer" "SpruceOS Installer.app/Contents/MacOS/"
-          chmod +x "SpruceOS Installer.app/Contents/MacOS/spruceos-installer"
+          cp "target/aarch64-apple-darwin/release/spruceos-installer" "SpruceOSInstaller.app/Contents/MacOS/"
+          chmod +x "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
 
           # Copy Info.plist
-          cp "assets/Mac/Info.plist" "SpruceOS Installer.app/Contents/"
+          cp "assets/Mac/Info.plist" "SpruceOSInstaller.app/Contents/"
 
           # Copy icon
-          cp "AppIcon.icns" "SpruceOS Installer.app/Contents/Resources/"
+          cp "AppIcon.icns" "SpruceOSInstaller.app/Contents/Resources/"
+
+          # Remove quarantine attribute to prevent macOS Gatekeeper issues
+          xattr -cr "SpruceOSInstaller.app"
 
           # Create zip for distribution
-          zip -r "SpruceOS-Installer-macOS-arm64.zip" "SpruceOS Installer.app"
+          zip -r "SpruceOS-Installer-macOS-arm64.zip" "SpruceOSInstaller.app"
 
           # Clean up for next build
-          rm -rf "SpruceOS Installer.app"
+          rm -rf "SpruceOSInstaller.app"
 
       - name: Create x64 App Bundle
         run: |
-          # Create .app bundle structure
-          mkdir -p "SpruceOS Installer.app/Contents/MacOS"
-          mkdir -p "SpruceOS Installer.app/Contents/Resources"
+          # Create .app bundle structure (no spaces in name)
+          mkdir -p "SpruceOSInstaller.app/Contents/MacOS"
+          mkdir -p "SpruceOSInstaller.app/Contents/Resources"
 
           # Copy binary
-          cp "target/x86_64-apple-darwin/release/spruceos-installer" "SpruceOS Installer.app/Contents/MacOS/"
-          chmod +x "SpruceOS Installer.app/Contents/MacOS/spruceos-installer"
+          cp "target/x86_64-apple-darwin/release/spruceos-installer" "SpruceOSInstaller.app/Contents/MacOS/"
+          chmod +x "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
 
           # Copy Info.plist
-          cp "assets/Mac/Info.plist" "SpruceOS Installer.app/Contents/"
+          cp "assets/Mac/Info.plist" "SpruceOSInstaller.app/Contents/"
 
           # Copy icon
-          cp "AppIcon.icns" "SpruceOS Installer.app/Contents/Resources/"
+          cp "AppIcon.icns" "SpruceOSInstaller.app/Contents/Resources/"
+
+          # Remove quarantine attribute to prevent macOS Gatekeeper issues
+          xattr -cr "SpruceOSInstaller.app"
 
           # Create zip for distribution
-          zip -r "SpruceOS-Installer-macOS-x64.zip" "SpruceOS Installer.app"
+          zip -r "SpruceOS-Installer-macOS-x64.zip" "SpruceOSInstaller.app"
 
       - name: Upload ARM64 artifact
         uses: actions/upload-artifact@v4
@@ -121,7 +127,12 @@ jobs:
 
             **Warning:** This is a pre-release build and may contain bugs.
 
-            **macOS Users:** Download the zip, extract it, then double-click "SpruceOS Installer.app" to run.
+            **macOS Users:** 
+            1. Download and extract the zip file
+            2. Double-click "SpruceOSInstaller.app" to run
+            3. If macOS blocks the app, right-click the app and select "Open", then click "Open" in the dialog
+            
+            Note: This app is not code-signed. For production releases, consider signing the app with an Apple Developer certificate.
           prerelease: true
           files: artifacts/**/*
         env:
