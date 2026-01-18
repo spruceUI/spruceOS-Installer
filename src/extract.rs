@@ -127,10 +127,11 @@ pub async fn extract_7z(
     let stdout = child.stdout.take()
         .ok_or_else(|| "Failed to capture 7z stdout".to_string())?;
 
-    let mut reader = BufReader::new(stdout).lines();
+    let mut reader = BufReader::new(stdout);
     let mut last_percent: u8 = 0;
+    let mut buffer = Vec::new();
 
-    // Read stdout line by line, looking for percentage
+    // Read stdout looking for progress - 7z uses \r for progress updates
     loop {
         tokio::select! {
             _ = cancel_token.cancelled() => {
@@ -141,20 +142,23 @@ pub async fn extract_7z(
                 let _ = progress_tx.send(ExtractProgress::Cancelled);
                 return Err("Extraction cancelled".to_string());
             }
-            line_result = reader.next_line() => {
-                match line_result {
-                    Ok(Some(line)) => {
-                        // Parse percentage from 7z output (looks like " 45%" or "45%")
-                        if let Some(percent) = parse_7z_percentage(&line) {
-                            if percent != last_percent {
-                                last_percent = percent;
-                                let _ = progress_tx.send(ExtractProgress::Progress { percent });
-                            }
-                        }
-                    }
-                    Ok(None) => {
+            read_result = reader.read_until(b'\r', &mut buffer) => {
+                match read_result {
+                    Ok(0) => {
                         // EOF - process finished output
                         break;
+                    }
+                    Ok(_) => {
+                        // Parse the buffer for percentage
+                        if let Ok(line) = std::str::from_utf8(&buffer) {
+                            if let Some(percent) = parse_7z_percentage(line) {
+                                if percent != last_percent {
+                                    last_percent = percent;
+                                    let _ = progress_tx.send(ExtractProgress::Progress { percent });
+                                }
+                            }
+                        }
+                        buffer.clear();
                     }
                     Err(e) => {
                         crate::debug::log(&format!("Error reading 7z output: {}", e));
@@ -186,23 +190,27 @@ pub async fn extract_7z(
 }
 
 /// Parse percentage from 7z output line
-/// 7z with -bsp1 outputs lines like " 45%" or "100%"
+/// 7z with -bsp1 outputs progress like " 45% 12 - filename" or just " 45%"
 fn parse_7z_percentage(line: &str) -> Option<u8> {
-    let line = line.trim();
-    // Look for pattern like "45%" at the end or standalone
-    if line.ends_with('%') {
-        // Find the number before the %
-        let num_str: String = line.chars()
+    // Look for pattern like "45%" anywhere in the line
+    // Find the position of '%' and extract the number before it
+    if let Some(percent_pos) = line.find('%') {
+        // Get the substring before '%'
+        let before_percent = &line[..percent_pos];
+        // Extract digits from the end of this substring
+        let num_str: String = before_percent
+            .chars()
             .rev()
-            .skip(1)  // Skip the %
             .take_while(|c| c.is_ascii_digit())
             .collect::<String>()
             .chars()
             .rev()
             .collect();
 
-        if let Ok(percent) = num_str.parse::<u8>() {
-            return Some(percent.min(100));
+        if !num_str.is_empty() {
+            if let Ok(percent) = num_str.parse::<u8>() {
+                return Some(percent.min(100));
+            }
         }
     }
     None
