@@ -4,8 +4,8 @@
 // Edit this file to customize the installer for your OS project.
 //
 // QUICK START - To rebrand this installer, change these values:
-//   1. APP_NAME        - Your OS name (e.g., "MuOS", "Onion", "MinUI")
-//   2. VOLUME_LABEL    - SD card label, max 11 chars uppercase (e.g., "MUOS")
+//   1. APP_NAME        - Your OS name (e.g., "SpruceOS", "Onion", "MinUI")
+//   2. VOLUME_LABEL    - SD card label, max 11 chars uppercase (e.g., "SPRUCE")
 //   3. REPO_OPTIONS    - Your GitHub repositories
 //
 // ALSO UPDATE THESE EXTERNAL FILES:
@@ -23,7 +23,7 @@ use eframe::egui;
 // ----------------------------------------------------------------------------
 
 /// The name of your OS (displayed in window title and UI)
-/// Examples: "SpruceOS", "MuOS", "Onion", "MinUI"
+/// Examples: "SpruceOS", "Onion", "MinUI"
 pub const APP_NAME: &str = "SpruceOS";
 
 /// Volume label applied to formatted SD cards (max 11 characters, uppercase)
