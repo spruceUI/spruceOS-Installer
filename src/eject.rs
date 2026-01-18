@@ -10,7 +10,7 @@ use crate::drives::DriveInfo;
 #[cfg(target_os = "windows")]
 pub fn eject_drive(drive: &DriveInfo) -> Result<(), String> {
     use std::mem::size_of;
-    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::Foundation::{CloseHandle, HANDLE, GENERIC_READ, GENERIC_WRITE};
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE,
         OPEN_EXISTING,
@@ -25,16 +25,24 @@ pub fn eject_drive(drive: &DriveInfo) -> Result<(), String> {
     const IOCTL_STORAGE_MEDIA_REMOVAL: u32 = 0x002D4804;
     const FSCTL_UNLOCK_VOLUME: u32 = 0x0009001C;
 
-    // Extract drive letter
-    let drive_letter = drive.device_path.chars().next().ok_or("Invalid device path")?;
+    // Extract drive letter from mount path or device path
+    let drive_letter = drive.mount_path
+        .as_ref()
+        .and_then(|p| p.to_str())
+        .and_then(|s| s.chars().next())
+        .or_else(|| drive.device_path.chars().next())
+        .ok_or("Invalid device path")?;
+
     let volume_path_str = format!("\\\\.\\{}:", drive_letter);
     let volume_path_wide: Vec<u16> = volume_path_str.encode_utf16().chain(Some(0)).collect();
 
-    // Get a handle to the volume.
+    crate::debug::log(&format!("Ejecting volume: {}", volume_path_str));
+
+    // Get a handle to the volume with read/write access for IOCTLs
     let handle = unsafe {
         CreateFileW(
             PCWSTR(volume_path_wide.as_ptr()),
-            0, // No specific access needed for these IOCTLs
+            GENERIC_READ.0 | GENERIC_WRITE.0,
             FILE_SHARE_READ | FILE_SHARE_WRITE,
             None,
             OPEN_EXISTING,
@@ -50,47 +58,57 @@ pub fn eject_drive(drive: &DriveInfo) -> Result<(), String> {
 
     let mut bytes_returned = 0u32;
 
-    // Step 1: Lock the volume to force dismount
-    unsafe {
-        let _ = DeviceIoControl(handle, FSCTL_LOCK_VOLUME, None, 0, None, 0, Some(&mut bytes_returned), None);
-    }
+    // Step 1: Lock the volume (may fail if files are open, but continue anyway)
+    let lock_result = unsafe {
+        DeviceIoControl(handle, FSCTL_LOCK_VOLUME, None, 0, None, 0, Some(&mut bytes_returned), None)
+    };
+    crate::debug::log(&format!("Lock volume result: {:?}", lock_result));
 
-    // Step 2: Dismount the volume
-    unsafe {
-        let _ = DeviceIoControl(handle, FSCTL_DISMOUNT_VOLUME, None, 0, None, 0, Some(&mut bytes_returned), None);
-    }
+    // Step 2: Dismount the volume (flushes all cached data)
+    let dismount_result = unsafe {
+        DeviceIoControl(handle, FSCTL_DISMOUNT_VOLUME, None, 0, None, 0, Some(&mut bytes_returned), None)
+    };
+    crate::debug::log(&format!("Dismount volume result: {:?}", dismount_result));
 
     // Step 3: Set media removal to be allowed
     #[repr(C)]
-    struct PreventMediaRemoval { PreventMediaRemoval: bool, }
-    let removal_policy = PreventMediaRemoval { PreventMediaRemoval: false };
+    struct PreventMediaRemoval { prevent: u8 }
+    let removal_policy = PreventMediaRemoval { prevent: 0 }; // 0 = allow removal
 
-    unsafe {
-        let _ = DeviceIoControl(
+    let removal_result = unsafe {
+        DeviceIoControl(
             handle, IOCTL_STORAGE_MEDIA_REMOVAL,
             Some(&removal_policy as *const _ as *const std::ffi::c_void),
             size_of::<PreventMediaRemoval>() as u32,
             None, 0, Some(&mut bytes_returned), None,
-        );
-    }
+        )
+    };
+    crate::debug::log(&format!("Allow removal result: {:?}", removal_result));
 
     // Step 4: Eject the media
     let eject_result = unsafe {
         DeviceIoControl(handle, IOCTL_STORAGE_EJECT_MEDIA, None, 0, None, 0, Some(&mut bytes_returned), None)
     };
+    crate::debug::log(&format!("Eject media result: {:?}", eject_result));
 
-    // Step 5: Unlock the volume (cleanup)
+    // Step 5: Unlock the volume (cleanup, even if eject failed)
     unsafe {
         let _ = DeviceIoControl(handle, FSCTL_UNLOCK_VOLUME, None, 0, None, 0, Some(&mut bytes_returned), None);
     }
 
     // Step 6: Close the handle
-    unsafe { CloseHandle(handle); }
+    unsafe { let _ = CloseHandle(handle); }
 
-    if eject_result.is_ok() {
+    // Consider success if dismount worked (data is safe) even if eject didn't
+    if dismount_result.is_ok() {
+        crate::debug::log("Eject successful (volume dismounted)");
+        Ok(())
+    } else if eject_result.is_ok() {
+        crate::debug::log("Eject successful (media ejected)");
         Ok(())
     } else {
-        Err("Eject command failed. The drive may be dismounted and safe to remove.".to_string())
+        crate::debug::log("Eject failed");
+        Err("Eject failed. Please use Windows 'Safely Remove Hardware' before removing the card.".to_string())
     }
 }
 
