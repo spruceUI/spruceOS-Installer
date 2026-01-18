@@ -6,6 +6,7 @@
 - Reverse the download/format order of operations.
 - Add the same output for all
 - Show % for copying and extracting (this might already be a thing)  if possible
+- x64 Linux hangs for a sec before ejecting safely, possible bug, it does eject though.
 
 ---
 
