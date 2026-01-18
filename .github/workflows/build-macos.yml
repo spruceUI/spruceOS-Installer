@@ -25,24 +25,79 @@ jobs:
       - name: Build x64 (Intel)
         run: cargo build --release --target x86_64-apple-darwin --features icon
 
-      - name: Prepare binaries
+      - name: Create macOS Icon
         run: |
-          cp "target/aarch64-apple-darwin/release/spruceos-installer" "spruceos-installer-macos-arm64"
-          cp "target/x86_64-apple-darwin/release/spruceos-installer" "spruceos-installer-macos-x64"
-          chmod +x spruceos-installer-macos-arm64
-          chmod +x spruceos-installer-macos-x64
+          # Create iconset directory
+          mkdir -p AppIcon.iconset
+
+          # Convert PNG to various sizes required for macOS icon
+          # Using sips (built into macOS) to resize
+          sips -z 16 16     "assets/Icons/icon.png" --out "AppIcon.iconset/icon_16x16.png"
+          sips -z 32 32     "assets/Icons/icon.png" --out "AppIcon.iconset/icon_16x16@2x.png"
+          sips -z 32 32     "assets/Icons/icon.png" --out "AppIcon.iconset/icon_32x32.png"
+          sips -z 64 64     "assets/Icons/icon.png" --out "AppIcon.iconset/icon_32x32@2x.png"
+          sips -z 128 128   "assets/Icons/icon.png" --out "AppIcon.iconset/icon_128x128.png"
+          sips -z 256 256   "assets/Icons/icon.png" --out "AppIcon.iconset/icon_128x128@2x.png"
+          sips -z 256 256   "assets/Icons/icon.png" --out "AppIcon.iconset/icon_256x256.png"
+          sips -z 512 512   "assets/Icons/icon.png" --out "AppIcon.iconset/icon_256x256@2x.png"
+          sips -z 512 512   "assets/Icons/icon.png" --out "AppIcon.iconset/icon_512x512.png"
+          sips -z 1024 1024 "assets/Icons/icon.png" --out "AppIcon.iconset/icon_512x512@2x.png"
+
+          # Convert iconset to icns
+          iconutil -c icns AppIcon.iconset -o AppIcon.icns
+
+      - name: Create ARM64 App Bundle
+        run: |
+          # Create .app bundle structure
+          mkdir -p "SpruceOS Installer.app/Contents/MacOS"
+          mkdir -p "SpruceOS Installer.app/Contents/Resources"
+
+          # Copy binary
+          cp "target/aarch64-apple-darwin/release/spruceos-installer" "SpruceOS Installer.app/Contents/MacOS/"
+          chmod +x "SpruceOS Installer.app/Contents/MacOS/spruceos-installer"
+
+          # Copy Info.plist
+          cp "assets/Mac/Info.plist" "SpruceOS Installer.app/Contents/"
+
+          # Copy icon
+          cp "AppIcon.icns" "SpruceOS Installer.app/Contents/Resources/"
+
+          # Create zip for distribution
+          zip -r "SpruceOS-Installer-macOS-arm64.zip" "SpruceOS Installer.app"
+
+          # Clean up for next build
+          rm -rf "SpruceOS Installer.app"
+
+      - name: Create x64 App Bundle
+        run: |
+          # Create .app bundle structure
+          mkdir -p "SpruceOS Installer.app/Contents/MacOS"
+          mkdir -p "SpruceOS Installer.app/Contents/Resources"
+
+          # Copy binary
+          cp "target/x86_64-apple-darwin/release/spruceos-installer" "SpruceOS Installer.app/Contents/MacOS/"
+          chmod +x "SpruceOS Installer.app/Contents/MacOS/spruceos-installer"
+
+          # Copy Info.plist
+          cp "assets/Mac/Info.plist" "SpruceOS Installer.app/Contents/"
+
+          # Copy icon
+          cp "AppIcon.icns" "SpruceOS Installer.app/Contents/Resources/"
+
+          # Create zip for distribution
+          zip -r "SpruceOS-Installer-macOS-x64.zip" "SpruceOS Installer.app"
 
       - name: Upload ARM64 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: spruceos-installer-macos-arm64
-          path: spruceos-installer-macos-arm64
+          name: SpruceOS-Installer-macOS-arm64
+          path: SpruceOS-Installer-macOS-arm64.zip
 
       - name: Upload x64 artifact
         uses: actions/upload-artifact@v4
         with:
-          name: spruceos-installer-macos-x64
-          path: spruceos-installer-macos-x64
+          name: SpruceOS-Installer-macOS-x64
+          path: SpruceOS-Installer-macOS-x64.zip
 
   release:
     needs: build
@@ -65,6 +120,8 @@ jobs:
             Automated beta build from the `${{ github.ref_name }}` branch.
 
             **Warning:** This is a pre-release build and may contain bugs.
+
+            **macOS Users:** Download the zip, extract it, then double-click "SpruceOS Installer.app" to run.
           prerelease: true
           files: artifacts/**/*
         env:
