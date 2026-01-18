@@ -12,7 +12,7 @@ To Do:
 
 - Extract to pc, THEN copy to drive???
 
-- List supported devices to version description & widem drop doen to accomodate the longer message.
+~~List supported devices to version description & widem drop doen to accomodate the longer message~~ NVMD this will have to happen some other way
 
 - Clean up colors to match SPRUCE theme.
 
