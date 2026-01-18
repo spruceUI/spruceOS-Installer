@@ -9,7 +9,7 @@
 //   3. REPO_OPTIONS    - Your GitHub repositories
 //
 // ALSO UPDATE THESE EXTERNAL FILES:
-//   - Cargo.toml: name, description, authors fields
+//   - Cargo.toml: name, description
 //   - assets/Mac/Info.plist: CFBundleName, CFBundleDisplayName, CFBundleIdentifier
 //   - assets/Icons/icon.png and icon.ico: Your app icons
 //   - .github/workflows/*.yml: Artifact names (optional, cosmetic only)
