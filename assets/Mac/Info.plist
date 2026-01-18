@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>SpruceOS Installer</string>
+    <string>SpruceOSInstaller</string>
     <key>CFBundleDisplayName</key>
     <string>SpruceOS Installer</string>
     <key>CFBundleIdentifier</key>
