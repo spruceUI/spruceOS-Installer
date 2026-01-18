@@ -1,3 +1,14 @@
+---
+
+## To-Do
+
+- Clean up colors to better match the **SPRUCE** theme
+- Reverse the download/format order of operations.
+- Add the same output for all
+
+---
+
+
 # spruceOS Installer
 
 ## Overview
@@ -34,13 +45,7 @@ The installer is distributed as a `.zip` containing a self-contained `.app` bund
 
 
 
----
 
-## To-Do
-
-- Clean up colors to better match the **SPRUCE** theme
-
----
 
 # spruceOS Installer — Developer Guide
 
