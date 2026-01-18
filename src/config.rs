@@ -58,6 +58,10 @@ pub const REPO_OPTIONS: &[(&str, &str)] = &[
 /// Index of the default repository selection (0 = first option)
 pub const DEFAULT_REPO_INDEX: usize = 0;
 
+/// File extension to look for in GitHub releases (e.g., ".7z", ".zip")
+/// The installer will download the first asset matching this extension
+pub const ASSET_EXTENSION: &str = ".7z";
+
 // ----------------------------------------------------------------------------
 // THEME COLORS
 // ----------------------------------------------------------------------------

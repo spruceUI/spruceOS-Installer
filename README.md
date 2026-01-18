@@ -68,6 +68,7 @@ Edit these constants:
 | `VOLUME_LABEL` | FAT32 SD card label (max 11 chars, uppercase) | `"SPRUCE"` |
 | `REPO_OPTIONS` | Array of repositories to fetch | `[("spruceOS Stable", "user/spruceOS")]` |
 | `DEFAULT_REPO_INDEX` | Index of the default repo selection | `0` |
+| `ASSET_EXTENSION` | File extension to download from releases | `".7z"` or `".zip"` |
 
 > **Notes:**  
 > - `WINDOW_TITLE`, `USER_AGENT`, and `TEMP_PREFIX` are auto-generated from `APP_NAME`. You usually **do not need to change these**.

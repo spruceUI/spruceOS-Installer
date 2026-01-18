@@ -1,14 +1,14 @@
 use crate::config::{
-    setup_theme, APP_NAME, COLOR_ACCENT, COLOR_ACCENT_DIM, COLOR_BG_DARK, COLOR_BG_LIGHT,
-    COLOR_ERROR, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARNING, DEFAULT_REPO_INDEX, REPO_OPTIONS,
-    TEMP_PREFIX, VOLUME_LABEL,
+    setup_theme, APP_NAME, ASSET_EXTENSION, COLOR_ACCENT, COLOR_ACCENT_DIM, COLOR_BG_DARK,
+    COLOR_BG_LIGHT, COLOR_ERROR, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARNING, DEFAULT_REPO_INDEX,
+    REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL,
 };
 use crate::copy::{copy_directory_with_progress, CopyProgress};
 use crate::drives::{get_removable_drives, DriveInfo};
 use crate::eject::eject_drive;
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
-use crate::github::{download_asset, find_7z_asset, get_latest_release, DownloadProgress, Release};
+use crate::github::{download_asset, find_release_asset, get_latest_release, DownloadProgress, Release};
 use eframe::egui;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -206,11 +206,11 @@ impl InstallerApp {
                 }
             };
 
-            let asset = match find_7z_asset(&release) {
+            let asset = match find_release_asset(&release) {
                 Some(a) => a,
                 None => {
-                    log("Error: No .7z file found in release");
-                    crate::debug::log("ERROR: No .7z asset found in release");
+                    log(&format!("Error: No {} file found in release", ASSET_EXTENSION));
+                    crate::debug::log(&format!("ERROR: No {} asset found in release", ASSET_EXTENSION));
                     let _ = state_tx_clone.send(AppState::Error);
                     return;
                 }

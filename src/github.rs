@@ -1,4 +1,4 @@
-use crate::config::USER_AGENT;
+use crate::config::{ASSET_EXTENSION, USER_AGENT};
 use futures_util::StreamExt;
 use serde::Deserialize;
 use std::path::Path;
@@ -53,8 +53,12 @@ pub async fn get_latest_release(repo_url: &str) -> Result<Release, String> {
         .map_err(|e| format!("Failed to parse release: {}", e))
 }
 
-pub fn find_7z_asset(release: &Release) -> Option<&Asset> {
-    release.assets.iter().find(|a| a.name.ends_with(".7z"))
+pub fn find_release_asset(release: &Release) -> Option<&Asset> {
+    // Find the largest file with the matching extension
+    // (handles cases where multiple files have the same extension)
+    release.assets.iter()
+        .filter(|a| a.name.ends_with(ASSET_EXTENSION))
+        .max_by_key(|a| a.size)
 }
 
 pub async fn download_asset(
