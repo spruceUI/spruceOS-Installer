@@ -2,21 +2,21 @@
 
 spruceOS-Installer
 
-This is an all in one downloader, extracter, formater, installer for spruce!
+This is an all in one downloader, extracter, formater, installer for made for spruce!
 
-Hopefully it can be edited and be made to work for any othe CFW that requires files copied onto a fat32 sd card with little to no struggle.
+It can be edited easily and be made to work for any othe CFW that requires files copied onto a fat32 sd card with little to no struggle.
+
+Githuib actions are set up run run and create releases by branch. If you would like to use this program let us know and we can create a branch for you (or just add you to this repo directly).
+
+Please do not delete the spruce team from the authors section; instead add your name to the listing in addition. 
 
 
 
 To Do:
 
-* Add a cancel button
-* Extract to pc, THEN copy to drive???
-
 ~~List supported devices to version description \& widem drop doen to accomodate the longer message~~ NVMD this will have to happen some other way
 
 * Clean up colors to match SPRUCE theme.
-* Fix the shown % for extraction + copying files (if we go this route).
 
 
 
@@ -34,7 +34,8 @@ To Do:
 
     - Change REPO\_OPTIONS to their GitHub repos
 
-&nbsp;   - Change the color values
+    - Change the color values to match your project
+
 
   2. In Cargo.toml:
 
