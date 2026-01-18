@@ -16,9 +16,6 @@ If you’d like to use this program for your own project, let us know—we can c
 
 ## To-Do
 
-- ~~List supported devices in the version description and widen the dropdown to accommodate longer text~~  
-  *(Never mind — this will need to be handled another way)*
-
 - Clean up colors to better match the **SPRUCE** theme
 
 ---
@@ -35,7 +32,7 @@ This guide is intended for **developers** who want to **rebrand or customize the
 
 ---
 
-## Quick Start — Rebranding the Installer
+## Rebranding the Installer
 
 To adapt this installer for your project, update the following in your branch:
 
@@ -134,7 +131,7 @@ To fully rebrand the installer, also update:
 
 ---
 
-> **Tip:** Keep the original SpruceOS authors in `Cargo.toml` and `Info.plist` for credit. Add your name alongside theirs.
+> **PLEASE:** Keep the original spruceOS authors in `Cargo.toml` and `Info.plist` for credit. Add your name alongside ours.
 
 
 
@@ -145,7 +142,7 @@ To fully rebrand the installer, also update:
 
 
 
-## Rebranding the Installer
+## Rebranding the Installer (short version)
 
 To rebrand the installer for your own project, make the following changes:
 
