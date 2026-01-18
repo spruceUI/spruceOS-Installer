@@ -3,6 +3,7 @@ use crate::config::{
     COLOR_ERROR, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARNING, DEFAULT_REPO_INDEX, REPO_OPTIONS,
     VOLUME_LABEL,
 };
+use crate::copy::{copy_directory_with_progress, CopyProgress};
 use crate::drives::{get_removable_drives, DriveInfo};
 use crate::eject::eject_drive;
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
@@ -23,6 +24,7 @@ enum AppState {
     Downloading,
     Formatting,
     Extracting,
+    Copying,
     Complete,
     Ejecting,
     Ejected,
@@ -392,11 +394,19 @@ impl InstallerApp {
 
             write_card_log("Format complete, starting extraction...");
 
-            // Step 4: Extract
+            // Step 4: Extract to temp folder on local PC
             let _ = state_tx_clone.send(AppState::Extracting);
-            log("Extracting files to SD card...");
+            let temp_extract_dir = temp_dir.join("spruce_extract");
+            log("Extracting files to local temp folder...");
             crate::debug::log_section("Extracting Files");
+            crate::debug::log(&format!("Temp extract dir: {:?}", temp_extract_dir));
             set_progress(0, 100, "Extracting files...");
+
+            // Clean up any previous extraction
+            let _ = std::fs::remove_dir_all(&temp_extract_dir);
+            std::fs::create_dir_all(&temp_extract_dir)
+                .map_err(|e| format!("Failed to create temp extract dir: {}", e))
+                .unwrap();
 
             let (ext_tx, mut ext_rx) = mpsc::unbounded_channel::<ExtractProgress>();
             let progress_ext = progress.clone();
@@ -437,28 +447,116 @@ impl InstallerApp {
 
             write_card_log(&format!(
                 "Calling 7z extraction: {:?} -> {:?}",
-                download_path, dest_path
+                download_path, temp_extract_dir
             ));
 
-            if let Err(e) = extract_7z_with_progress(&download_path, &dest_path, ext_tx, cancel_token_clone.clone()).await {
+            if let Err(e) = extract_7z_with_progress(&download_path, &temp_extract_dir, ext_tx, cancel_token_clone.clone()).await {
                 if e.contains("cancelled") {
                     write_card_log("Extraction cancelled");
                     log("Extraction cancelled");
+                    let _ = std::fs::remove_dir_all(&temp_extract_dir);
                     let _ = state_tx_clone.send(AppState::Idle);
                     return;
                 }
                 write_card_log(&format!("Extract error: {}", e));
                 log(&format!("Extract error: {}", e));
+                let _ = std::fs::remove_dir_all(&temp_extract_dir);
                 let _ = state_tx_clone.send(AppState::Error);
                 return;
             }
-
-            write_card_log("extract_7z_with_progress returned successfully");
 
             let _ = ext_handle.await;
             log("Extraction complete");
             write_card_log("Extraction complete");
             crate::debug::log("Extraction complete");
+
+            // Step 5: Copy files to SD card
+            let _ = state_tx_clone.send(AppState::Copying);
+            log("Copying files to SD card...");
+            crate::debug::log_section("Copying Files");
+            set_progress(0, 100, "Copying files...");
+
+            let (copy_tx, mut copy_rx) = mpsc::unbounded_channel::<CopyProgress>();
+            let progress_copy = progress.clone();
+            let ctx_copy = ctx_clone.clone();
+
+            // Spawn copy progress handler
+            let copy_handle = tokio::spawn(async move {
+                while let Some(prog) = copy_rx.recv().await {
+                    if let Ok(mut p) = progress_copy.lock() {
+                        match prog {
+                            CopyProgress::Counting => {
+                                p.message = "Counting files...".to_string();
+                            }
+                            CopyProgress::Started { total_bytes, total_files } => {
+                                p.total = total_bytes;
+                                p.current = 0;
+                                p.message = format!("Copying {} files...", total_files);
+                            }
+                            CopyProgress::Progress { copied_bytes, total_bytes, current_file } => {
+                                p.current = copied_bytes;
+                                p.total = total_bytes;
+                                let pct = if total_bytes > 0 {
+                                    (copied_bytes as f64 / total_bytes as f64 * 100.0) as u32
+                                } else {
+                                    0
+                                };
+                                if current_file.is_empty() {
+                                    p.message = format!("Copying... {}%", pct);
+                                } else {
+                                    // Truncate filename if too long
+                                    let display_file = if current_file.len() > 40 {
+                                        format!("...{}", &current_file[current_file.len()-37..])
+                                    } else {
+                                        current_file
+                                    };
+                                    p.message = format!("{}% - {}", pct, display_file);
+                                }
+                            }
+                            CopyProgress::Completed => {
+                                p.current = p.total;
+                                p.message = "Copy complete".to_string();
+                            }
+                            CopyProgress::Cancelled => {
+                                p.message = "Copy cancelled".to_string();
+                            }
+                            CopyProgress::Error(e) => {
+                                p.message = format!("Copy error: {}", e);
+                            }
+                        }
+                    }
+                    ctx_copy.request_repaint();
+                }
+            });
+
+            write_card_log(&format!(
+                "Copying files: {:?} -> {:?}",
+                temp_extract_dir, dest_path
+            ));
+
+            if let Err(e) = copy_directory_with_progress(&temp_extract_dir, &dest_path, copy_tx, cancel_token_clone.clone()).await {
+                if e.contains("cancelled") {
+                    write_card_log("Copy cancelled");
+                    log("Copy cancelled");
+                    let _ = std::fs::remove_dir_all(&temp_extract_dir);
+                    let _ = state_tx_clone.send(AppState::Idle);
+                    return;
+                }
+                write_card_log(&format!("Copy error: {}", e));
+                log(&format!("Copy error: {}", e));
+                let _ = std::fs::remove_dir_all(&temp_extract_dir);
+                let _ = state_tx_clone.send(AppState::Error);
+                return;
+            }
+
+            let _ = copy_handle.await;
+            log("Copy complete");
+            write_card_log("Copy complete");
+            crate::debug::log("Copy complete");
+
+            // Clean up temp extraction folder
+            let _ = std::fs::remove_dir_all(&temp_extract_dir);
+            crate::debug::log("Cleaned up temp extraction folder");
 
             // Cleanup temp file
             let _ = tokio::fs::remove_file(&download_path).await;
@@ -498,6 +596,7 @@ impl InstallerApp {
                         AppState::Downloading => "Downloading...".to_string(),
                         AppState::Formatting => "Formatting...".to_string(),
                         AppState::Extracting => "Extracting...".to_string(),
+                        AppState::Copying => "Copying...".to_string(),
                         AppState::Complete => "COMPLETE".to_string(),
                         AppState::Error => "ERROR".to_string(),
                         AppState::Idle => "CANCELLED".to_string(),
@@ -620,6 +719,9 @@ impl eframe::App for InstallerApp {
                 } else if progress.message.contains("Extracting") || progress.message.contains("Extract")
                 {
                     self.state = AppState::Extracting;
+                } else if progress.message.contains("Copying") || progress.message.contains("Copy")
+                {
+                    self.state = AppState::Copying;
                 }
             }
         }
@@ -632,6 +734,7 @@ impl eframe::App for InstallerApp {
                 | AppState::Downloading
                 | AppState::Formatting
                 | AppState::Extracting
+                | AppState::Copying
                 | AppState::Ejecting
                 | AppState::Cancelling
         );
@@ -753,6 +856,7 @@ impl eframe::App for InstallerApp {
                         | AppState::Downloading
                         | AppState::Formatting
                         | AppState::Extracting
+                        | AppState::Copying
                         | AppState::AwaitingConfirmation
                         | AppState::Ejecting
                         | AppState::Cancelling
@@ -774,6 +878,7 @@ impl eframe::App for InstallerApp {
                         | AppState::Downloading
                         | AppState::Formatting
                         | AppState::Extracting
+                        | AppState::Copying
                         | AppState::Cancelling
                 );
 
@@ -842,6 +947,7 @@ impl eframe::App for InstallerApp {
                             | AppState::Downloading
                             | AppState::Formatting
                             | AppState::Extracting
+                            | AppState::Copying
                     ) && self.cancel_token.is_some();
 
                     if can_cancel {
