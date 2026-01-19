@@ -127,65 +127,83 @@ pub fn eject_drive(drive: &DriveInfo) -> Result<(), String> {
         return Ok(());
     }
 
-    // Unmount the mount path if available, syncing just that filesystem first
-    if let Some(mount_path) = &drive.mount_path {
-        if let Some(path_str) = mount_path.to_str() {
-            // Sync just this filesystem (not all filesystems)
-            crate::debug::log(&format!("Linux eject: syncing {}...", path_str));
-            let _ = Command::new("sync").arg("-f").arg(path_str).output();
-
-            crate::debug::log(&format!("Linux eject: unmounting {}...", path_str));
-            let _ = Command::new("umount").arg(path_str).output();
-        }
-    }
-
-    // Determine the partition path and unmount it too
+    // Determine the partition path
     let partition_path = if drive.device_path.contains("mmcblk") || drive.device_path.contains("nvme") {
         format!("{}p1", drive.device_path)
     } else {
         format!("{}1", drive.device_path)
     };
 
-    // Sync and unmount the partition (in case it was auto-mounted elsewhere)
-    crate::debug::log(&format!("Linux eject: syncing partition {}...", partition_path));
-    let _ = Command::new("sync").arg("-f").arg(&partition_path).output();
+    // Sync the filesystem first
+    if let Some(mount_path) = &drive.mount_path {
+        if let Some(path_str) = mount_path.to_str() {
+            crate::debug::log(&format!("Linux eject: syncing {}...", path_str));
+            let _ = Command::new("sync").arg("-f").arg(path_str).output();
+        }
+    }
 
-    crate::debug::log(&format!("Linux eject: unmounting partition {}...", partition_path));
-    let _ = Command::new("umount").arg(&partition_path).output();
+    // Use udisksctl for unmounting - this tells the udisks2 daemon we're ejecting
+    // so it won't auto-remount the device. Falls back to regular umount if udisksctl fails.
+    crate::debug::log(&format!("Linux eject: unmounting partition {} via udisksctl...", partition_path));
+    let udisks_unmount = Command::new("udisksctl")
+        .args(["unmount", "-b", &partition_path])
+        .output();
 
-    // Also try unmounting the device path directly
-    crate::debug::log(&format!("Linux eject: unmounting device {}...", drive.device_path));
-    let _ = Command::new("umount").arg(&drive.device_path).output();
+    if let Ok(output) = &udisks_unmount {
+        if output.status.success() {
+            crate::debug::log("Linux eject: udisksctl unmount succeeded");
+        } else {
+            // Fallback to regular umount for our custom mount point
+            if let Some(mount_path) = &drive.mount_path {
+                if let Some(path_str) = mount_path.to_str() {
+                    crate::debug::log(&format!("Linux eject: falling back to umount {}...", path_str));
+                    let _ = Command::new("umount").arg(path_str).output();
+                }
+            }
+            // Also try unmounting the partition directly
+            let _ = Command::new("umount").arg(&partition_path).output();
+        }
+    } else {
+        // udisksctl not available, use regular umount
+        if let Some(mount_path) = &drive.mount_path {
+            if let Some(path_str) = mount_path.to_str() {
+                crate::debug::log(&format!("Linux eject: unmounting {}...", path_str));
+                let _ = Command::new("umount").arg(path_str).output();
+            }
+        }
+        let _ = Command::new("umount").arg(&partition_path).output();
+    }
 
-    // Check again if device still exists after unmount
+    // Check if device still exists after unmount
     if !Path::new(&drive.device_path).exists() {
         crate::debug::log("Linux eject: device removed after unmount");
         return Ok(());
     }
 
-    // Eject the device using udisksctl if available (cleaner), fallback to eject
-    crate::debug::log(&format!("Linux eject: ejecting {}...", drive.device_path));
-
-    // Try udisksctl first (prevents auto-remount race)
+    // Power off the device using udisksctl (cleanest method)
+    crate::debug::log(&format!("Linux eject: powering off {}...", drive.device_path));
     let udisks_result = Command::new("udisksctl")
         .args(["power-off", "-b", &drive.device_path])
         .output();
 
     if let Ok(output) = udisks_result {
         if output.status.success() {
-            crate::debug::log("Linux eject: success via udisksctl");
+            crate::debug::log("Linux eject: success via udisksctl power-off");
             return Ok(());
         }
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        crate::debug::log(&format!("Linux eject: udisksctl power-off failed: {}", stderr.trim()));
     }
 
     // Fallback to eject command
+    crate::debug::log(&format!("Linux eject: trying eject command..."));
     let output = Command::new("eject")
         .arg(&drive.device_path)
         .output()
         .map_err(|e| format!("Failed to run eject: {}", e))?;
 
     if output.status.success() {
-        crate::debug::log("Linux eject: success");
+        crate::debug::log("Linux eject: success via eject");
         Ok(())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr);

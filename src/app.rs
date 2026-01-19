@@ -663,7 +663,33 @@ async fn get_mount_path_after_format(drive: &DriveInfo, volume_label: &str) -> R
         format!("{}1", drive.device_path)
     };
 
-    // Create a mount point in cache dir (~/.cache) instead of /tmp
+    // Use udisksctl to mount - this registers with the udisks2 daemon so it won't
+    // auto-remount when we later unmount. The daemon chooses the mount point
+    // (typically /media/username/LABEL or /run/media/username/LABEL).
+    crate::debug::log(&format!("Mounting {} via udisksctl...", partition_path));
+    let output = Command::new("udisksctl")
+        .args(["mount", "-b", &partition_path])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run udisksctl mount: {}", e))?;
+
+    if output.status.success() {
+        // Parse mount point from udisksctl output: "Mounted /dev/sdb1 at /media/user/LABEL"
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        crate::debug::log(&format!("udisksctl output: {}", stdout.trim()));
+
+        if let Some(mount_point) = stdout.split(" at ").nth(1) {
+            let mount_path = PathBuf::from(mount_point.trim().trim_end_matches('.'));
+            crate::debug::log(&format!("Mount point: {:?}", mount_path));
+            return Ok(mount_path);
+        }
+    }
+
+    // Fallback: use raw mount if udisksctl fails (e.g., no udisks2 daemon)
+    crate::debug::log("udisksctl mount failed, falling back to raw mount...");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    crate::debug::log(&format!("udisksctl error: {}", stderr.trim()));
+
     let cache_dir = dirs::cache_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
     let mount_point = cache_dir.join(format!("{}_{}", TEMP_PREFIX, volume_label));
 
