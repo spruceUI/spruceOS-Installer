@@ -127,23 +127,33 @@ pub fn eject_drive(drive: &DriveInfo) -> Result<(), String> {
         return Ok(());
     }
 
-    // With root privileges, use direct commands for fast ejection:
-    // 1. sync - flush filesystem buffers
-    // 2. umount - unmount the partition
-    // 3. eject - eject the device
-
-    crate::debug::log("Linux eject: syncing filesystems...");
-    let _ = Command::new("sync").output();
-
-    // Unmount the mount path if available
+    // Unmount the mount path if available, syncing just that filesystem first
     if let Some(mount_path) = &drive.mount_path {
         if let Some(path_str) = mount_path.to_str() {
+            // Sync just this filesystem (not all filesystems)
+            crate::debug::log(&format!("Linux eject: syncing {}...", path_str));
+            let _ = Command::new("sync").arg("-f").arg(path_str).output();
+
             crate::debug::log(&format!("Linux eject: unmounting {}...", path_str));
             let _ = Command::new("umount").arg(path_str).output();
         }
     }
 
-    // Also try unmounting the device path directly (catches all partitions)
+    // Determine the partition path and unmount it too
+    let partition_path = if drive.device_path.contains("mmcblk") || drive.device_path.contains("nvme") {
+        format!("{}p1", drive.device_path)
+    } else {
+        format!("{}1", drive.device_path)
+    };
+
+    // Sync and unmount the partition (in case it was auto-mounted elsewhere)
+    crate::debug::log(&format!("Linux eject: syncing partition {}...", partition_path));
+    let _ = Command::new("sync").arg("-f").arg(&partition_path).output();
+
+    crate::debug::log(&format!("Linux eject: unmounting partition {}...", partition_path));
+    let _ = Command::new("umount").arg(&partition_path).output();
+
+    // Also try unmounting the device path directly
     crate::debug::log(&format!("Linux eject: unmounting device {}...", drive.device_path));
     let _ = Command::new("umount").arg(&drive.device_path).output();
 
@@ -153,8 +163,22 @@ pub fn eject_drive(drive: &DriveInfo) -> Result<(), String> {
         return Ok(());
     }
 
-    // Eject the device
+    // Eject the device using udisksctl if available (cleaner), fallback to eject
     crate::debug::log(&format!("Linux eject: ejecting {}...", drive.device_path));
+
+    // Try udisksctl first (prevents auto-remount race)
+    let udisks_result = Command::new("udisksctl")
+        .args(["power-off", "-b", &drive.device_path])
+        .output();
+
+    if let Ok(output) = udisks_result {
+        if output.status.success() {
+            crate::debug::log("Linux eject: success via udisksctl");
+            return Ok(());
+        }
+    }
+
+    // Fallback to eject command
     let output = Command::new("eject")
         .arg(&drive.device_path)
         .output()

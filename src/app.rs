@@ -987,44 +987,26 @@ impl eframe::App for InstallerApp {
                         ui.add_space(5.0);
                         if ui.button("Safely Eject SD Card").clicked() {
                             if let Some(drive) = self.installed_drive.clone() {
-                                #[cfg(target_os = "windows")]
-                                {
-                                    // WINDOWS: Run in background task
-                                    self.state = AppState::Ejecting;
-                                    self.log("Ejecting SD card...");
-                                    
-                                    let progress = self.progress.clone();
-                                    let ctx_clone = ctx.clone();
+                                // Run eject in background task so UI stays responsive
+                                self.state = AppState::Ejecting;
+                                self.log("Ejecting SD card...");
 
-                                    self.runtime.spawn(async move {
-                                        let result = tokio::task::spawn_blocking(move || {
-                                            eject_drive(&drive)
-                                        }).await.unwrap();
+                                let progress = self.progress.clone();
+                                let ctx_clone = ctx.clone();
 
-                                        if let Ok(mut progress) = progress.lock() {
-                                            match result {
-                                                Ok(()) => progress.message = "EJECT_SUCCESS".to_string(),
-                                                Err(e) => progress.message = format!("EJECT_ERROR: {}", e),
-                                            }
-                                        }
-                                        ctx_clone.request_repaint();
-                                    });
-                                }
+                                self.runtime.spawn(async move {
+                                    let result = tokio::task::spawn_blocking(move || {
+                                        eject_drive(&drive)
+                                    }).await.unwrap();
 
-                                #[cfg(not(target_os = "windows"))]
-                                {
-                                    // Run synchronously
-                                    match eject_drive(&drive) {
-                                        Ok(()) => {
-                                            self.log("SD card safely ejected. You may now remove it.");
-                                            self.state = AppState::Ejected;
-                                        }
-                                        Err(e) => {
-                                            self.log(&format!("Eject warning: {}. The card should still be safe to remove.", e));
-                                            self.state = AppState::Ejected;
+                                    if let Ok(mut progress) = progress.lock() {
+                                        match result {
+                                            Ok(()) => progress.message = "EJECT_SUCCESS".to_string(),
+                                            Err(e) => progress.message = format!("EJECT_ERROR: {}", e),
                                         }
                                     }
-                                }
+                                    ctx_clone.request_repaint();
+                                });
                             }
                         }
                     }
