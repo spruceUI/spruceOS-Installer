@@ -115,6 +115,9 @@ pub async fn copy_directory_with_progress(
             current_file: file_name,
         });
 
+        // Yield to allow UI to update
+        tokio::task::yield_now().await;
+
         // Copy the file (std::fs::copy preserves permissions and timestamps)
         std::fs::copy(file_path, &dest_path)
             .map_err(|e| format!("Failed to copy {:?}: {}", file_path, e))?;
