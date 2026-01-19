@@ -119,18 +119,52 @@ pub async fn copy_directory_with_progress(
         tokio::task::yield_now().await;
 
         // Copy the file
-        // On macOS, try standard copy first, but if it fails due to extended attributes
-        // (common when copying to FAT32), retry with a simpler read/write copy
+        // On macOS, handle various permission/attribute issues when copying to FAT32
         #[cfg(target_os = "macos")]
         {
             match std::fs::copy(file_path, &dest_path) {
                 Ok(_) => {},
                 Err(e) if e.raw_os_error() == Some(1) => {
-                    // Error 1 = "Operation not permitted" - likely extended attributes issue
-                    // Fall back to manual read/write which doesn't preserve attributes
-                    std::fs::read(file_path)
-                        .and_then(|contents| std::fs::write(&dest_path, contents))
-                        .map_err(|e2| format!("Failed to copy {:?} (tried fallback): {}", file_path, e2))?;
+                    // Error 1 = "Operation not permitted"
+                    crate::debug::log(&format!("Copy failed for {:?}, trying workarounds...", file_path.file_name().unwrap_or_default()));
+
+                    // Try to fix source file permissions first
+                    #[cfg(unix)]
+                    {
+                        use std::os::unix::fs::PermissionsExt;
+                        if let Ok(metadata) = std::fs::metadata(file_path) {
+                            let mut perms = metadata.permissions();
+                            perms.set_mode(0o644); // rw-r--r--
+                            let _ = std::fs::set_permissions(file_path, perms);
+                        }
+                    }
+
+                    // Fallback 1: Try standard copy again after permission fix
+                    match std::fs::copy(file_path, &dest_path) {
+                        Ok(_) => {
+                            crate::debug::log("Copy succeeded after permission fix");
+                        },
+                        Err(_) => {
+                            // Fallback 2: Manual read/write (no attributes preserved)
+                            crate::debug::log("Trying manual read/write...");
+                            match std::fs::read(file_path) {
+                                Ok(contents) => {
+                                    std::fs::write(&dest_path, contents)
+                                        .map_err(|e2| {
+                                            crate::debug::log(&format!("Manual write failed: {:?}", e2));
+                                            format!("Failed to copy {:?}: original error: {}, write error: {}", file_path, e, e2)
+                                        })?;
+                                    crate::debug::log("Manual read/write succeeded");
+                                },
+                                Err(read_err) => {
+                                    crate::debug::log(&format!("Manual read failed: {:?}", read_err));
+                                    // Skip this file and continue
+                                    crate::debug::log(&format!("SKIPPING file {:?} - cannot copy", file_path));
+                                    continue;
+                                }
+                            }
+                        }
+                    }
                 }
                 Err(e) => {
                     return Err(format!("Failed to copy {:?}: {}", file_path, e));
