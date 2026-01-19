@@ -1059,7 +1059,7 @@ impl eframe::App for InstallerApp {
                     .show(ui, |ui| {
                         if let Ok(logs) = self.log_messages.lock() {
                             for msg in logs.iter() {
-                                ui.label(msg);
+                                ui.colored_label(COLOR_TEXT, msg);
                             }
                         }
                     });
