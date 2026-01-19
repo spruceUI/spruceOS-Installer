@@ -45,25 +45,9 @@ jobs:
           # Convert iconset to icns
           iconutil -c icns AppIcon.iconset -o AppIcon.icns
 
-      - name: Create ARM64 App Bundle
+      - name: Create launcher script
         run: |
-          # Create .app bundle structure (no spaces in name)
-          mkdir -p "SpruceOSInstaller.app/Contents/MacOS"
-          mkdir -p "SpruceOSInstaller.app/Contents/Resources"
-          
-          # Copy binary
-          cp "target/aarch64-apple-darwin/release/spruceos-installer" "SpruceOSInstaller.app/Contents/MacOS/"
-          chmod +x "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
-          
-          # Copy Info.plist and icon
-          cp "assets/Mac/Info.plist" "SpruceOSInstaller.app/Contents/"
-          cp "AppIcon.icns" "SpruceOSInstaller.app/Contents/Resources/"
-          
-          # Remove quarantine attribute to prevent macOS Gatekeeper issues
-          xattr -cr "SpruceOSInstaller.app"
-          
-          # Create launcher script
-          cat > launch-installer.command << 'LAUNCHER_EOF'
+          cat > launch-installer.command << 'EOF'
           #!/bin/bash
           SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
           APP_PATH="$SCRIPT_DIR/SpruceOSInstaller.app"
@@ -73,24 +57,26 @@ jobs:
           xattr -d com.apple.quarantine "$APP_PATH" 2>/dev/null
           echo "Launching SpruceOS Installer..."
           open "$APP_PATH"
-          LAUNCHER_EOF
+          EOF
           chmod +x launch-installer.command
-          
-          # Create zip for distribution with both app and launcher
-          zip -r "SpruceOS-Installer-macOS-arm64.zip" "SpruceOSInstaller.app" "launch-installer.command"
-          
-          # Clean up for next build
-          rm -rf "SpruceOSInstaller.app"
-          rm launch-installer.command
 
-      - name: Create x64 App Bundle
+      - name: Create Universal App Bundle
         run: |
+          # Create universal binary using lipo
+          lipo -create -output spruceos-installer-universal \
+            target/aarch64-apple-darwin/release/spruceos-installer \
+            target/x86_64-apple-darwin/release/spruceos-installer
+          
+          # Verify the universal binary contains both architectures
+          echo "Universal binary architectures:"
+          lipo -info spruceos-installer-universal
+          
           # Create .app bundle structure (no spaces in name)
           mkdir -p "SpruceOSInstaller.app/Contents/MacOS"
           mkdir -p "SpruceOSInstaller.app/Contents/Resources"
           
-          # Copy binary
-          cp "target/x86_64-apple-darwin/release/spruceos-installer" "SpruceOSInstaller.app/Contents/MacOS/"
+          # Copy universal binary
+          cp spruceos-installer-universal "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
           chmod +x "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
           
           # Copy Info.plist and icon
@@ -100,34 +86,14 @@ jobs:
           # Remove quarantine attribute to prevent macOS Gatekeeper issues
           xattr -cr "SpruceOSInstaller.app"
           
-          # Create launcher script
-          cat > launch-installer.command << 'LAUNCHER_EOF'
-          #!/bin/bash
-          SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-          APP_PATH="$SCRIPT_DIR/SpruceOSInstaller.app"
-          echo "SpruceOS Installer Launcher"
-          echo "============================"
-          echo "Removing quarantine attribute..."
-          xattr -d com.apple.quarantine "$APP_PATH" 2>/dev/null
-          echo "Launching SpruceOS Installer..."
-          open "$APP_PATH"
-          LAUNCHER_EOF
-          chmod +x launch-installer.command
-          
           # Create zip for distribution with both app and launcher
-          zip -r "SpruceOS-Installer-macOS-x64.zip" "SpruceOSInstaller.app" "launch-installer.command"
+          zip -r "SpruceOS-Installer-macOS-Universal.zip" "SpruceOSInstaller.app" "launch-installer.command"
 
-      - name: Upload ARM64 artifact
+      - name: Upload Universal artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SpruceOS-Installer-macOS-arm64
-          path: SpruceOS-Installer-macOS-arm64.zip
-
-      - name: Upload x64 artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: SpruceOS-Installer-macOS-x64
-          path: SpruceOS-Installer-macOS-x64.zip
+          name: SpruceOS-Installer-macOS-Universal
+          path: SpruceOS-Installer-macOS-Universal.zip
 
   release:
     needs: build
@@ -152,13 +118,14 @@ jobs:
             **Warning:** This is a pre-release build and may contain bugs.
 
             ## Downloads
-            - **macOS (Apple Silicon):** `SpruceOS-Installer-macOS-arm64.zip`
-            - **macOS (Intel):** `SpruceOS-Installer-macOS-x64.zip`
+            - **macOS (Universal - Apple Silicon & Intel):** `SpruceOS-Installer-macOS-Universal.zip`
 
             **macOS Users:** 
             1. Download and extract the zip file
             2. **Easy Method:** Double-click `launch-installer.command` to automatically remove quarantine and launch the app
             3. **Alternative:** Right-click "SpruceOSInstaller.app" and select "Open", then click "Open" in the dialog
+            
+            This is a Universal binary that works on both Apple Silicon (M1/M2/M3/M4) and Intel Macs.
             
             Note: This app is not code-signed. For production releases, consider signing the app with an Apple Developer certificate.
           prerelease: true
