@@ -68,10 +68,10 @@ pub async fn extract_7z(
     let _ = progress_tx.send(ExtractProgress::Extracting);
 
     // Extract 7z binary to temp/cache directory with platform-appropriate name
-    // On Linux, use cache dir (~/.cache) instead of /tmp
-    #[cfg(target_os = "linux")]
+    // On Linux/macOS, use cache dir to avoid temp space issues
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     let bin_dir = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     let bin_dir = std::env::temp_dir();
 
     #[cfg(target_os = "windows")]

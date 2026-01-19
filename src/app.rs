@@ -224,10 +224,11 @@ impl InstallerApp {
             crate::debug::log(&format!("Asset: {} ({} bytes)", asset.name, asset.size));
 
             // Define temp/cache directory for later use
-            // On Linux, use cache dir (~/.cache) instead of /tmp to avoid tmpfs space issues
-            #[cfg(target_os = "linux")]
+            // On Linux/macOS, use cache dir to avoid temp space issues
+            // Linux: ~/.cache, macOS: ~/Library/Caches
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             let temp_dir = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
             let temp_dir = std::env::temp_dir();
 
             // Step 2: Format drive (do this first so we fail fast if the card has issues)
@@ -402,10 +403,10 @@ impl InstallerApp {
             write_card_log("Download complete, starting extraction...");
 
             // Step 4: Extract to temp folder on local PC
-            // On Linux, use cache dir (~/.cache) instead of /tmp to avoid tmpfs space issues
-            #[cfg(target_os = "linux")]
+            // On Linux/macOS, use cache dir to avoid temp space issues
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             let extract_base_dir = dirs::cache_dir().unwrap_or_else(|| temp_dir.clone());
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
             let extract_base_dir = temp_dir.clone();
 
             let _ = state_tx_clone.send(AppState::Extracting);
