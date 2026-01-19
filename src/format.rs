@@ -156,6 +156,17 @@ pub async fn format_drive_fat32(
         return Err("Format cancelled".to_string());
     }
 
+    // Lock and dismount the volume BEFORE running diskpart
+    // This is critical - diskpart's clean command will fail if the volume is mounted
+    let _ = progress_tx.send(FormatProgress::Unmounting);
+    let _ = progress_tx.send(FormatProgress::Progress { percent: 15 });
+    crate::debug::log("Locking and dismounting volume before diskpart...");
+    lock_and_dismount_volume(drive_letter).await;
+    crate::debug::log("Volume locked/dismounted");
+
+    // Give Windows a moment to fully release the volume
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
     let _ = progress_tx.send(FormatProgress::CleaningDisk);
     let _ = progress_tx.send(FormatProgress::Progress { percent: 20 });
     crate::debug::log("Running diskpart to clean and partition disk...");
@@ -213,12 +224,9 @@ pub async fn format_drive_fat32(
 
     let _ = progress_tx.send(FormatProgress::Formatting);
     let _ = progress_tx.send(FormatProgress::Progress { percent: 60 });
-    crate::debug::log("Locking and dismounting volume before FAT32 format...");
 
-    // Lock and dismount the volume to prevent Windows from interfering
-    // The new partition will likely be mounted on the same drive letter
+    // Lock/dismount again in case Windows auto-mounted the new partition
     lock_and_dismount_volume(drive_letter).await;
-    crate::debug::log("Volume locked/dismounted");
 
     let _ = progress_tx.send(FormatProgress::Progress { percent: 70 });
 
@@ -268,8 +276,11 @@ fn get_drive_size_windows(drive_letter: char) -> Result<u64, String> {
 #[cfg(target_os = "windows")]
 fn create_partition_script(disk_number: u32) -> String {
     // Only partition, don't format - we'll use our custom formatter
+    // Use offline/online to force Windows to release its grip on the disk
     format!(
         r#"select disk {}
+offline disk
+online disk
 clean
 create partition primary
 select partition 1
