@@ -634,7 +634,9 @@ async fn get_mount_path_after_format(drive: &DriveInfo, _volume_label: &str) -> 
 }
 
 #[cfg(target_os = "macos")]
-async fn get_mount_path_after_format(_drive: &DriveInfo, volume_label: &str) -> Result<PathBuf, String> {
+async fn get_mount_path_after_format(drive: &DriveInfo, volume_label: &str) -> Result<PathBuf, String> {
+    use tokio::process::Command;
+
     // macOS automatically mounts at /Volumes/LABEL after diskutil eraseDisk
     // Wait a moment for the mount to complete
     tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
@@ -644,12 +646,51 @@ async fn get_mount_path_after_format(_drive: &DriveInfo, volume_label: &str) -> 
     // Wait for the mount point to appear (up to 10 seconds)
     for _ in 0..20 {
         if mount_path.exists() {
-            return Ok(mount_path);
+            break;
         }
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     }
 
-    Err(format!("Mount point {} did not appear after formatting", mount_path.display()))
+    if !mount_path.exists() {
+        return Err(format!("Mount point {} did not appear after formatting", mount_path.display()));
+    }
+
+    // On macOS 15+ with fskit, the volume may be mounted with restrictive flags (noowners, noatime)
+    // that cause directory creation to fail. Remount to get better flags.
+    crate::debug::log("Remounting volume to fix permissions...");
+
+    // Unmount the volume (not the disk)
+    let _ = Command::new("diskutil")
+        .args(["unmount", mount_path.to_str().unwrap_or("")])
+        .output()
+        .await;
+
+    tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+
+    // Remount using disk identifier (diskutil will choose better default mount options)
+    // Use diskN (not diskNsP) for mount command - diskutil figures out the partition
+    let output = Command::new("diskutil")
+        .args(["mount", &drive.device_path])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to remount volume: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        crate::debug::log(&format!("Remount warning: {}", stderr));
+        // Don't fail if remount doesn't work - the volume might already be mounted correctly
+    }
+
+    // Wait for remount
+    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+
+    // Verify mount path still exists
+    if mount_path.exists() {
+        crate::debug::log("Volume remounted successfully");
+        Ok(mount_path)
+    } else {
+        Err(format!("Mount point {} disappeared after remount", mount_path.display()))
+    }
 }
 
 #[cfg(target_os = "linux")]

@@ -118,65 +118,9 @@ pub async fn copy_directory_with_progress(
         // Yield to allow UI to update
         tokio::task::yield_now().await;
 
-        // Copy the file
-        // On macOS, handle various permission/attribute issues when copying to FAT32
-        #[cfg(target_os = "macos")]
-        {
-            match std::fs::copy(file_path, &dest_path) {
-                Ok(_) => {},
-                Err(e) if e.raw_os_error() == Some(1) => {
-                    // Error 1 = "Operation not permitted"
-                    crate::debug::log(&format!("Copy failed for {:?}, trying workarounds...", file_path.file_name().unwrap_or_default()));
-
-                    // Try to fix source file permissions first
-                    #[cfg(unix)]
-                    {
-                        use std::os::unix::fs::PermissionsExt;
-                        if let Ok(metadata) = std::fs::metadata(file_path) {
-                            let mut perms = metadata.permissions();
-                            perms.set_mode(0o644); // rw-r--r--
-                            let _ = std::fs::set_permissions(file_path, perms);
-                        }
-                    }
-
-                    // Fallback 1: Try standard copy again after permission fix
-                    match std::fs::copy(file_path, &dest_path) {
-                        Ok(_) => {
-                            crate::debug::log("Copy succeeded after permission fix");
-                        },
-                        Err(_) => {
-                            // Fallback 2: Manual read/write (no attributes preserved)
-                            crate::debug::log("Trying manual read/write...");
-                            match std::fs::read(file_path) {
-                                Ok(contents) => {
-                                    std::fs::write(&dest_path, contents)
-                                        .map_err(|e2| {
-                                            crate::debug::log(&format!("Manual write failed: {:?}", e2));
-                                            format!("Failed to copy {:?}: original error: {}, write error: {}", file_path, e, e2)
-                                        })?;
-                                    crate::debug::log("Manual read/write succeeded");
-                                },
-                                Err(read_err) => {
-                                    crate::debug::log(&format!("Manual read failed: {:?}", read_err));
-                                    // Skip this file and continue
-                                    crate::debug::log(&format!("SKIPPING file {:?} - cannot copy", file_path));
-                                    continue;
-                                }
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    return Err(format!("Failed to copy {:?}: {}", file_path, e));
-                }
-            }
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            std::fs::copy(file_path, &dest_path)
-                .map_err(|e| format!("Failed to copy {:?}: {}", file_path, e))?;
-        }
+        // Copy the file (std::fs::copy preserves permissions and timestamps)
+        std::fs::copy(file_path, &dest_path)
+            .map_err(|e| format!("Failed to copy {:?}: {}", file_path, e))?;
 
         copied_bytes += file_size;
     }
