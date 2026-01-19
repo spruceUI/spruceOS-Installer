@@ -118,31 +118,9 @@ pub async fn copy_directory_with_progress(
         // Yield to allow UI to update
         tokio::task::yield_now().await;
 
-        // Copy the file
-        // On macOS, try standard copy first, but if it fails due to extended attributes
-        // (common when copying to FAT32), retry with a simpler read/write copy
-        #[cfg(target_os = "macos")]
-        {
-            match std::fs::copy(file_path, &dest_path) {
-                Ok(_) => {},
-                Err(e) if e.raw_os_error() == Some(1) => {
-                    // Error 1 = "Operation not permitted" - likely extended attributes issue
-                    // Fall back to manual read/write which doesn't preserve attributes
-                    std::fs::read(file_path)
-                        .and_then(|contents| std::fs::write(&dest_path, contents))
-                        .map_err(|e2| format!("Failed to copy {:?} (tried fallback): {}", file_path, e2))?;
-                }
-                Err(e) => {
-                    return Err(format!("Failed to copy {:?}: {}", file_path, e));
-                }
-            }
-        }
-
-        #[cfg(not(target_os = "macos"))]
-        {
-            std::fs::copy(file_path, &dest_path)
-                .map_err(|e| format!("Failed to copy {:?}: {}", file_path, e))?;
-        }
+        // Copy the file (std::fs::copy preserves permissions and timestamps)
+        std::fs::copy(file_path, &dest_path)
+            .map_err(|e| format!("Failed to copy {:?}: {}", file_path, e))?;
 
         copied_bytes += file_size;
     }
