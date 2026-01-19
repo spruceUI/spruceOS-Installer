@@ -1,7 +1,7 @@
 use crate::config::{
     setup_theme, APP_NAME, ASSET_EXTENSION, COLOR_ACCENT, COLOR_ACCENT_DIM, COLOR_BG_DARK,
-    COLOR_BG_LIGHT, COLOR_ERROR, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARNING, DEFAULT_REPO_INDEX,
-    REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL,
+    COLOR_BG_LIGHT, COLOR_ERROR, COLOR_SPINNER, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARNING,
+    DEFAULT_REPO_INDEX, REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL,
 };
 use crate::copy::{copy_directory_with_progress, CopyProgress};
 use crate::drives::{get_removable_drives, DriveInfo};
@@ -1032,7 +1032,7 @@ impl eframe::App for InstallerApp {
                         ui.colored_label(COLOR_SUCCESS, format!("{} installation complete!", selected_repo_name));
                         ui.add_space(5.0);
                         ui.horizontal(|ui| {
-                            ui.spinner();
+                            ui.add(egui::Spinner::new().color(COLOR_SPINNER));
                             ui.label(" Ejecting SD card...");
                         });
                     }

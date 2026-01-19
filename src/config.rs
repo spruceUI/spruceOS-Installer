@@ -97,6 +97,9 @@ pub const COLOR_ERROR: egui::Color32 = egui::Color32::from_rgb(180, 90, 90);
 /// Warning color (warning messages, destructive action alerts)
 pub const COLOR_WARNING: egui::Color32 = egui::Color32::from_rgb(212, 168, 75);
 
+/// Spinner color (loading indicator during eject)
+pub const COLOR_SPINNER: egui::Color32 = egui::Color32::from_rgb(170, 135, 60);
+
 // ----------------------------------------------------------------------------
 // WINDOW SETTINGS
 // ----------------------------------------------------------------------------
