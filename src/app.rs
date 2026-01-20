@@ -969,39 +969,57 @@ impl eframe::App for InstallerApp {
             .frame(panel_frame)
             .show(ctx, |ui| {
                 ui.set_enabled(self.state != AppState::AwaitingConfirmation);
+                ctx.set_zoom_factor(1.15);
 
-                ui.horizontal(|ui| {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                        if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
-                            self.show_theme_editor = !self.show_theme_editor;
-                        }
-                        if ui.button("📜").on_hover_text("Toggle Log Area").clicked() {
-                            self.show_log = !self.show_log;
+                ui.columns(3, |columns| {
+                    columns[0].allocate_ui_with_layout(
+                        egui::Vec2::ZERO,
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
                             
-                            // Adjust window size when toggling log
-                            let current_size = ctx.screen_rect().size();
-                            let new_width = if self.show_log {
-                                current_size.x + 320.0
-                            } else {
-                                current_size.x - 320.0
-                            };
-                            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(new_width, current_size.y)));
                         }
-                    });
+                    );
+
+                    columns[1].allocate_ui_with_layout(
+                        egui::Vec2::ZERO,
+                        egui::Layout::top_down(egui::Align::Center),
+                        |ui| {
+                            ui.add_space(12.0);
+                            let is_dark = ctx.style().visuals.dark_mode;
+                            let image = if is_dark {
+                                egui::include_image!("../data/icons/nextui_vectorized_shadow.svg")
+                            } else {
+                                egui::include_image!("../data/icons/nextui_vectorized_shadow_dark.svg")
+                            };
+                            ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(60.0, 60.0)));
+                        },
+                    );
+
+                    columns[2].allocate_ui_with_layout(
+                        egui::Vec2::ZERO,
+                        egui::Layout::right_to_left(egui::Align::TOP),
+                        |ui| {
+                            if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
+                                self.show_theme_editor = !self.show_theme_editor;
+                            }
+                            if ui.button("📜").on_hover_text("Toggle Log Area").clicked() {
+                                self.show_log = !self.show_log;
+                                
+                                // Adjust window size when toggling log
+                                let current_size = ctx.screen_rect().size();
+                                let new_width = if self.show_log {
+                                    current_size.x + 320.0
+                                } else {
+                                    current_size.x - 320.0
+                                };
+                                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(new_width, current_size.y)));
+                            }
+                            },
+                    );
                 });
 
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    ui.vertical_centered(|ui| {
-                        let is_dark = ctx.style().visuals.dark_mode;
-                        let image = if is_dark {
-                            egui::include_image!("../data/icons/nextui_vectorized_shadow.svg")
-                        } else {
-                            egui::include_image!("../data/icons/nextui_vectorized_shadow_dark.svg")
-                        };
-                        ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(60.0, 60.0)));
-                    });
-                });
+                ui.add_space(16.0);
+                ui.separator();
                 ui.add_space(16.0);
                 ui.columns(2, |columns| {
                     columns[0].allocate_ui_with_layout(
