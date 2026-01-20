@@ -8,6 +8,7 @@ use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
 use crate::github::{download_asset, find_release_asset, get_latest_release, DownloadProgress, Release};
 use eframe::egui;
+use egui_thematic::{ThemeConfig, ThemeEditorState, render_theme_panel};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
@@ -63,6 +64,11 @@ pub struct InstallerApp {
 
     // Channel for background drive updates
     drive_rx: mpsc::UnboundedReceiver<Vec<DriveInfo>>,
+
+    // Theme editor
+    theme_state: ThemeEditorState,
+    show_theme_editor: bool,
+    last_system_dark_mode: bool,
 }
 
 impl InstallerApp {
@@ -87,6 +93,15 @@ impl InstallerApp {
             }
         });
 
+        let is_dark = cc.egui_ctx.style().visuals.dark_mode;
+        let theme_config = if is_dark {
+            ThemeConfig::dark_preset()
+        } else {
+            ThemeConfig::light_preset()
+        };
+        let mut theme_state = ThemeEditorState::default();
+        theme_state.current_config = theme_config;
+
         let mut app = Self {
             runtime,
             drives: Vec::new(),
@@ -104,6 +119,9 @@ impl InstallerApp {
             installed_drive: None,
             cancel_token: None,
             drive_rx: rx,
+            theme_state,
+            show_theme_editor: false,
+            last_system_dark_mode: is_dark,
         };
 
         // Initial sync load
@@ -737,6 +755,25 @@ async fn get_mount_path_after_format(_drive: &DriveInfo, _volume_label: &str) ->
 
 impl eframe::App for InstallerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Sync with system theme if it changes
+        let is_dark = ctx.style().visuals.dark_mode;
+        if is_dark != self.last_system_dark_mode {
+            self.last_system_dark_mode = is_dark;
+            self.theme_state.current_config = if is_dark {
+                ThemeConfig::dark_preset()
+            } else {
+                ThemeConfig::light_preset()
+            };
+        }
+
+        // Theme editor panel
+        render_theme_panel(ctx, &mut self.theme_state, &mut self.show_theme_editor);
+
+        // Keyboard shortcut to toggle theme editor (Ctrl+T)
+        if ctx.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::T))) {
+            self.show_theme_editor = !self.show_theme_editor;
+        }
+
         // Poll for drive updates
         while let Ok(drives) = self.drive_rx.try_recv() {
             self.drives = drives;
@@ -864,7 +901,15 @@ impl eframe::App for InstallerApp {
         egui::CentralPanel::default()
             .frame(panel_frame)
             .show(ctx, |ui| {
-                ui.add_space(24.0);
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                        if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
+                            self.show_theme_editor = !self.show_theme_editor;
+                        }
+                    });
+                });
+
+                ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     ui.vertical_centered(|ui| {
                         let is_dark = ctx.style().visuals.dark_mode;
@@ -935,7 +980,7 @@ impl eframe::App for InstallerApp {
                                     ui.visuals_mut().widgets.hovered.corner_radius = corner_radius;
                                     ui.visuals_mut().widgets.active.corner_radius = corner_radius;
 
-                                    if ui.add(egui::SelectableLabel::new(
+                                    if ui.add(egui::Button::selectable(
                                         self.selected_repo_idx == idx,
                                         *name,
                                     )).clicked() {
