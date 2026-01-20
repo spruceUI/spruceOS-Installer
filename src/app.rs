@@ -769,11 +769,13 @@ impl eframe::App for InstallerApp {
         }
 
         // Theme editor panel
-        render_theme_panel(ctx, &mut self.theme_state, &mut self.show_theme_editor);
+        if self.state != AppState::AwaitingConfirmation {
+            render_theme_panel(ctx, &mut self.theme_state, &mut self.show_theme_editor);
 
-        // Keyboard shortcut to toggle theme editor (Ctrl+T)
-        if ctx.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::T))) {
-            self.show_theme_editor = !self.show_theme_editor;
+            // Keyboard shortcut to toggle theme editor (Ctrl+T)
+            if ctx.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::T))) {
+                self.show_theme_editor = !self.show_theme_editor;
+            }
         }
 
         // Poll for drive updates
@@ -849,51 +851,75 @@ impl eframe::App for InstallerApp {
 
         // Show confirmation dialog if awaiting confirmation
         if self.state == AppState::AwaitingConfirmation {
+            // Background Dimmer
+            egui::Area::new(egui::Id::from("modal_dimmer"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(egui::pos2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    let screen_rect = ui.ctx().screen_rect();
+                    ui.allocate_rect(screen_rect, egui::Sense::click()); // Block clicks
+                    ui.painter().rect_filled(screen_rect, 0.0, egui::Color32::from_black_alpha(140));
+                });
+
             let window_frame = egui::Frame::window(&ctx.style())
                 .fill(ctx.style().visuals.window_fill)
                 .stroke(ctx.style().visuals.window_stroke);
 
             let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
             egui::Window::new(format!("Confirm {} Installation", selected_repo_name))
+                .order(egui::Order::Foreground)
                 .collapsible(false)
                 .resizable(false)
+                .title_bar(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .frame(window_frame)
                 .show(ctx, |ui| {
                     ui.vertical_centered(|ui| {
-                        ui.add_space(10.0);
+                        ui.add_space(12.0);
                         ui.colored_label(ui.visuals().warn_fg_color, "WARNING");
-                        ui.add_space(10.0);
+                        ui.add_space(12.0);
 
                         ui.label("This will DELETE ALL DATA on the selected drive:");
-                        ui.add_space(5.0);
+                        ui.add_space(8.0);
 
                         if let Some(idx) = self.selected_drive_idx {
                             if let Some(drive) = self.drives.get(idx) {
-                                ui.colored_label(ui.visuals().selection.bg_fill, drive.display_name());
+                                ui.label(drive.display_name());
                             }
                         }
 
-                        ui.add_space(10.0);
+                        ui.add_space(12.0);
                         ui.label("Are you sure you want to continue?");
-                        ui.add_space(15.0);
+                        ui.add_space(12.0);
+                        ui.separator();
+                        ui.add_space(8.0);
 
-                        ui.horizontal(|ui| {
-                            if ui.button("Cancel").clicked() {
-                                self.state = AppState::Idle;
-                            }
+                        ui.columns(2, |columns| {
+                            columns[0].allocate_ui_with_layout(
+                                egui::Vec2::ZERO,
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
 
-                            ui.add_space(20.0);
+                                    if ui.button("Cancel").clicked() {
+                                        self.state = AppState::Idle;
+                                    }
+                                }
+                            );
 
-                            if ui
-                                .add(egui::Button::new(format!("Yes, Install {}", selected_repo_name)).fill(ui.visuals().error_fg_color))
-                                .clicked()
-                            {
-                                self.start_installation(ctx.clone());
-                            }
+                            columns[1].allocate_ui_with_layout(
+                                egui::Vec2::ZERO,
+                                egui::Layout::left_to_right(egui::Align::Center),
+                                |ui| {
+                                    
+                                    if ui.button("Yes, install").clicked()
+                                    {
+                                        self.start_installation(ctx.clone());
+                                    }
+                                },
+                            );
                         });
 
-                        ui.add_space(10.0);
+                        ui.add_space(8.0);
                     });
                 });
         }
@@ -903,6 +929,8 @@ impl eframe::App for InstallerApp {
         egui::CentralPanel::default()
             .frame(panel_frame)
             .show(ctx, |ui| {
+                ui.set_enabled(self.state != AppState::AwaitingConfirmation);
+
                 ui.horizontal(|ui| {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
                         if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
