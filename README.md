@@ -7,6 +7,8 @@
 - Add the same output for all
 - ~~Show % for copying and extracting (this might already be a thing)  if possible~~
 - ~~x64 Linux hangs for a sec before ejecting safely, possible bug, it does eject though.~~ idk if this is really fixed it only happens sometimes for me?
+- arm64 fails to extract
+- inform user of where to find logfile
 
 ## wishlist
 - merge twig flasher with rest of spruce version
@@ -17,6 +19,7 @@
     - PortMaster (are we making this a separate archive?)
 - backup and restore (update current installation instead of just fresh ones?)
 - scrape boxart for roms
+- offline installer / updater mode - provide your own 7z or gz file instead of downloading
 ---
 
 
