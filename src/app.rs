@@ -136,6 +136,7 @@ impl InstallerApp {
             ThemeConfig::light_preset()
         };
         config.override_selection_bg = Some([124, 27, 69, 255]);
+        config.override_selection_stroke_color = Some([224, 210, 210, 255]);
         config
     }
 

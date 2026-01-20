@@ -126,5 +126,6 @@ pub fn setup_theme(ctx: &egui::Context) {
         ThemeConfig::light_preset()
     };
     theme.override_selection_bg = Some([124, 27, 69, 255]);
+    theme.override_selection_stroke_color = Some([224, 210, 210, 255]);
     ctx.set_visuals(theme.to_visuals());
 }
