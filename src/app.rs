@@ -969,7 +969,7 @@ impl eframe::App for InstallerApp {
             .frame(panel_frame)
             .show(ctx, |ui| {
                 ui.set_enabled(self.state != AppState::AwaitingConfirmation);
-                ctx.set_zoom_factor(1.15);
+                //ctx.set_zoom_factor(1.15);
 
                 ui.columns(3, |columns| {
                     columns[0].allocate_ui_with_layout(
