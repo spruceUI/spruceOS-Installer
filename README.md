@@ -7,11 +7,11 @@
 ---
 
 
-# NextUI Installer
+# SpruceOS Installer
 
 ## Overview
 
-**NextUI Installer** is an all-in-one **downloader, extractor, formatter, and installer** made for **NextUI**.
+**SpruceOS Installer** is an all-in-one **downloader, extractor, formatter, and installer** made for **SpruceOS**.
 
 It can be easily edited and adapted to work with **any custom firmware (CFW)** that requires files to be copied onto a **FAT32 SD card**, with little to no hassle.
 
@@ -32,20 +32,20 @@ The installer is distributed as a `.zip` containing a self-contained `.app` bund
 2. Extract the ZIP — you will get the following bundle and files:
 
     ```
-    NextUI Installer.app/
+    SpruceOS Installer.app/
     ├── Contents/
     │   ├── MacOS/
-    │   │   └── nextui-installer
+    │   │   └── spruceos-installer
     │   ├── Info.plist
     │   └── Resources/
     │       └── AppIcon.icns
     ```
 
-# NextUI Installer — Developer Guide
+# SpruceOS Installer — Developer Guide
 
 ## Overview
 
-**NextUI Installer** is an all-in-one Rust installer for flashing SD cards with NextUI (or other custom firmware).  
+**SpruceOS Installer** is an all-in-one Rust installer for flashing SD cards with SpruceOS (or other custom firmware).  
 This guide is intended for **developers** who want to **rebrand or customize the installer** for their own OS project.
 
 > **Note:** All builds are handled automatically via **GitHub Actions**.  
@@ -63,9 +63,9 @@ Edit these constants:
 
 | Field | Purpose | Example |
 |-------|---------|---------|
-| `APP_NAME` | Display name of your OS (window title, UI) | `"NextUI"` |
-| `VOLUME_LABEL` | FAT32 SD card label (max 11 chars, uppercase) | `"NEXTUI"` |
-| `REPO_OPTIONS` | Array of repositories to fetch | `[("NextUI stable", "LoveRetro/NextUI")]` |
+| `APP_NAME` | Display name of your OS (window title, UI) | `"SpruceOS"` |
+| `VOLUME_LABEL` | FAT32 SD card label (max 11 chars, uppercase) | `"SPRUCEOS"` |
+| `REPO_OPTIONS` | Array of repositories to fetch | `[("SpruceOS stable", "LoveRetro/SpruceOS")]` |
 | `DEFAULT_REPO_INDEX` | Index of the default repo selection | `0` |
 | `ASSET_EXTENSION` | File extension to download from releases | `".7z"` or `".zip"` |
 

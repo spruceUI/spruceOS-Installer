@@ -39,16 +39,16 @@ jobs:
           mkdir -p AppIcon.iconset
 
           # Convert PNG to various sizes required for macOS icon
-          sips -z 16 16     "assets/Icons/icon-macOS-Dark-1024x1024@1x.png" --out "AppIcon.iconset/icon_16x16.png"
-          sips -z 32 32     "assets/Icons/icon-macOS-Dark-1024x1024@1x.png" --out "AppIcon.iconset/icon_16x16@2x.png"
-          sips -z 32 32     "assets/Icons/icon-macOS-Dark-1024x1024@1x.png" --out "AppIcon.iconset/icon_32x32.png"
-          sips -z 64 64     "assets/Icons/icon-macOS-Dark-1024x1024@1x.png" --out "AppIcon.iconset/icon_32x32@2x.png"
-          sips -z 128 128   "assets/Icons/icon-macOS-Dark-1024x1024@1x.png" --out "AppIcon.iconset/icon_128x128.png"
-          sips -z 256 256   "assets/Icons/icon-macOS-Dark-1024x1024@1x.png" --out "AppIcon.iconset/icon_128x128@2x.png"
-          sips -z 256 256   "assets/Icons/icon-macOS-Dark-1024x1024@1x.png" --out "AppIcon.iconset/icon_256x256.png"
-          sips -z 512 512   "assets/Icons/icon-macOS-Dark-1024x1024@1x.png" --out "AppIcon.iconset/icon_256x256@2x.png"
-          sips -z 512 512   "assets/Icons/icon-macOS-Dark-1024x1024@1x.png" --out "AppIcon.iconset/icon_512x512.png"
-          sips -z 1024 1024 "assets/Icons/icon-macOS-Dark-1024x1024@1x.png" --out "AppIcon.iconset/icon_512x512@2x.png"
+          sips -z 16 16     "assets/Icons/icon.png" --out "AppIcon.iconset/icon_16x16.png"
+          sips -z 32 32     "assets/Icons/icon.png" --out "AppIcon.iconset/icon_16x16@2x.png"
+          sips -z 32 32     "assets/Icons/icon.png" --out "AppIcon.iconset/icon_32x32.png"
+          sips -z 64 64     "assets/Icons/icon.png" --out "AppIcon.iconset/icon_32x32@2x.png"
+          sips -z 128 128   "assets/Icons/icon.png" --out "AppIcon.iconset/icon_128x128.png"
+          sips -z 256 256   "assets/Icons/icon.png" --out "AppIcon.iconset/icon_128x128@2x.png"
+          sips -z 256 256   "assets/Icons/icon.png" --out "AppIcon.iconset/icon_256x256.png"
+          sips -z 512 512   "assets/Icons/icon.png" --out "AppIcon.iconset/icon_256x256@2x.png"
+          sips -z 512 512   "assets/Icons/icon.png" --out "AppIcon.iconset/icon_512x512.png"
+          sips -z 1024 1024 "assets/Icons/icon.png" --out "AppIcon.iconset/icon_512x512@2x.png"
 
           # Convert iconset to icns
           iconutil -c icns AppIcon.iconset -o AppIcon.icns
@@ -58,12 +58,12 @@ jobs:
           cat > launch-installer.command << 'EOF'
           #!/bin/bash
           SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-          APP_PATH="$SCRIPT_DIR/NextUIInstaller.app"
-          echo "NextUI Installer Launcher"
+          APP_PATH="$SCRIPT_DIR/SpruceOSInstaller.app"
+          echo "SpruceOS Installer Launcher"
           echo "============================"
           echo "Removing quarantine attribute..."
           xattr -d com.apple.quarantine "$APP_PATH" 2>/dev/null
-          echo "Launching NextUI Installer..."
+          echo "Launching SpruceOS Installer..."
           open "$APP_PATH"
           EOF
           chmod +x launch-installer.command
@@ -71,41 +71,41 @@ jobs:
       - name: Create Universal App Bundle
         run: |
           # Create universal binary using lipo
-          lipo -create -output nextui-installer-universal \
-            target/aarch64-apple-darwin/release/nextui-installer \
-            target/x86_64-apple-darwin/release/nextui-installer
+          lipo -create -output spruceos-installer-universal \
+            target/aarch64-apple-darwin/release/spruceos-installer \
+            target/x86_64-apple-darwin/release/spruceos-installer
           
           # Verify the universal binary contains both architectures
           echo "Universal binary architectures:"
-          lipo -info nextui-installer-universal
+          lipo -info spruceos-installer-universal
           
           # Create .app bundle structure (no spaces in name)
-          mkdir -p "NextUIInstaller.app/Contents/MacOS"
-          mkdir -p "NextUIInstaller.app/Contents/Resources"
+          mkdir -p "SpruceOSInstaller.app/Contents/MacOS"
+          mkdir -p "SpruceOSInstaller.app/Contents/Resources"
           
           # Copy universal binary
-          cp nextui-installer-universal "NextUIInstaller.app/Contents/MacOS/nextui-installer"
-          chmod +x "NextUIInstaller.app/Contents/MacOS/nextui-installer"
+          cp spruceos-installer-universal "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
+          chmod +x "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
 
           # Copy Info.plist and icon
-          cp "assets/Mac/Info.plist" "NextUIInstaller.app/Contents/"
-          cp "AppIcon.icns" "NextUIInstaller.app/Contents/Resources/"
+          cp "assets/Mac/Info.plist" "SpruceOSInstaller.app/Contents/"
+          cp "AppIcon.icns" "SpruceOSInstaller.app/Contents/Resources/"
 
           # Copy 7zz binary to Resources so it inherits app's unquarantine status
-          cp "assets/Mac/7zz" "NextUIInstaller.app/Contents/Resources/7zz"
-          chmod +x "NextUIInstaller.app/Contents/Resources/7zz"
+          cp "assets/Mac/7zz" "SpruceOSInstaller.app/Contents/Resources/7zz"
+          chmod +x "SpruceOSInstaller.app/Contents/Resources/7zz"
           
           # Remove quarantine attribute to prevent macOS Gatekeeper issues
-          xattr -cr "NextUIInstaller.app"
+          xattr -cr "SpruceOSInstaller.app"
           
           # Create zip for distribution with both app and launcher
-          zip -r "NextUI-Installer-macOS-Universal.zip" "NextUIInstaller.app" "launch-installer.command"
+          zip -r "SpruceOS-Installer-macOS-Universal.zip" "SpruceOSInstaller.app" "launch-installer.command"
 
       - name: Upload Universal artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NextUI-Installer-macOS-Universal
-          path: NextUI-Installer-macOS-Universal.zip
+          name: SpruceOS-Installer-macOS-Universal
+          path: SpruceOS-Installer-macOS-Universal.zip
 
   release:
     needs: build
@@ -130,12 +130,12 @@ jobs:
             **Warning:** This is a pre-release build and may contain bugs.
 
             ## Downloads
-            - **macOS (Universal - Apple Silicon & Intel):** `NextUI-Installer-macOS-Universal.zip`
+            - **macOS (Universal - Apple Silicon & Intel):** `SpruceOS-Installer-macOS-Universal.zip`
 
             **macOS Users:** 
             1. Download and extract the zip file
             2. **Easy Method:** Double-click `launch-installer.command` to automatically remove quarantine and launch the app
-            3. **Alternative:** Right-click "NextUIInstaller.app" and select "Open", then click "Open" in the dialog
+            3. **Alternative:** Right-click "SpruceOSInstaller.app" and select "Open", then click "Open" in the dialog
             
             This is a Universal binary that works on both Apple Silicon (M1/M2/M3/M4) and Intel Macs.
             

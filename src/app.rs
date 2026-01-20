@@ -141,12 +141,12 @@ impl InstallerApp {
 
     fn get_theme_config(&self, is_dark: bool) -> ThemeConfig {
         let mut config = if is_dark {
-            ThemeConfig::dark_preset()
+            ThemeConfig::gruvbox_dark_preset()
         } else {
-            ThemeConfig::light_preset()
+            // TODO: not sure what light preset would fit spruceos branding, 
+            // pick one from theme editor
+            ThemeConfig::gruvbox_dark_preset()
         };
-        config.override_selection_bg = Some([124, 27, 69, 255]);
-        config.override_selection_stroke_color = Some([224, 210, 210, 255]);
         config
     }
 
@@ -1146,9 +1146,9 @@ impl eframe::App for InstallerApp {
                             ui.add_space(12.0);
                             let is_dark = ctx.style().visuals.dark_mode;
                             let image = if is_dark {
-                                egui::include_image!("../data/icons/nextui_vectorized_shadow.svg")
+                                egui::include_image!("../assets/Icons/icon_dark.png")
                             } else {
-                                egui::include_image!("../data/icons/nextui_vectorized_shadow_dark.svg")
+                                egui::include_image!("../assets/Icons/icon.png")
                             };
                             ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(60.0, 60.0)));
                         },
@@ -1158,9 +1158,9 @@ impl eframe::App for InstallerApp {
                         egui::Vec2::ZERO,
                         egui::Layout::right_to_left(egui::Align::TOP),
                         |ui| {
-                            //if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
-                            //    self.show_theme_editor = !self.show_theme_editor;
-                            //}
+                            if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
+                                self.show_theme_editor = !self.show_theme_editor;
+                            }
                             if ui.button("📜").on_hover_text("Toggle Log Area").clicked() {
                                 self.show_log = !self.show_log;
                                 

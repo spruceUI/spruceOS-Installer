@@ -3,10 +3,10 @@
   <assemblyIdentity
     version="1.0.0.0"
     processorArchitecture="*"
-    name="NextUI.Installer"
+    name="SpruceOS.Installer"
     type="win32"
   />
-  <description>NextUI SD Card Installer</description>
+  <description>SpruceOS SD Card Installer</description>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges>

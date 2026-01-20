@@ -37,14 +37,14 @@ jobs:
 
       - name: Rename binary
         run: |
-          cp "target/x86_64-unknown-linux-gnu/release/nextui-installer" "nextui-installer-linux-x64"
-          chmod +x "nextui-installer-linux-x64"
+          cp "target/x86_64-unknown-linux-gnu/release/spruceos-installer" "spruceos-installer-linux-x64"
+          chmod +x "spruceos-installer-linux-x64"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nextui-installer-linux-x64
-          path: nextui-installer-linux-x64
+          name: spruceos-installer-linux-x64
+          path: spruceos-installer-linux-x64
 
   build-arm64:
     runs-on: ubuntu-latest
@@ -66,14 +66,14 @@ jobs:
 
       - name: Rename binary
         run: |
-          cp "target/aarch64-unknown-linux-gnu/release/nextui-installer" "nextui-installer-linux-arm64"
-          chmod +x "nextui-installer-linux-arm64"
+          cp "target/aarch64-unknown-linux-gnu/release/spruceos-installer" "spruceos-installer-linux-arm64"
+          chmod +x "spruceos-installer-linux-arm64"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nextui-installer-linux-arm64
-          path: nextui-installer-linux-arm64
+          name: spruceos-installer-linux-arm64
+          path: spruceos-installer-linux-arm64
 
   release:
     needs: [build-x64, build-arm64]

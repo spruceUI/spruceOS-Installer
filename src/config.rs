@@ -4,8 +4,8 @@
 // Edit this file to customize the installer for your OS project.
 //
 // QUICK START - To rebrand this installer, change these values:
-//   1. APP_NAME        - Your OS name (e.g., "NextUI", "Onion", "MinUI")
-//   2. VOLUME_LABEL    - SD card label, max 11 chars uppercase (e.g., "NEXTUI")
+//   1. APP_NAME        - Your OS name (e.g., "SpruceOS", "Onion", "MinUI")
+//   2. VOLUME_LABEL    - SD card label, max 11 chars uppercase (e.g., "SPRUCEOS")
 //   3. REPO_OPTIONS    - Your GitHub repositories
 //
 // ALSO UPDATE THESE EXTERNAL FILES:
@@ -23,12 +23,12 @@ use eframe::egui;
 // ----------------------------------------------------------------------------
 
 /// The name of your OS (displayed in window title and UI)
-/// Examples: "NextUI", "Onion", "MinUI"
-pub const APP_NAME: &str = "NextUI";
+/// Examples: "SpruceOS", "Onion", "MinUI"
+pub const APP_NAME: &str = "SpruceOS";
 
 /// Volume label applied to formatted SD cards (max 11 characters, uppercase)
 /// This is what the SD card will be named in file explorers
-pub const VOLUME_LABEL: &str = "NEXTUI";
+pub const VOLUME_LABEL: &str = "SPRUCEOS";
 
 // ----------------------------------------------------------------------------
 // INTERNAL IDENTIFIERS (auto-generated from APP_NAME)
@@ -36,7 +36,7 @@ pub const VOLUME_LABEL: &str = "NEXTUI";
 // ----------------------------------------------------------------------------
 
 /// Window title (displayed in title bar)
-pub const WINDOW_TITLE: &str = "NextUI Setup";
+pub const WINDOW_TITLE: &str = concat!(env!("CARGO_PKG_NAME"), " Installer");
 
 /// User-Agent string for HTTP requests to GitHub
 pub const USER_AGENT: &str = env!("CARGO_PKG_NAME");
@@ -50,8 +50,9 @@ pub const TEMP_PREFIX: &str = env!("CARGO_PKG_NAME");
 // Each entry is (Display Name, GitHub repo in "owner/repo" format)
 
 pub const REPO_OPTIONS: &[(&str, &str)] = &[
-    ("NextUI stable", "LoveRetro/NextUI"),
-    ("beta", "LoveRetro/NextUI-nightly"),
+    ("Stable", "spruceUI/spruceOS"),
+    ("Nightlies", "spruceUI/spruceOSNightlies"),
+    ("SprigUI", "spruceUI/sprigUI"),
 ];
 
 /// Index of the default repository selection (0 = first option)
@@ -59,7 +60,7 @@ pub const DEFAULT_REPO_INDEX: usize = 0;
 
 /// File extension to look for in GitHub releases (e.g., ".7z", ".zip")
 /// The installer will download the first asset matching this extension
-pub const ASSET_EXTENSION: &str = ".zip";
+pub const ASSET_EXTENSION: &str = ".7z";
 
 // ----------------------------------------------------------------------------
 // WINDOW SETTINGS
@@ -121,11 +122,11 @@ pub fn setup_theme(ctx: &egui::Context) {
 
     let is_dark = ctx.style().visuals.dark_mode;
     let mut theme = if is_dark {
-        ThemeConfig::dark_preset()
+        ThemeConfig::gruvbox_dark_preset()
     } else {
-        ThemeConfig::light_preset()
+        // TODO: not sure what light preset would fit spruceos branding, 
+        // pick one from theme editor
+        ThemeConfig::gruvbox_dark_preset()
     };
-    theme.override_selection_bg = Some([124, 27, 69, 255]);
-    theme.override_selection_stroke_color = Some([224, 210, 210, 255]);
     ctx.set_visuals(theme.to_visuals());
 }

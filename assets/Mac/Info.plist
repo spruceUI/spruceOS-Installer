@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>NextUIInstaller</string>
+    <string>SpruceOSInstaller</string>
     <key>CFBundleDisplayName</key>
-    <string>NextUI Installer</string>
+    <string>SpruceOS Installer</string>
     <key>CFBundleIdentifier</key>
-    <string>com.nextui.installer</string>
+    <string>com.spruceos.installer</string>
     <key>CFBundleVersion</key>
     <string>1.0.0</string>
     <key>CFBundleShortVersionString</key>
@@ -15,7 +15,7 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>nextui-installer</string>
+    <string>spruceos-installer</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>

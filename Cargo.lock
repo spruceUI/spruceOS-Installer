@@ -2301,30 +2301,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "nextui-installer"
-version = "1.0.0"
-dependencies = [
- "dirs",
- "eframe",
- "egui",
- "egui-thematic",
- "egui_extras",
- "embed-resource",
- "futures-util",
- "image",
- "lazy_static",
- "libc",
- "reqwest",
- "serde",
- "serde_json",
- "sevenz-rust",
- "tempfile",
- "tokio",
- "tokio-util",
- "windows 0.58.0",
-]
-
-[[package]]
 name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3667,6 +3643,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "eda41003dc44290527a59b13432d4a0379379fa074b70174882adfbdfd917844"
 dependencies = [
  "bitflags 2.10.0",
+]
+
+[[package]]
+name = "spruceos-installer"
+version = "1.0.0"
+dependencies = [
+ "dirs",
+ "eframe",
+ "egui",
+ "egui-thematic",
+ "egui_extras",
+ "embed-resource",
+ "futures-util",
+ "image",
+ "lazy_static",
+ "libc",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sevenz-rust",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "windows 0.58.0",
 ]
 
 [[package]]
