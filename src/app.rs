@@ -858,8 +858,8 @@ impl eframe::App for InstallerApp {
                 self.state = AppState::Idle;
                 self.cancel_token = None;
                 progress.message.clear();
-            } else if self.state == AppState::Idle || self.state == AppState::AwaitingConfirmation {
-                // Only update state if we are not already in a process
+            } else {
+                // Update state based on progress message
                 if progress.message.contains("Downloading") {
                     self.state = AppState::Downloading;
                 } else if progress.message.contains("Formatting")
