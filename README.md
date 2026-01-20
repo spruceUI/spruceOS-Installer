@@ -2,9 +2,6 @@
 
 ## To-Do
 
-- Clean up colors to better match the **NextUI** theme
-- Add the same output for all
-- ~~Show % for copying and extracting (this might already be a thing)  if possible~~
 - ~~x64 Linux hangs for a sec before ejecting safely, possible bug, it does eject though.~~ idk if this is really fixed it only happens sometimes for me?
 
 ---
