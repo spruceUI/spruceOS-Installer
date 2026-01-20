@@ -1084,6 +1084,16 @@ impl eframe::App for InstallerApp {
             .frame(panel_frame)
             .show(ctx, |ui| {
                 ui.add_enabled_ui(!show_modal, |ui| {
+                    let show_progress = matches!(
+                        self.state,
+                        AppState::FetchingRelease
+                            | AppState::Downloading
+                            | AppState::Formatting
+                            | AppState::Extracting
+                            | AppState::Copying
+                            | AppState::Cancelling
+                    );
+
                     //ctx.set_zoom_factor(1.15);
                     //ui.style_mut().spacing.item_spacing = egui::vec2(16.0, 16.0);
 
@@ -1151,7 +1161,7 @@ impl eframe::App for InstallerApp {
                                         .and_then(|idx| self.drives.get(idx))
                                         .map(|d| d.display_name())
                                         .unwrap_or_else(|| "Select Drive".to_string()),
-                                    true
+                                    !show_progress
                                 )
                             };
 
@@ -1175,34 +1185,36 @@ impl eframe::App for InstallerApp {
                         egui::Vec2::ZERO,
                         egui::Layout::left_to_right(egui::Align::Center),
                         |ui| {
-                            // Repository selection
-                            ui.spacing_mut().item_spacing.x = 0.0;
-                            let count = REPO_OPTIONS.len();
+                            ui.add_enabled_ui(!show_progress, |ui| {
+                                // Repository selection
+                                ui.spacing_mut().item_spacing.x = 0.0;
+                                let count = REPO_OPTIONS.len();
 
-                            for (idx, (name, _url)) in REPO_OPTIONS.iter().enumerate() {
-                                let corner_radius = if count == 1 {
-                                    egui::CornerRadius::same(4)
-                                } else if idx == 0 {
-                                    egui::CornerRadius { nw: 4, sw: 4, ne: 0, se: 0 }
-                                } else if idx == count - 1 {
-                                    egui::CornerRadius { nw: 0, sw: 0, ne: 4, se: 4 }
-                                } else {
-                                    egui::CornerRadius::ZERO
-                                };
+                                for (idx, (name, _url)) in REPO_OPTIONS.iter().enumerate() {
+                                    let corner_radius = if count == 1 {
+                                        egui::CornerRadius::same(4)
+                                    } else if idx == 0 {
+                                        egui::CornerRadius { nw: 4, sw: 4, ne: 0, se: 0 }
+                                    } else if idx == count - 1 {
+                                        egui::CornerRadius { nw: 0, sw: 0, ne: 4, se: 4 }
+                                    } else {
+                                        egui::CornerRadius::ZERO
+                                    };
 
-                                ui.scope(|ui| {
-                                    ui.visuals_mut().widgets.inactive.corner_radius = corner_radius;
-                                    ui.visuals_mut().widgets.hovered.corner_radius = corner_radius;
-                                    ui.visuals_mut().widgets.active.corner_radius = corner_radius;
+                                    ui.scope(|ui| {
+                                        ui.visuals_mut().widgets.inactive.corner_radius = corner_radius;
+                                        ui.visuals_mut().widgets.hovered.corner_radius = corner_radius;
+                                        ui.visuals_mut().widgets.active.corner_radius = corner_radius;
 
-                                    if ui.add(egui::Button::selectable(
-                                        self.selected_repo_idx == idx,
-                                        *name,
-                                    )).clicked() {
-                                        self.selected_repo_idx = idx;
-                                    }
-                                });
-                            }
+                                        if ui.add(egui::Button::selectable(
+                                            self.selected_repo_idx == idx,
+                                            *name,
+                                        )).clicked() {
+                                            self.selected_repo_idx = idx;
+                                        }
+                                    });
+                                }
+                            });
                         },
                     );
                 });
@@ -1210,17 +1222,6 @@ impl eframe::App for InstallerApp {
                 ui.add_space(12.0);
 
                 // Progress bar
-                let show_progress = matches!(
-                    self.state,
-                    AppState::FetchingRelease
-                        | AppState::Downloading
-                        | AppState::Formatting
-                        | AppState::Extracting
-                        | AppState::Copying
-                        | AppState::Cancelling
-                        //| AppState::Idle // only for debugging layout
-                );
-
                 if show_progress {
                     
                     let (current, total, message) = {
