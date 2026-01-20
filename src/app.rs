@@ -909,13 +909,32 @@ impl eframe::App for InstallerApp {
                     // Repository selection
                     ui.vertical(|ui| {
                         ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 0.0;
+                            let count = REPO_OPTIONS.len();
+
                             for (idx, (name, _url)) in REPO_OPTIONS.iter().enumerate() {
-                                if ui.add(egui::SelectableLabel::new(
-                                    self.selected_repo_idx == idx,
-                                    *name,
-                                )).clicked() {
-                                    self.selected_repo_idx = idx;
-                                }
+                                let rounding = if count == 1 {
+                                    egui::Rounding::same(4.0)
+                                } else if idx == 0 {
+                                    egui::Rounding { nw: 4.0, sw: 4.0, ne: 0.0, se: 0.0 }
+                                } else if idx == count - 1 {
+                                    egui::Rounding { nw: 0.0, sw: 0.0, ne: 4.0, se: 4.0 }
+                                } else {
+                                    egui::Rounding::ZERO
+                                };
+
+                                ui.scope(|ui| {
+                                    ui.visuals_mut().widgets.inactive.rounding = rounding;
+                                    ui.visuals_mut().widgets.hovered.rounding = rounding;
+                                    ui.visuals_mut().widgets.active.rounding = rounding;
+
+                                    if ui.add(egui::SelectableLabel::new(
+                                        self.selected_repo_idx == idx,
+                                        *name,
+                                    )).clicked() {
+                                        self.selected_repo_idx = idx;
+                                    }
+                                });
                             }
                         });
                     });
