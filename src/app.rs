@@ -68,6 +68,7 @@ pub struct InstallerApp {
     // Theme editor
     theme_state: ThemeEditorState,
     show_theme_editor: bool,
+    show_log: bool,
     last_system_dark_mode: bool,
 }
 
@@ -115,6 +116,7 @@ impl InstallerApp {
             drive_rx: rx,
             theme_state: ThemeEditorState::default(),
             show_theme_editor: false,
+            show_log: false,
             last_system_dark_mode: is_dark,
         };
 
@@ -924,6 +926,42 @@ impl eframe::App for InstallerApp {
                 });
         }
 
+        if self.show_log {
+            egui::SidePanel::right("log_panel")
+                .resizable(true)
+                .default_width(320.0)
+                .min_width(200.0)
+                .show(ctx, |ui| {
+                    ui.set_enabled(self.state != AppState::AwaitingConfirmation);
+                    ui.vertical(|ui| {
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            ui.heading("Installation Log");
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                if ui.button("X").on_hover_text("Close Log").clicked() {
+                                    self.show_log = false;
+                                    let current_size = ui.ctx().screen_rect().size();
+                                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(current_size.x - 320.0, current_size.y)));
+                                }
+                            });
+                        });
+                        ui.separator();
+                        
+                        egui::ScrollArea::vertical()
+                            .stick_to_bottom(true)
+                            .auto_shrink([false, false])
+                            .show(ui, |ui| {
+                                ui.set_width(ui.available_width());
+                                if let Ok(logs) = self.log_messages.lock() {
+                                    for msg in logs.iter() {
+                                        ui.label(msg);
+                                    }
+                                }
+                            });
+                    });
+                });
+        }
+
         let panel_frame = egui::Frame::central_panel(&ctx.style()).fill(ctx.style().visuals.panel_fill);
 
         egui::CentralPanel::default()
@@ -935,6 +973,18 @@ impl eframe::App for InstallerApp {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
                         if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
                             self.show_theme_editor = !self.show_theme_editor;
+                        }
+                        if ui.button("📜").on_hover_text("Toggle Log Area").clicked() {
+                            self.show_log = !self.show_log;
+                            
+                            // Adjust window size when toggling log
+                            let current_size = ctx.screen_rect().size();
+                            let new_width = if self.show_log {
+                                current_size.x + 320.0
+                            } else {
+                                current_size.x - 320.0
+                            };
+                            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(new_width, current_size.y)));
                         }
                     });
                 });
@@ -1033,7 +1083,7 @@ impl eframe::App for InstallerApp {
                         | AppState::Extracting
                         | AppState::Copying
                         | AppState::Cancelling
-                        //| AppState::Idle // only for debugging layout
+                        | AppState::Idle // only for debugging layout
                 );
 
                 if show_progress {
@@ -1045,10 +1095,10 @@ impl eframe::App for InstallerApp {
 
                     ui.horizontal(|ui| {
                         ui.vertical_centered(|ui| {
-                            ui.label(&message);
+                            //ui.label(&message);
+                            ui.label("Message test");
                         });
                     });
-                    //ui.colored_label(COLOR_TEXT, &message);
                     ui.add_space(8.0);
 
                     ui.horizontal(|ui| {
@@ -1067,26 +1117,30 @@ impl eframe::App for InstallerApp {
 
                                 // Allocate space for the progress bar
                                 let desired_size = egui::vec2(ui.available_width() / 2.0, 6.0);
-                                let (rect, _response) =
+                                let (outer_rect, _response) =
                                     ui.allocate_exact_size(desired_size, egui::Sense::hover());
 
-                                if ui.is_rect_visible(rect) {
-                                    let painter = ui.painter();
-
-                                    // Background
-                                    painter.rect_filled(rect, 4.0, ui.visuals().widgets.noninteractive.bg_fill);
+                                if ui.is_rect_visible(outer_rect) {
+                                    let visuals = ui.style().visuals.clone();
+                                    let half_height = outer_rect.height() / 2.0;
+                                    let corner_radius = half_height;
+                                    ui.painter()
+                                        .rect_filled(outer_rect, corner_radius, visuals.extreme_bg_color);
 
                                     // Animated highlight - moves back and forth
                                     let cycle = (time * 0.8).sin() * 0.5 + 0.5; // 0.0 to 1.0
-                                    let bar_width = rect.width() * 0.3;
-                                    let bar_x = rect.left() + (rect.width() - bar_width) * cycle as f32;
+                                    let bar_width = outer_rect.width() * 0.3;
+                                    let bar_x = outer_rect.left() + (outer_rect.width() - bar_width) * cycle as f32;
 
                                     let highlight_rect = egui::Rect::from_min_size(
-                                        egui::pos2(bar_x, rect.top()),
-                                        egui::vec2(bar_width, rect.height()),
+                                        egui::pos2(bar_x, outer_rect.top()),
+                                        egui::vec2(bar_width, outer_rect.height()),
                                     );
 
-                                    painter.rect_filled(highlight_rect, 4.0, ui.visuals().selection.bg_fill);
+                                    ui.painter().rect_filled(
+                                        highlight_rect,
+                                        corner_radius,
+                                        visuals.selection.bg_fill);
                                 }
                             } else {
                                 // Normal progress bar for downloading
@@ -1199,21 +1253,6 @@ impl eframe::App for InstallerApp {
                 }
 
                 ui.add_space(10.0);
-
-                // Log area
-                ui.separator();
-                ui.label("Log:");
-
-                egui::ScrollArea::vertical()
-                    .max_height(150.0)
-                    .stick_to_bottom(true)
-                    .show(ui, |ui| {
-                        if let Ok(logs) = self.log_messages.lock() {
-                            for msg in logs.iter() {
-                                ui.label(msg);
-                            }
-                        }
-                    });
             });
     }
 }

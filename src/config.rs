@@ -36,7 +36,7 @@ pub const VOLUME_LABEL: &str = "NEXTUI";
 // ----------------------------------------------------------------------------
 
 /// Window title (displayed in title bar)
-pub const WINDOW_TITLE: &str = "NextUI Installer";
+pub const WINDOW_TITLE: &str = "NextUI Setup";
 
 /// User-Agent string for HTTP requests to GitHub
 pub const USER_AGENT: &str = env!("CARGO_PKG_NAME");
@@ -66,10 +66,10 @@ pub const ASSET_EXTENSION: &str = ".zip";
 // ----------------------------------------------------------------------------
 
 /// Default window size (width, height)
-pub const WINDOW_SIZE: (f32, f32) = (475.0, 320.0);
+pub const WINDOW_SIZE: (f32, f32) = (475.0, 275.0);
 
 /// Minimum window size (width, height)
-pub const WINDOW_MIN_SIZE: (f32, f32) = (475.0, 320.0);
+pub const WINDOW_MIN_SIZE: (f32, f32) = (475.0, 275.0);
 
 // ----------------------------------------------------------------------------
 // ICON CONFIGURATION
