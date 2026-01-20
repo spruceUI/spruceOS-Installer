@@ -1115,9 +1115,9 @@ impl eframe::App for InstallerApp {
                         egui::Vec2::ZERO,
                         egui::Layout::right_to_left(egui::Align::TOP),
                         |ui| {
-                            if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
-                                self.show_theme_editor = !self.show_theme_editor;
-                            }
+                            //if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
+                            //    self.show_theme_editor = !self.show_theme_editor;
+                            //}
                             if ui.button("📜").on_hover_text("Toggle Log Area").clicked() {
                                 self.show_log = !self.show_log;
                                 
