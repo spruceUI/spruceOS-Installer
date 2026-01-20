@@ -2,10 +2,6 @@
 
 ## To-Do
 
-- Clean up colors to better match the **SPRUCE** theme
-- ~~Reverse the download/format order of operations.~~
-- Add the same output for all
-- ~~Show % for copying and extracting (this might already be a thing)  if possible~~
 - ~~x64 Linux hangs for a sec before ejecting safely, possible bug, it does eject though.~~ idk if this is really fixed it only happens sometimes for me?
 - arm64 fails to extract
 - inform user of where to find logfile
@@ -23,11 +19,11 @@
 ---
 
 
-# spruceOS Installer
+# SpruceOS Installer
 
 ## Overview
 
-**spruceOS Installer** is an all-in-one **downloader, extractor, formatter, and installer** made for **spruceOS**.
+**SpruceOS Installer** is an all-in-one **downloader, extractor, formatter, and installer** made for **SpruceOS**.
 
 It can be easily edited and adapted to work with **any custom firmware (CFW)** that requires files to be copied onto a **FAT32 SD card**, with little to no hassle.
 
@@ -57,15 +53,11 @@ The installer is distributed as a `.zip` containing a self-contained `.app` bund
     │       └── AppIcon.icns
     ```
 
-
-
-
-
-# spruceOS Installer — Developer Guide
+# SpruceOS Installer — Developer Guide
 
 ## Overview
 
-**spruceOS Installer** is an all-in-one Rust installer for flashing SD cards with SpruceOS (or other custom firmware).  
+**SpruceOS Installer** is an all-in-one Rust installer for flashing SD cards with SpruceOS (or other custom firmware).  
 This guide is intended for **developers** who want to **rebrand or customize the installer** for their own OS project.
 
 > **Note:** All builds are handled automatically via **GitHub Actions**.  
@@ -84,8 +76,8 @@ Edit these constants:
 | Field | Purpose | Example |
 |-------|---------|---------|
 | `APP_NAME` | Display name of your OS (window title, UI) | `"SpruceOS"` |
-| `VOLUME_LABEL` | FAT32 SD card label (max 11 chars, uppercase) | `"SPRUCE"` |
-| `REPO_OPTIONS` | Array of repositories to fetch | `[("spruceOS Stable", "user/spruceOS")]` |
+| `VOLUME_LABEL` | FAT32 SD card label (max 11 chars, uppercase) | `"SPRUCEOS"` |
+| `REPO_OPTIONS` | Array of repositories to fetch | `[("SpruceOS stable", "LoveRetro/SpruceOS")]` |
 | `DEFAULT_REPO_INDEX` | Index of the default repo selection | `0` |
 | `ASSET_EXTENSION` | File extension to download from releases | `".7z"` or `".zip"` |
 

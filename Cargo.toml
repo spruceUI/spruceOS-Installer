@@ -3,7 +3,7 @@ name = "spruceos-installer"
 version = "1.0.0"
 edition = "2021"
 description = "SpruceOS SD Card Installer"
-authors = ["SpruceOS Team"]
+authors = ["SpruceOS Team", "SpruceOS Team"]
 license = "GPL-3.0-or-later"
 
 [features]
@@ -11,8 +11,10 @@ default = []
 icon = ["image"]
 
 [dependencies]
-eframe = "0.29"
-egui = "0.29"
+eframe = "0.33"
+egui = "0.33"
+egui_extras = { version = "0.33", features = ["all_loaders"] }
+egui-thematic = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "fs", "process", "sync", "time", "io-util", "macros"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
 sevenz-rust = "0.6"

@@ -1,7 +1,15 @@
 name: Build Windows
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request: {}
+
+permissions:
+  attestations: write
+  contents: read
+  id-token: write
 
 env:
   CARGO_TERM_COLOR: always

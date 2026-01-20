@@ -7,7 +7,7 @@
     <key>CFBundleDisplayName</key>
     <string>SpruceOS Installer</string>
     <key>CFBundleIdentifier</key>
-    <string>com.spruceui.installer</string>
+    <string>com.spruceos.installer</string>
     <key>CFBundleVersion</key>
     <string>1.0.0</string>
     <key>CFBundleShortVersionString</key>

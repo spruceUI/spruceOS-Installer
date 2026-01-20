@@ -558,46 +558,32 @@ pub async fn format_drive_fat32(
         crate::debug::log("Unmounting disk...");
 
         let unmount_result = timeout(
-            Duration::from_secs(30),
+            Duration::from_secs(10),
             Command::new("diskutil")
-                .args(["unmountDisk", device_path])
-                .output()
+                .args(["unmountDisk", "force", device_path])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
         ).await;
+        let _ = progress_tx.send(FormatProgress::Progress { percent: 10 });
 
         match unmount_result {
-            Ok(Ok(output)) => {
-                if !output.status.success() {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    if !stderr.contains("was already unmounted") && !stderr.contains("not mounted") {
-                        crate::debug::log(&format!("Unmount warning: {}", stderr));
-                    }
+            Ok(Ok(status)) => {
+                if !status.success() {
+                    crate::debug::log(&format!("Unmount warning (proceeding): status {}", status));
                 } else {
                     crate::debug::log("Disk unmounted successfully");
                 }
             }
             Ok(Err(e)) => {
-                crate::debug::log(&format!("Unmount failed: {}", e));
-                if attempt == MAX_ATTEMPTS {
-                    let _ = progress_tx.send(FormatProgress::Error(
-                        "Formatting failed, please check your SD Card".to_string()
-                    ));
-                    return Err("Formatting failed, please check your SD Card".to_string());
-                }
-                continue;
+                crate::debug::log(&format!("Unmount failed (proceeding): {}", e));
             }
             Err(_) => {
-                crate::debug::log("Unmount timed out");
-                if attempt == MAX_ATTEMPTS {
-                    let _ = progress_tx.send(FormatProgress::Error(
-                        "Formatting failed, please check your SD Card".to_string()
-                    ));
-                    return Err("Formatting failed, please check your SD Card".to_string());
-                }
-                continue;
+                crate::debug::log("Unmount timed out (proceeding)");
             }
         }
 
-        let _ = progress_tx.send(FormatProgress::Progress { percent: 10 });
+        let _ = progress_tx.send(FormatProgress::Progress { percent: 15 });
 
         if cancel_token.is_cancelled() {
             let _ = progress_tx.send(FormatProgress::Cancelled);
@@ -605,81 +591,124 @@ pub async fn format_drive_fat32(
         }
 
         let _ = progress_tx.send(FormatProgress::Formatting);
-        let _ = progress_tx.send(FormatProgress::Progress { percent: 15 });
+        let _ = progress_tx.send(FormatProgress::Progress { percent: 20 });
         crate::debug::log("Running diskutil eraseDisk...");
         crate::debug::log(&format!("Command: diskutil eraseDisk FAT32 {} MBRFormat {}", volume_label, device_path));
 
-        let progress_tx_clone = progress_tx.clone();
-        let progress_task = tokio::spawn(async move {
-            let mut progress_interval = interval(Duration::from_secs(15));
-            let mut current_percent = 20u8;
-            
-            loop {
-                progress_interval.tick().await;
-                if current_percent < 95 {
-                    current_percent += 5;
-                    let _ = progress_tx_clone.send(FormatProgress::Progress { percent: current_percent });
-                }
-            }
-        });
+        let mut child = Command::new("diskutil")
+            .args([
+                "eraseDisk",
+                "FAT32",
+                volume_label,
+                "MBRFormat",
+                device_path,
+            ])
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .stdin(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| format!("Failed to spawn diskutil: {}", e))?;
 
-        let format_result = timeout(
-            Duration::from_secs(TIMEOUT_SECS),
-            Command::new("diskutil")
-                .args([
-                    "eraseDisk",
-                    "FAT32",
-                    volume_label,
-                    "MBRFormat",
-                    device_path,
-                ])
-                .output()
-        ).await;
-
-        progress_task.abort();
-
-        match format_result {
-            Ok(Ok(output)) => {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                crate::debug::log(&format!("diskutil stdout: {}", stdout));
-                if !stderr.is_empty() {
-                    crate::debug::log(&format!("diskutil stderr: {}", stderr));
-                }
-
-                if output.status.success() {
-                    let _ = progress_tx.send(FormatProgress::Progress { percent: 100 });
-                    crate::debug::log("macOS format operation completed successfully");
-                    let _ = progress_tx.send(FormatProgress::Completed);
-                    return Ok(());
-                } else {
-                    crate::debug::log(&format!("Format attempt {} failed", attempt));
-                    if attempt == MAX_ATTEMPTS {
-                        let _ = progress_tx.send(FormatProgress::Error(
-                            "Formatting failed, please check your SD Card".to_string()
-                        ));
-                        return Err("Formatting failed, please check your SD Card".to_string());
+        // Capture stdout/stderr to detect completion and log output
+        let child_stdout = child.stdout.take();
+        let child_stderr = child.stderr.take();
+        
+        // Channel to signal "success signature found" from background reader
+        let (finish_tx, mut finish_rx) = mpsc::unbounded_channel();
+        
+        if let Some(stdout) = child_stdout {
+            let finish_tx = finish_tx.clone();
+            tokio::spawn(async move {
+                use tokio::io::{AsyncBufReadExt, BufReader};
+                let mut reader = BufReader::new(stdout).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    crate::debug::log(&format!("diskutil: {}", line));
+                    if line.contains("Finished erase on") {
+                        let _ = finish_tx.send(());
                     }
                 }
-            }
-            Ok(Err(e)) => {
-                crate::debug::log(&format!("Format attempt {} failed: {}", attempt, e));
-                if attempt == MAX_ATTEMPTS {
-                    let _ = progress_tx.send(FormatProgress::Error(
-                        "Formatting failed, please check your SD Card".to_string()
-                    ));
-                    return Err("Formatting failed, please check your SD Card".to_string());
+            });
+        }
+        
+        if let Some(stderr) = child_stderr {
+            tokio::spawn(async move {
+                use tokio::io::{AsyncBufReadExt, BufReader};
+                let mut reader = BufReader::new(stderr).lines();
+                while let Ok(Some(line)) = reader.next_line().await {
+                    crate::debug::log(&format!("diskutil stderr: {}", line));
+                }
+            });
+        }
+
+        let start_time = std::time::Instant::now();
+        let mut current_percent = 16u8;
+        let mut success = false;
+
+        loop {
+            // 1. Check if process has exited naturally
+            match child.try_wait() {
+                Ok(Some(status)) => {
+                    if status.success() {
+                        crate::debug::log("diskutil exited successfully");
+                        success = true;
+                        break;
+                    } else {
+                        crate::debug::log(&format!("diskutil exited with error: {}", status));
+                        // Break outer loop to retry or fail
+                        break; 
+                    }
+                }
+                Ok(None) => {
+                    // Process still running
+                }
+                Err(e) => {
+                    crate::debug::log(&format!("Error checking child status: {}", e));
+                    let _ = child.kill().await;
+                    break;
                 }
             }
-            Err(_) => {
-                crate::debug::log(&format!("Format attempt {} timed out after {} seconds", attempt, TIMEOUT_SECS));
-                if attempt == MAX_ATTEMPTS {
-                    let _ = progress_tx.send(FormatProgress::Error(
-                        "Formatting failed, please check your SD Card".to_string()
-                    ));
-                    return Err("Formatting timed out, please check your SD Card".to_string());
+
+            // 2. Check for success message from stdout (handle "zombie" process case)
+            if finish_rx.try_recv().is_ok() {
+                crate::debug::log("Detected 'Finished erase' in output - process maintenance");
+                success = true;
+                // Give it a moment to exit cleanly
+                tokio::time::sleep(Duration::from_millis(500)).await;
+                if let Ok(None) = child.try_wait() {
+                    crate::debug::log("diskutil still running after finish; force killing...");
+                    let _ = child.kill().await;
+                    let _ = child.wait().await; // Reap
                 }
+                break;
             }
+
+            // 3. Update progress (simulate up to 95%)
+            if current_percent < 95 {
+                current_percent = (current_percent + 1).min(95);
+                let _ = progress_tx.send(FormatProgress::Progress { percent: current_percent });
+            }
+
+            // 4. Timeout check
+            if start_time.elapsed().as_secs() > TIMEOUT_SECS {
+                crate::debug::log("Format timed out");
+                let _ = child.kill().await;
+                break;
+            }
+
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+
+        if success {
+            let _ = progress_tx.send(FormatProgress::Progress { percent: 100 });
+            crate::debug::log("macOS format operation completed successfully");
+            let _ = progress_tx.send(FormatProgress::Completed);
+            return Ok(());
+        } else {
+             // Loop continues to next attempt if not successful
+             crate::debug::log(&format!("Format attempt {} failed", attempt));
+             if attempt == MAX_ATTEMPTS {
+                 return Err("Formatting failed, please check your SD Card".to_string());
+             }
         }
     }
 
@@ -687,6 +716,11 @@ pub async fn format_drive_fat32(
         "Formatting failed, please check your SD Card".to_string()
     ));
     Err("Formatting failed, please check your SD Card".to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn log_content(_path: &std::path::Path) {
+    // No-op, file logging removed
 }
 
 // =============================================================================

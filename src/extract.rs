@@ -1,7 +1,7 @@
 use crate::config::TEMP_PREFIX;
 use std::path::Path;
 use std::process::Stdio;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -184,17 +184,27 @@ pub async fn extract_7z(
         .map_err(|e| format!("Failed to start 7z: {}", e))?;
 
     // Take stdout for progress parsing
-    let stdout = child.stdout.take()
+    let mut stdout = child.stdout.take()
         .ok_or_else(|| "Failed to capture 7z stdout".to_string())?;
 
-    // Take stderr for error capture
-    let stderr = child.stderr.take();
+    // Take stderr for error capture and read in background to prevent deadlock
+    let mut stderr = child.stderr.take()
+        .ok_or_else(|| "Failed to capture 7z stderr".to_string())?;
+    
+    let stderr_handle = tokio::spawn(async move {
+        let mut buffer = Vec::new();
+        if stderr.read_to_end(&mut buffer).await.is_ok() {
+            buffer
+        } else {
+            Vec::new()
+        }
+    });
 
-    let mut reader = BufReader::new(stdout);
     let mut last_percent: u8 = 0;
-    let mut buffer = Vec::new();
+    let mut buffer = [0u8; 1024];
 
-    // Read stdout looking for progress - 7z uses \r for progress updates
+    // Read stdout looking for progress
+    // 7z with -bsp1 uses backspaces or carriage returns, so we read raw chunks
     loop {
         tokio::select! {
             _ = cancel_token.cancelled() => {
@@ -207,23 +217,21 @@ pub async fn extract_7z(
                 let _ = progress_tx.send(ExtractProgress::Cancelled);
                 return Err("Extraction cancelled".to_string());
             }
-            read_result = reader.read_until(b'\r', &mut buffer) => {
+            read_result = stdout.read(&mut buffer) => {
                 match read_result {
                     Ok(0) => {
                         // EOF - process finished output
                         break;
                     }
-                    Ok(_) => {
+                    Ok(n) => {
                         // Parse the buffer for percentage
-                        if let Ok(line) = std::str::from_utf8(&buffer) {
-                            if let Some(percent) = parse_7z_percentage(line) {
-                                if percent != last_percent {
-                                    last_percent = percent;
-                                    let _ = progress_tx.send(ExtractProgress::Progress { percent });
-                                }
+                        let text = String::from_utf8_lossy(&buffer[..n]);
+                        if let Some(percent) = parse_last_percentage(&text) {
+                            if percent != last_percent {
+                                last_percent = percent;
+                                let _ = progress_tx.send(ExtractProgress::Progress { percent });
                             }
                         }
-                        buffer.clear();
                     }
                     Err(e) => {
                         crate::debug::log(&format!("Error reading 7z output: {}", e));
@@ -251,12 +259,9 @@ pub async fn extract_7z(
         let _ = progress_tx.send(ExtractProgress::Completed);
         Ok(())
     } else {
-        // Read stderr for error details
-        let stderr_output = if let Some(mut stderr) = stderr {
-            use tokio::io::AsyncReadExt;
-            let mut stderr_buf = Vec::new();
-            let _ = stderr.read_to_end(&mut stderr_buf).await;
-            String::from_utf8_lossy(&stderr_buf).trim().to_string()
+        // Get stderr output from background task
+        let stderr_output = if let Ok(buf) = stderr_handle.await {
+            String::from_utf8_lossy(&buf).trim().to_string()
         } else {
             String::new()
         };
@@ -274,28 +279,30 @@ pub async fn extract_7z(
     }
 }
 
-/// Parse percentage from 7z output line
-/// 7z with -bsp1 outputs progress like " 45% 12 - filename" or just " 45%"
-fn parse_7z_percentage(line: &str) -> Option<u8> {
-    // Look for pattern like "45%" anywhere in the line
-    if let Some(percent_pos) = line.find('%') {
-        let before_percent = &line[..percent_pos];
-        let num_str: String = before_percent
-            .chars()
-            .rev()
-            .take_while(|c| c.is_ascii_digit())
-            .collect::<String>()
-            .chars()
-            .rev()
-            .collect();
+/// Parse the last percentage from a text chunk
+/// Finds the last occurrence of "N%" in the text
+fn parse_last_percentage(text: &str) -> Option<u8> {
+    // Collect all matches of '%'
+    text.match_indices('%')
+        .fold(None, |acc, (idx, _)| {
+            // Check preceding characters for digits
+            let prefix = &text[..idx];
+            let num_str: String = prefix
+                .chars()
+                .rev()
+                .take_while(|c| c.is_ascii_digit())
+                .collect::<String>()
+                .chars()
+                .rev()
+                .collect();
 
-        if !num_str.is_empty() {
-            if let Ok(percent) = num_str.parse::<u8>() {
-                return Some(percent.min(100));
+            if !num_str.is_empty() {
+                if let Ok(percent) = num_str.parse::<u8>() {
+                    return Some(percent.min(100));
+                }
             }
-        }
-    }
-    None
+            acc
+        })
 }
 
 /// Main entry point for extraction with cancellation support
