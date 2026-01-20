@@ -311,6 +311,12 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
     let mt_lower = media_type.to_lowercase();
     let loc_lower = device_location.to_lowercase();
 
+    // Skip disk images (DMGs)
+    if proto_lower.contains("disk image") {
+        crate::debug::log("  REJECTED: disk image");
+        return None;
+    }
+
     // Check various removable indicators
     let is_sd_card = proto_lower.contains("secure digital") || proto_lower.contains("sd");
     let is_usb = proto_lower.contains("usb") || loc_lower.contains("usb");
