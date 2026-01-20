@@ -8,6 +8,15 @@
 - ~~Show % for copying and extracting (this might already be a thing)  if possible~~
 - ~~x64 Linux hangs for a sec before ejecting safely, possible bug, it does eject though.~~ idk if this is really fixed it only happens sometimes for me?
 
+## wishlist
+- merge twig flasher with rest of spruce version
+- checkboxes for various additional packages:
+    - all themes
+    - all A30 ports
+    - all free games
+    - PortMaster (are we making this a separate archive?)
+- backup and restore (update current installation instead of just fresh ones?)
+- scrape boxart for roms
 ---
 
 
