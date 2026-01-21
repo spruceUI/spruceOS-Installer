@@ -15,15 +15,10 @@
     - PortMaster (are we making this a separate archive?)
 - backup and restore (update current installation instead of just fresh ones?)
 - scrape boxart for roms
-<<<<<<< HEAD
-<<<<<<< HEAD
+
 - offline installer / updater mode - provide your own 7z or gz file instead of downloading
-=======
->>>>>>> 40b2a81 (Add wishlist section to README)
-=======
+
 - offline installer / updater mode - provide your own 7z or gz file instead of downloading
->>>>>>> 4e48455 (Revise README with extraction failure and wishlist)
----
 
 
 # SpruceOS Installer
