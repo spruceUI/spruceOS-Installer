@@ -1,15 +1,7 @@
 name: Build Linux
 
 on:
-  push:
-    branches:
-      - main
-  pull_request: {}
-
-permissions:
-  attestations: write
-  contents: read
-  id-token: write
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
