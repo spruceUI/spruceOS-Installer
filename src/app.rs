@@ -1,7 +1,5 @@
 use crate::config::{
-    setup_theme, APP_NAME, ASSET_EXTENSION, COLOR_ACCENT, COLOR_ACCENT_DIM, COLOR_BG_DARK,
-    COLOR_BG_LIGHT, COLOR_ERROR, COLOR_SPINNER, COLOR_SUCCESS, COLOR_TEXT, COLOR_WARNING,
-    DEFAULT_REPO_INDEX, REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL,
+    setup_theme, ASSET_EXTENSION, REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL, DEFAULT_REPO_INDEX,
 };
 use crate::copy::{copy_directory_with_progress, CopyProgress};
 use crate::drives::{get_removable_drives, DriveInfo};
@@ -10,6 +8,7 @@ use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
 use crate::github::{download_asset, find_release_asset, get_latest_release, DownloadProgress, Release};
 use eframe::egui;
+use egui_thematic::{ThemeConfig, ThemeEditorState, render_theme_panel};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
@@ -47,7 +46,7 @@ pub struct InstallerApp {
     drives: Vec<DriveInfo>,
     selected_drive_idx: Option<usize>,
     selected_repo_idx: usize,
-    release_info: Option<Release>,
+    _release_info: Option<Release>,
 
     // Progress tracking
     state: AppState,
@@ -55,13 +54,23 @@ pub struct InstallerApp {
     log_messages: Arc<Mutex<Vec<String>>>,
 
     // Temp file for downloads
-    temp_download_path: Option<PathBuf>,
+    _temp_download_path: Option<PathBuf>,
 
     // Drive that was installed to (for eject)
     installed_drive: Option<DriveInfo>,
 
     // Cancellation token for aborting installation
     cancel_token: Option<CancellationToken>,
+
+    // Channel for background drive updates
+    drive_rx: mpsc::UnboundedReceiver<Vec<DriveInfo>>,
+    drive_poll_tx: mpsc::UnboundedSender<bool>,
+
+    // Theme editor
+    theme_state: ThemeEditorState,
+    show_theme_editor: bool,
+    show_log: bool,
+    last_system_dark_mode: bool,
 }
 
 impl InstallerApp {
@@ -71,12 +80,38 @@ impl InstallerApp {
 
         let runtime = Runtime::new().expect("Failed to create Tokio runtime");
 
+        // Start background drive polling
+        let (tx, rx) = mpsc::unbounded_channel();
+        let (poll_tx, mut poll_rx) = mpsc::unbounded_channel::<bool>();
+        let ctx_clone = cc.egui_ctx.clone();
+        
+        runtime.spawn(async move {
+            let mut enabled = true;
+            loop {
+                while let Ok(new_state) = poll_rx.try_recv() {
+                    enabled = new_state;
+                }
+
+                if enabled {
+                    let drives = tokio::task::spawn_blocking(get_removable_drives).await.unwrap_or_default();
+                    if tx.send(drives).is_err() {
+                        break;
+                    }
+                    ctx_clone.request_repaint();
+                }
+                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+            }
+        });
+
+        let is_dark = cc.egui_ctx.style().visuals.dark_mode;
+        
+        // Initial app creation to use helper method
         let mut app = Self {
             runtime,
             drives: Vec::new(),
             selected_drive_idx: None,
             selected_repo_idx: DEFAULT_REPO_INDEX,
-            release_info: None,
+            _release_info: None,
             state: AppState::Idle,
             progress: Arc::new(Mutex::new(ProgressInfo {
                 current: 0,
@@ -84,17 +119,100 @@ impl InstallerApp {
                 message: String::new(),
             })),
             log_messages: Arc::new(Mutex::new(Vec::new())),
-            temp_download_path: None,
+            _temp_download_path: None,
             installed_drive: None,
             cancel_token: None,
+            drive_rx: rx,
+            drive_poll_tx: poll_tx,
+            theme_state: ThemeEditorState::default(),
+            show_theme_editor: false,
+            show_log: false,
+            last_system_dark_mode: is_dark,
         };
 
-        app.refresh_drives();
+        app.theme_state.current_config = app.get_theme_config(is_dark);
+
+        // Initial sync load
+        app.drives = get_removable_drives();
+        app.ensure_selection_valid();
+        
         app
     }
 
-    fn refresh_drives(&mut self) {
-        self.drives = get_removable_drives();
+    fn get_theme_config(&self, _is_dark: bool) -> ThemeConfig {
+        ThemeConfig {
+            name: "SpruceOS".to_string(),
+            dark_mode: true,
+            override_text_color: Some([251, 241, 199, 255]),
+            override_weak_text_color: Some([124, 111, 100, 255]),
+            override_hyperlink_color: Some([131, 165, 152, 255]),
+            override_faint_bg_color: Some([48, 48, 48, 255]),
+            override_extreme_bg_color: Some([29, 32, 33, 255]),
+            override_code_bg_color: Some([60, 56, 54, 255]),
+            override_warn_fg_color: Some([214, 93, 14, 255]),
+            override_error_fg_color: Some([204, 36, 29, 255]),
+            override_window_fill: Some([40, 40, 40, 255]),
+            override_window_stroke_color: None,
+            override_window_stroke_width: None,
+            override_window_corner_radius: None,
+            override_window_shadow_size: None,
+            override_panel_fill: Some([40, 40, 40, 255]),
+            override_popup_shadow_size: None,
+            override_selection_bg: Some([215, 180, 95, 255]),
+            override_selection_stroke_color: None,
+            override_selection_stroke_width: None,
+            override_widget_noninteractive_bg_fill: None,
+            override_widget_noninteractive_weak_bg_fill: None,
+            override_widget_noninteractive_bg_stroke_color: None,
+            override_widget_noninteractive_bg_stroke_width: None,
+            override_widget_noninteractive_corner_radius: None,
+            override_widget_noninteractive_fg_stroke_color: None,
+            override_widget_noninteractive_fg_stroke_width: None,
+            override_widget_noninteractive_expansion: None,
+            override_widget_inactive_bg_fill: Some([215, 180, 95, 255]),
+            override_widget_inactive_weak_bg_fill: None,
+            override_widget_inactive_bg_stroke_color: Some([124, 111, 100, 100]),
+            override_widget_inactive_bg_stroke_width: None,
+            override_widget_inactive_corner_radius: None,
+            override_widget_inactive_fg_stroke_color: Some([104, 157, 106, 255]),
+            override_widget_inactive_fg_stroke_width: None,
+            override_widget_inactive_expansion: None,
+            override_widget_hovered_bg_fill: Some([215, 180, 95, 60]),
+            override_widget_hovered_weak_bg_fill: None,
+            override_widget_hovered_bg_stroke_color: Some([215, 180, 95, 255]),
+            override_widget_hovered_bg_stroke_width: None,
+            override_widget_hovered_corner_radius: None,
+            override_widget_hovered_fg_stroke_color: None,
+            override_widget_hovered_fg_stroke_width: None,
+            override_widget_hovered_expansion: None,
+            override_widget_active_bg_fill: Some([215, 180, 95, 100]),
+            override_widget_active_weak_bg_fill: None,
+            override_widget_active_bg_stroke_color: Some([215, 180, 95, 255]),
+            override_widget_active_bg_stroke_width: None,
+            override_widget_active_corner_radius: None,
+            override_widget_active_fg_stroke_color: None,
+            override_widget_active_fg_stroke_width: None,
+            override_widget_active_expansion: None,
+            override_widget_open_bg_fill: None,
+            override_widget_open_weak_bg_fill: None,
+            override_widget_open_bg_stroke_color: None,
+            override_widget_open_bg_stroke_width: None,
+            override_widget_open_corner_radius: None,
+            override_widget_open_fg_stroke_color: None,
+            override_widget_open_fg_stroke_width: None,
+            override_widget_open_expansion: None,
+            override_resize_corner_size: None,
+            override_text_cursor_width: None,
+            override_clip_rect_margin: None,
+            override_button_frame: None,
+            override_collapsing_header_frame: None,
+            override_indent_has_left_vline: None,
+            override_striped: None,
+            override_slider_trailing_fill: None,
+        }
+    }
+
+    fn ensure_selection_valid(&mut self) {
         if !self.drives.is_empty() && self.selected_drive_idx.is_none() {
             self.selected_drive_idx = Some(0);
         }
@@ -168,8 +286,12 @@ impl InstallerApp {
         // Channel for state updates
         let (state_tx, mut state_rx) = mpsc::unbounded_channel::<AppState>();
 
+        // Disable drive polling during installation
+        let _ = self.drive_poll_tx.send(false);
+
         // Clone values for the async block
         let state_tx_clone = state_tx.clone();
+        let drive_poll_tx_clone = self.drive_poll_tx.clone();
         let cancel_token_clone = cancel_token.clone();
 
         // Spawn the installation task
@@ -178,6 +300,8 @@ impl InstallerApp {
                 if let Ok(mut logs) = log_messages.lock() {
                     logs.push(msg.to_string());
                 }
+                // Also log to debug file/console
+                crate::debug::log(msg);
                 ctx_clone.request_repaint();
             };
 
@@ -202,6 +326,7 @@ impl InstallerApp {
                     log(&format!("Error: {}", e));
                     crate::debug::log(&format!("ERROR fetching release: {}", e));
                     let _ = state_tx_clone.send(AppState::Error);
+                    let _ = drive_poll_tx_clone.send(true);
                     return;
                 }
             };
@@ -212,6 +337,7 @@ impl InstallerApp {
                     log(&format!("Error: No {} file found in release", ASSET_EXTENSION));
                     crate::debug::log(&format!("ERROR: No {} asset found in release", ASSET_EXTENSION));
                     let _ = state_tx_clone.send(AppState::Error);
+                    let _ = drive_poll_tx_clone.send(true);
                     return;
                 }
             };
@@ -287,10 +413,12 @@ impl InstallerApp {
                 if e.contains("cancelled") {
                     log("Format cancelled");
                     let _ = state_tx_clone.send(AppState::Idle);
+                    let _ = drive_poll_tx_clone.send(true);
                     return;
                 }
                 log(&format!("Format error: {}", e));
                 let _ = state_tx_clone.send(AppState::Error);
+                let _ = drive_poll_tx_clone.send(true);
                 return;
             }
 
@@ -306,6 +434,7 @@ impl InstallerApp {
                     log(&format!("Error getting mount path: {}", e));
                     crate::debug::log(&format!("ERROR getting mount path: {}", e));
                     let _ = state_tx_clone.send(AppState::Error);
+                    let _ = drive_poll_tx_clone.send(true);
                     return;
                 }
             };
@@ -390,10 +519,12 @@ impl InstallerApp {
                 if e.contains("cancelled") {
                     log("Download cancelled");
                     let _ = state_tx_clone.send(AppState::Idle);
+                    let _ = drive_poll_tx_clone.send(true);
                     return;
                 }
                 log(&format!("Download error: {}", e));
                 let _ = state_tx_clone.send(AppState::Error);
+                let _ = drive_poll_tx_clone.send(true);
                 return;
             }
 
@@ -418,9 +549,14 @@ impl InstallerApp {
 
             // Clean up any previous extraction
             let _ = std::fs::remove_dir_all(&temp_extract_dir);
-            std::fs::create_dir_all(&temp_extract_dir)
-                .map_err(|e| format!("Failed to create temp extract dir: {}", e))
-                .unwrap();
+            if let Err(e) = std::fs::create_dir_all(&temp_extract_dir) {
+                let err_msg = format!("Failed to create temp extract dir: {}", e);
+                log(&err_msg);
+                crate::debug::log(&format!("ERROR: {}", err_msg));
+                let _ = state_tx_clone.send(AppState::Error);
+                let _ = drive_poll_tx_clone.send(true);
+                return;
+            }
 
             let (ext_tx, mut ext_rx) = mpsc::unbounded_channel::<ExtractProgress>();
             let progress_ext = progress.clone();
@@ -470,12 +606,14 @@ impl InstallerApp {
                     log("Extraction cancelled");
                     let _ = std::fs::remove_dir_all(&temp_extract_dir);
                     let _ = state_tx_clone.send(AppState::Idle);
+                    let _ = drive_poll_tx_clone.send(true);
                     return;
                 }
                 write_card_log(&format!("Extract error: {}", e));
                 log(&format!("Extract error: {}", e));
                 let _ = std::fs::remove_dir_all(&temp_extract_dir);
                 let _ = state_tx_clone.send(AppState::Error);
+                let _ = drive_poll_tx_clone.send(true);
                 return;
             }
 
@@ -554,12 +692,14 @@ impl InstallerApp {
                     log("Copy cancelled");
                     let _ = std::fs::remove_dir_all(&temp_extract_dir);
                     let _ = state_tx_clone.send(AppState::Idle);
+                    let _ = drive_poll_tx_clone.send(true);
                     return;
                 }
                 write_card_log(&format!("Copy error: {}", e));
                 log(&format!("Copy error: {}", e));
                 let _ = std::fs::remove_dir_all(&temp_extract_dir);
                 let _ = state_tx_clone.send(AppState::Error);
+                let _ = drive_poll_tx_clone.send(true);
                 return;
             }
 
@@ -595,6 +735,7 @@ impl InstallerApp {
             write_card_log("Installation complete!");
             crate::debug::log("Installation complete!");
             let _ = state_tx_clone.send(AppState::Complete);
+            let _ = drive_poll_tx_clone.send(true);
         });
 
         // Spawn a task to update state from the channel
@@ -718,6 +859,39 @@ async fn get_mount_path_after_format(_drive: &DriveInfo, _volume_label: &str) ->
 
 impl eframe::App for InstallerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Show modal dialogs for confirmation or status
+        let show_modal = matches!(
+            self.state,
+            AppState::AwaitingConfirmation
+                | AppState::Complete
+                | AppState::Ejecting
+                | AppState::Ejected
+                | AppState::Error
+        );
+
+        // Sync with system theme if it changes
+        let is_dark = ctx.style().visuals.dark_mode;
+        if is_dark != self.last_system_dark_mode {
+            self.last_system_dark_mode = is_dark;
+            self.theme_state.current_config = self.get_theme_config(is_dark);
+        }
+
+        // Theme editor panel
+        if !show_modal {
+            render_theme_panel(ctx, &mut self.theme_state, &mut self.show_theme_editor);
+
+            // Keyboard shortcut to toggle theme editor (Ctrl+T)
+            if ctx.input_mut(|i| i.consume_shortcut(&egui::KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::T))) {
+                self.show_theme_editor = !self.show_theme_editor;
+            }
+        }
+
+        // Poll for drive updates
+        while let Ok(drives) = self.drive_rx.try_recv() {
+            self.drives = drives;
+            self.ensure_selection_valid();
+        }
+
         // Check for state updates from async eject on Windows
         if let Ok(mut progress) = self.progress.lock() {
             if progress.message.starts_with("EJECT_") {
@@ -746,8 +920,8 @@ impl eframe::App for InstallerApp {
                 self.state = AppState::Idle;
                 self.cancel_token = None;
                 progress.message.clear();
-            } else if self.state == AppState::Idle || self.state == AppState::AwaitingConfirmation {
-                // Only update state if we are not already in a process
+            } else {
+                // Update state based on progress message
                 if progress.message.contains("Downloading") {
                     self.state = AppState::Downloading;
                 } else if progress.message.contains("Formatting")
@@ -783,294 +957,483 @@ impl eframe::App for InstallerApp {
             ctx.request_repaint();
         }
 
-        // Show confirmation dialog if awaiting confirmation
-        if self.state == AppState::AwaitingConfirmation {
-            let window_frame = egui::Frame::window(&ctx.style())
-                .fill(COLOR_BG_DARK)
-                .stroke(egui::Stroke::new(1.0, COLOR_ACCENT_DIM));
+        // Show modal dialogs for confirmation or status
+        let show_modal = matches!(
+            self.state,
+            AppState::AwaitingConfirmation
+                | AppState::Complete
+                | AppState::Ejecting
+                | AppState::Ejected
+                | AppState::Error
+        );
 
-            let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
-            egui::Window::new(format!("Confirm {} Installation", selected_repo_name))
+        if show_modal {
+            // Background Dimmer
+            egui::Area::new(egui::Id::from("modal_dimmer"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(egui::pos2(0.0, 0.0))
+                .show(ctx, |ui| {
+                    let screen_rect = ui.ctx().content_rect();
+                    ui.allocate_rect(screen_rect, egui::Sense::click()); // Block clicks
+                    ui.painter()
+                        .rect_filled(screen_rect, 0.0, egui::Color32::from_black_alpha(140));
+                });
+
+            let window_frame = egui::Frame::window(&ctx.style())
+                .fill(ctx.style().visuals.window_fill)
+                .stroke(ctx.style().visuals.window_stroke);
+
+            let window_title = match self.state {
+                AppState::AwaitingConfirmation => {
+                    let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
+                    format!("Confirm {} Installation", selected_repo_name)
+                }
+                AppState::Complete => "Installation Complete".to_string(),
+                AppState::Ejecting => "Ejecting...".to_string(),
+                AppState::Ejected => "Safe to Remove".to_string(),
+                AppState::Error => "Installation Error".to_string(),
+                _ => String::new(),
+            };
+
+            egui::Window::new(window_title)
+                .order(egui::Order::Foreground)
                 .collapsible(false)
                 .resizable(false)
+                .title_bar(false)
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .frame(window_frame)
                 .show(ctx, |ui| {
                     ui.vertical_centered(|ui| {
-                        ui.add_space(10.0);
-                        ui.colored_label(COLOR_WARNING, "WARNING");
-                        ui.add_space(10.0);
+                        match self.state {
+                            AppState::AwaitingConfirmation => {
+                                ui.add_space(12.0);
+                                ui.colored_label(ui.visuals().warn_fg_color, "WARNING");
+                                ui.add_space(12.0);
 
-                        ui.label("This will DELETE ALL DATA on the selected drive:");
-                        ui.add_space(5.0);
+                                ui.label("This will DELETE ALL DATA on the selected drive:");
+                                ui.add_space(8.0);
 
-                        if let Some(idx) = self.selected_drive_idx {
-                            if let Some(drive) = self.drives.get(idx) {
-                                ui.colored_label(COLOR_ACCENT, drive.display_name());
+                                if let Some(idx) = self.selected_drive_idx {
+                                    if let Some(drive) = self.drives.get(idx) {
+                                        ui.label(drive.display_name());
+                                    }
+                                }
+
+                                ui.add_space(12.0);
+                                ui.label("Are you sure you want to continue?");
+                                ui.add_space(12.0);
+                                ui.separator();
+                                ui.add_space(8.0);
+
+                                ui.columns(2, |columns| {
+                                    columns[0].allocate_ui_with_layout(
+                                        egui::Vec2::ZERO,
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui.button("Cancel").clicked() {
+                                                self.state = AppState::Idle;
+                                            }
+                                        },
+                                    );
+
+                                    columns[1].allocate_ui_with_layout(
+                                        egui::Vec2::ZERO,
+                                        egui::Layout::left_to_right(egui::Align::Center),
+                                        |ui| {
+                                            if ui.button("Yes, install").clicked() {
+                                                self.start_installation(ctx.clone());
+                                            }
+                                        },
+                                    );
+                                });
                             }
+                            AppState::Complete => {
+                                ui.add_space(12.0);
+                                ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "SUCCESS");
+                                ui.add_space(12.0);
+                                let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
+                                ui.label(format!("{} has been successfully installed.", selected_repo_name));
+                                ui.add_space(15.0);
+                                ui.separator();
+                                ui.add_space(8.0);
+                                
+                                ui.columns(2, |columns| {
+                                    columns[0].allocate_ui_with_layout(
+                                        egui::Vec2::ZERO,
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui.button("Close").clicked() {
+                                                self.state = AppState::Idle;
+                                            }
+                                        },
+                                    );
+
+                                    columns[1].allocate_ui_with_layout(
+                                        egui::Vec2::ZERO,
+                                        egui::Layout::left_to_right(egui::Align::Center),
+                                        |ui| {
+                                            if ui.button("Safely Eject").clicked() {
+                                                if let Some(drive) = self.installed_drive.clone() {
+                                                    self.state = AppState::Ejecting;
+                                                    self.log("Ejecting SD card...");
+                    
+                                                    let progress = self.progress.clone();
+                                                    let ctx_clone = ctx.clone();
+                    
+                                                    self.runtime.spawn(async move {
+                                                        let result = tokio::task::spawn_blocking(move || {
+                                                            eject_drive(&drive)
+                                                        }).await.unwrap();
+                    
+                                                        if let Ok(mut progress) = progress.lock() {
+                                                            match result {
+                                                                Ok(()) => progress.message = "EJECT_SUCCESS".to_string(),
+                                                                Err(e) => progress.message = format!("EJECT_ERROR: {}", e),
+                                                            }
+                                                        }
+                                                        ctx_clone.request_repaint();
+                                                    });
+                                                }
+                                            }
+                                        },
+                                    );
+                                });
+                            }
+                            AppState::Ejecting => {
+                                ui.add_space(12.0);
+                                ui.add(egui::Spinner::new().color(ui.visuals().selection.bg_fill));
+                                ui.add_space(8.0);
+                                ui.label("Ejecting SD card...");
+                                ui.add_space(12.0);
+                            }
+                            AppState::Ejected => {
+                                ui.add_space(12.0);
+                                ui.label("SD card ejected!");
+                                ui.add_space(8.0);
+                                ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "You may now safely remove it.");
+                                ui.add_space(15.0);
+                                if ui.button("OK").clicked() {
+                                    self.state = AppState::Idle;
+                                }
+                            }
+                            AppState::Error => {
+                                ui.add_space(12.0);
+                                ui.colored_label(ui.visuals().error_fg_color, "FAILED");
+                                ui.add_space(12.0);
+                                let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
+                                ui.label(format!("{} installation failed.", selected_repo_name));
+                                ui.add_space(8.0);
+                                ui.label("Check the log for details.");
+                                ui.add_space(15.0);
+                                if ui.button("OK").clicked() {
+                                    self.state = AppState::Idle;
+                                }
+                            }
+                            _ => {}
                         }
-
-                        ui.add_space(10.0);
-                        ui.label("Are you sure you want to continue?");
-                        ui.add_space(15.0);
-
-                        ui.horizontal(|ui| {
-                            if ui.button("Cancel").clicked() {
-                                self.state = AppState::Idle;
-                            }
-
-                            ui.add_space(20.0);
-
-                            if ui
-                                .add(egui::Button::new(format!("Yes, Install {}", selected_repo_name)).fill(COLOR_ERROR))
-                                .clicked()
-                            {
-                                self.start_installation(ctx.clone());
-                            }
-                        });
-
-                        ui.add_space(10.0);
+                        ui.add_space(8.0);
                     });
                 });
         }
 
-        let panel_frame = egui::Frame::central_panel(&ctx.style()).fill(COLOR_BG_DARK);
+        if self.show_log {
+            egui::SidePanel::right("log_panel")
+                .resizable(true)
+                .default_width(320.0)
+                .min_width(200.0)
+                .show(ctx, |ui| {
+                    ui.add_enabled_ui(!show_modal, |ui| {
+                        ui.vertical(|ui| {
+                            ui.add_space(8.0);
+                            ui.horizontal(|ui| {
+                                ui.heading("Installation Log");
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    if ui.button("X").on_hover_text("Close Log").clicked() {
+                                        self.show_log = false;
+                                        let current_size = ui.ctx().content_rect().size();
+                                        ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(current_size.x - 320.0, current_size.y)));
+                                    }
+                                });
+                            });
+                            ui.separator();
+                            
+                            egui::ScrollArea::vertical()
+                                .stick_to_bottom(true)
+                                .auto_shrink([false, false])
+                                .show(ui, |ui| {
+                                    ui.set_width(ui.available_width());
+                                    if let Ok(logs) = self.log_messages.lock() {
+                                        for msg in logs.iter() {
+                                            ui.label(msg);
+                                        }
+                                    }
+                                });
+                        });
+                    });
+                });
+        }
+
+        let panel_frame = egui::Frame::central_panel(&ctx.style()).fill(ctx.style().visuals.panel_fill);
 
         egui::CentralPanel::default()
             .frame(panel_frame)
             .show(ctx, |ui| {
-                ui.heading(
-                    egui::RichText::new(format!("{} Installer", APP_NAME)).color(COLOR_ACCENT),
-                );
-                ui.add_space(10.0);
-
-                // Drive selection
-                ui.horizontal(|ui| {
-                    ui.label("Target Drive:");
-
-                    let selected_text = self
-                        .selected_drive_idx
-                        .and_then(|idx| self.drives.get(idx))
-                        .map(|d| d.display_name())
-                        .unwrap_or_else(|| "No drives found".to_string());
-
-                    egui::ComboBox::from_id_salt("drive_select")
-                        .selected_text(&selected_text)
-                        .show_ui(ui, |ui| {
-                            for (idx, drive) in self.drives.iter().enumerate() {
-                                ui.selectable_value(
-                                    &mut self.selected_drive_idx,
-                                    Some(idx),
-                                    drive.display_name(),
-                                );
-                            }
-                        });
-
-                    if ui.button("Refresh").clicked() {
-                        self.refresh_drives();
-                    }
-                });
-
-                ui.add_space(10.0);
-
-                // Repository selection
-                ui.horizontal(|ui| {
-                    ui.label("Release Channel:");
-
-                    let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
-
-                    egui::ComboBox::from_id_salt("repo_select")
-                        .selected_text(selected_repo_name)
-                        .show_ui(ui, |ui| {
-                            for (idx, (name, _url)) in REPO_OPTIONS.iter().enumerate() {
-                                ui.selectable_value(&mut self.selected_repo_idx, idx, *name);
-                            }
-                        });
-                });
-
-                ui.add_space(10.0);
-
-                // Install button
-                let is_busy = matches!(
-                    self.state,
-                    AppState::FetchingRelease
-                        | AppState::Downloading
-                        | AppState::Formatting
-                        | AppState::Extracting
-                        | AppState::Copying
-                        | AppState::AwaitingConfirmation
-                        | AppState::Ejecting
-                        | AppState::Cancelling
-                );
-
-                ui.add_enabled_ui(!is_busy && self.selected_drive_idx.is_some(), |ui| {
-                    let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
-                    if ui.button(format!("Install {}", selected_repo_name)).clicked() {
-                        self.state = AppState::AwaitingConfirmation;
-                    }
-                });
-
-                ui.add_space(10.0);
-
-                // Progress bar
-                let show_progress = matches!(
-                    self.state,
-                    AppState::FetchingRelease
-                        | AppState::Downloading
-                        | AppState::Formatting
-                        | AppState::Extracting
-                        | AppState::Copying
-                        | AppState::Cancelling
-                );
-
-                if show_progress {
-                    let (current, total, message) = {
-                        let p = self.progress.lock().unwrap();
-                        (p.current, p.total, p.message.clone())
-                    };
-
-                    // Only FetchingRelease has indeterminate progress
-                    // Downloading, Formatting, and Extracting now report percentages
-                    let is_indeterminate = matches!(
-                        self.state,
-                        AppState::FetchingRelease
-                    );
-
-                    if is_indeterminate {
-                        // Animated indeterminate progress bar
-                        let time = ctx.input(|i| i.time);
-
-                        // Allocate space for the progress bar
-                        let desired_size = egui::vec2(ui.available_width(), 20.0);
-                        let (rect, _response) =
-                            ui.allocate_exact_size(desired_size, egui::Sense::hover());
-
-                        if ui.is_rect_visible(rect) {
-                            let painter = ui.painter();
-
-                            // Background
-                            painter.rect_filled(rect, 4.0, COLOR_BG_LIGHT);
-
-                            // Animated highlight - moves back and forth
-                            let cycle = (time * 0.8).sin() * 0.5 + 0.5; // 0.0 to 1.0
-                            let bar_width = rect.width() * 0.3;
-                            let bar_x = rect.left() + (rect.width() - bar_width) * cycle as f32;
-
-                            let highlight_rect = egui::Rect::from_min_size(
-                                egui::pos2(bar_x, rect.top()),
-                                egui::vec2(bar_width, rect.height()),
-                            );
-
-                            painter.rect_filled(highlight_rect, 4.0, COLOR_ACCENT);
-                        }
-                    } else {
-                        // Normal progress bar for downloading
-                        let progress = if total > 0 {
-                            current as f32 / total as f32
-                        } else {
-                            0.0
-                        };
-
-                        ui.add(
-                            egui::ProgressBar::new(progress)
-                                .fill(COLOR_ACCENT)
-                                .show_percentage(),
-                        );
-                    }
-
-                    ui.add_space(5.0);
-                    ui.colored_label(COLOR_TEXT, &message);
-
-                    // Cancel button (only show during cancellable operations)
-                    let can_cancel = matches!(
+                ui.add_enabled_ui(!show_modal, |ui| {
+                    let show_progress = matches!(
                         self.state,
                         AppState::FetchingRelease
                             | AppState::Downloading
                             | AppState::Formatting
                             | AppState::Extracting
                             | AppState::Copying
-                    ) && self.cancel_token.is_some();
+                            | AppState::Cancelling
+                    );
 
-                    if can_cancel {
-                        ui.add_space(10.0);
-                        if ui.button("Cancel").clicked() {
-                            self.cancel_installation();
+                    //ctx.set_zoom_factor(1.15);
+                    //ui.style_mut().spacing.item_spacing = egui::vec2(16.0, 16.0);
+
+                    ui.columns(3, |columns| {
+                    columns[0].allocate_ui_with_layout(
+                        egui::Vec2::ZERO,
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |_ui| {
+
                         }
-                    }
+                    );
 
-                    // Show cancelling message
-                    if self.state == AppState::Cancelling {
-                        ui.add_space(5.0);
-                        ui.colored_label(COLOR_WARNING, "Cancelling...");
-                    }
-                }
+                    columns[1].allocate_ui_with_layout(
+                        egui::Vec2::ZERO,
+                        egui::Layout::top_down(egui::Align::Center),
+                        |ui| {
+                            ui.add_space(12.0);
+                            let is_dark = ctx.style().visuals.dark_mode;
+                            let image = if is_dark {
+                                egui::include_image!("../assets/Icons/icon_dark.png")
+                            } else {
+                                egui::include_image!("../assets/Icons/icon.png")
+                            };
+                            ui.add(egui::Image::new(image).fit_to_exact_size(egui::vec2(60.0, 60.0)));
+                        },
+                    );
 
-                // Status
-                match self.state {
-                    AppState::Complete => {
-                        let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
-                        ui.colored_label(COLOR_SUCCESS, format!("{} installation complete!", selected_repo_name));
-                        ui.add_space(5.0);
-                        if ui.button("Safely Eject SD Card").clicked() {
-                            if let Some(drive) = self.installed_drive.clone() {
-                                // Run eject in background task so UI stays responsive
-                                self.state = AppState::Ejecting;
-                                self.log("Ejecting SD card...");
-
-                                let progress = self.progress.clone();
-                                let ctx_clone = ctx.clone();
-
-                                self.runtime.spawn(async move {
-                                    let result = tokio::task::spawn_blocking(move || {
-                                        eject_drive(&drive)
-                                    }).await.unwrap();
-
-                                    if let Ok(mut progress) = progress.lock() {
-                                        match result {
-                                            Ok(()) => progress.message = "EJECT_SUCCESS".to_string(),
-                                            Err(e) => progress.message = format!("EJECT_ERROR: {}", e),
-                                        }
-                                    }
-                                    ctx_clone.request_repaint();
-                                });
+                    columns[2].allocate_ui_with_layout(
+                        egui::Vec2::ZERO,
+                        egui::Layout::right_to_left(egui::Align::TOP),
+                        |ui| {
+                            if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
+                                self.show_theme_editor = !self.show_theme_editor;
                             }
+                            if ui.button("📜").on_hover_text("Toggle Log Area").clicked() {
+                                self.show_log = !self.show_log;
+                                
+                                // Adjust window size when toggling log
+                                let current_size = ctx.content_rect().size();
+                                let new_width = if self.show_log {
+                                    current_size.x + 320.0
+                                } else {
+                                    current_size.x - 320.0
+                                };
+                                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(new_width, current_size.y)));
+                            }
+                            },
+                    );
+                });
+
+                ui.add_space(16.0);
+                ui.separator();
+                ui.add_space(16.0);
+                ui.columns(2, |columns| {
+                    columns[0].allocate_ui_with_layout(
+                        egui::Vec2::ZERO,
+                        egui::Layout::right_to_left(egui::Align::Center),
+                        |ui| {
+                            // Drive selection
+                            let (selected_text, enabled) = if self.drives.is_empty() {
+                                ("No SD card".to_string(), false)
+                            } else {
+                                (
+                                    self.selected_drive_idx
+                                        .and_then(|idx| self.drives.get(idx))
+                                        .map(|d| d.display_name())
+                                        .unwrap_or_else(|| "Select Drive".to_string()),
+                                    !show_progress
+                                )
+                            };
+
+                            ui.add_enabled_ui(enabled, |ui| {
+                                egui::ComboBox::from_id_salt("drive_select")
+                                    .selected_text(&selected_text)
+                                    .show_ui(ui, |ui| {
+                                        for (idx, drive) in self.drives.iter().enumerate() {
+                                            ui.selectable_value(
+                                                &mut self.selected_drive_idx,
+                                                Some(idx),
+                                                drive.display_name(),
+                                            );
+                                        }
+                                    });
+                            });
                         }
-                    }
-                    AppState::Ejecting => {
-                        let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
-                        ui.colored_label(COLOR_SUCCESS, format!("{} installation complete!", selected_repo_name));
-                        ui.add_space(5.0);
-                        ui.horizontal(|ui| {
-                            ui.add(egui::Spinner::new().color(COLOR_SPINNER));
-                            ui.label(" Ejecting SD card...");
+                    );
+
+                    columns[1].allocate_ui_with_layout(
+                        egui::Vec2::ZERO,
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            ui.add_enabled_ui(!show_progress, |ui| {
+                                // Repository selection
+                                ui.spacing_mut().item_spacing.x = 0.0;
+                                let count = REPO_OPTIONS.len();
+
+                                for (idx, (name, _url)) in REPO_OPTIONS.iter().enumerate() {
+                                    let corner_radius = if count == 1 {
+                                        egui::CornerRadius::same(4)
+                                    } else if idx == 0 {
+                                        egui::CornerRadius { nw: 4, sw: 4, ne: 0, se: 0 }
+                                    } else if idx == count - 1 {
+                                        egui::CornerRadius { nw: 0, sw: 0, ne: 4, se: 4 }
+                                    } else {
+                                        egui::CornerRadius::ZERO
+                                    };
+
+                                    ui.scope(|ui| {
+                                        ui.visuals_mut().widgets.inactive.corner_radius = corner_radius;
+                                        ui.visuals_mut().widgets.hovered.corner_radius = corner_radius;
+                                        ui.visuals_mut().widgets.active.corner_radius = corner_radius;
+
+                                        if ui.add(egui::Button::selectable(
+                                            self.selected_repo_idx == idx,
+                                            *name,
+                                        )).clicked() {
+                                            self.selected_repo_idx = idx;
+                                        }
+                                    });
+                                }
+                            });
+                        },
+                    );
+                });
+
+                ui.add_space(12.0);
+
+                // Progress bar
+                if show_progress {
+                    
+                    let (current, total, message) = {
+                        let p = self.progress.lock().unwrap();
+                        (p.current, p.total, p.message.clone())
+                    };
+
+                    ui.horizontal(|ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.label(&message);
                         });
-                    }
-                    AppState::Ejected => {
-                        ui.colored_label(COLOR_SUCCESS, "SD card ejected! You may safely remove it.");
-                    }
-                    AppState::Error => {
-                        let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
-                        ui.colored_label(COLOR_ERROR, format!("{} installation failed. See log for details.", selected_repo_name));
-                    }
-                    _ => {}
+                    });
+                    ui.add_space(8.0);
+
+                    ui.horizontal(|ui| {
+                        ui.vertical_centered(|ui| {
+                            
+                            // Only FetchingRelease has indeterminate progress
+                            // Downloading, Formatting, and Extracting now report percentages
+                            let is_indeterminate = matches!(
+                                self.state,
+                                AppState::FetchingRelease | AppState::Idle
+                            );
+
+                            if is_indeterminate {
+                                // Animated indeterminate progress bar
+                                let time = ctx.input(|i| i.time);
+
+                                // Allocate space for the progress bar
+                                let desired_size = egui::vec2(ui.available_width() / 2.0, 6.0);
+                                let (outer_rect, _response) =
+                                    ui.allocate_exact_size(desired_size, egui::Sense::hover());
+
+                                if ui.is_rect_visible(outer_rect) {
+                                    let visuals = ui.style().visuals.clone();
+                                    let half_height = outer_rect.height() / 2.0;
+                                    let corner_radius = half_height;
+                                    ui.painter()
+                                        .rect_filled(outer_rect, corner_radius, visuals.extreme_bg_color);
+
+                                    // Animated highlight - moves back and forth
+                                    let cycle = (time * 0.8).sin() * 0.5 + 0.5; // 0.0 to 1.0
+                                    let bar_width = outer_rect.width() * 0.3;
+                                    let bar_x = outer_rect.left() + (outer_rect.width() - bar_width) * cycle as f32;
+
+                                    let highlight_rect = egui::Rect::from_min_size(
+                                        egui::pos2(bar_x, outer_rect.top()),
+                                        egui::vec2(bar_width, outer_rect.height()),
+                                    );
+
+                                    ui.painter().rect_filled(
+                                        highlight_rect,
+                                        corner_radius,
+                                        visuals.selection.bg_fill);
+                                }
+                            } else {
+                                // Normal progress bar for downloading
+                                let progress = if total > 0 {
+                                    current as f32 / total as f32
+                                } else {
+                                    0.0
+                                };
+
+                                ui.add(
+                                    egui::ProgressBar::new(progress)
+                                        .fill(ui.visuals().selection.bg_fill).desired_height(6.0).desired_width(ui.available_width() / 2.0)
+                                );
+                            }
+                        });
+                    });
+                    ui.add_space(12.0);
                 }
 
-                ui.add_space(10.0);
 
-                // Log area
-                ui.separator();
-                ui.label("Log:");
+                ui.horizontal(|ui| {
+                    ui.vertical_centered(|ui| {
+                        // Install button
+                        let is_busy = matches!(
+                            self.state,
+                            AppState::FetchingRelease
+                                | AppState::Downloading
+                                | AppState::Formatting
+                                | AppState::Extracting
+                                | AppState::Copying
+                                | AppState::AwaitingConfirmation
+                                | AppState::Ejecting
+                                | AppState::Cancelling
+                        );
+                        
+                        if !is_busy {
+                            ui.add_enabled_ui(!is_busy && self.selected_drive_idx.is_some() && !self.drives.is_empty(), |ui| {
+                                if ui.button("Install").clicked() {
+                                    self.state = AppState::AwaitingConfirmation;
+                                }
+                            });
+                        }
 
-                egui::ScrollArea::vertical()
-                    .max_height(150.0)
-                    .stick_to_bottom(true)
-                    .show(ui, |ui| {
-                        if let Ok(logs) = self.log_messages.lock() {
-                            for msg in logs.iter() {
-                                ui.colored_label(COLOR_TEXT, msg);
+                        // Cancel button (only show during cancellable operations)
+                        let can_cancel = matches!(
+                            self.state,
+                            AppState::FetchingRelease
+                                | AppState::Downloading
+                                | AppState::Formatting
+                                | AppState::Extracting
+                                | AppState::Copying
+                        ) && self.cancel_token.is_some();
+
+                        if can_cancel {
+                            if ui.button("Cancel").clicked() {
+                                self.cancel_installation();
                             }
                         }
                     });
+                });
+
+                ui.add_space(10.0);
             });
+        });
     }
 }

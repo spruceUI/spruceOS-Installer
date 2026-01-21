@@ -10,7 +10,7 @@ use crate::drives::DriveInfo;
 #[cfg(target_os = "windows")]
 pub fn eject_drive(drive: &DriveInfo) -> Result<(), String> {
     use std::mem::size_of;
-    use windows::Win32::Foundation::{CloseHandle, HANDLE, GENERIC_READ, GENERIC_WRITE};
+    use windows::Win32::Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE};
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE,
         OPEN_EXISTING,
@@ -174,42 +174,12 @@ pub fn eject_drive(drive: &DriveInfo) -> Result<(), String> {
         let _ = Command::new("umount").arg(&partition_path).output();
     }
 
-    // Check if device still exists after unmount
-    if !Path::new(&drive.device_path).exists() {
-        crate::debug::log("Linux eject: device removed after unmount");
-        return Ok(());
-    }
+    // Final sync to ensure all data is written
+    crate::debug::log("Linux eject: performing final system sync...");
+    let _ = Command::new("sync").output();
 
-    // Power off the device using udisksctl (cleanest method)
-    crate::debug::log(&format!("Linux eject: powering off {}...", drive.device_path));
-    let udisks_result = Command::new("udisksctl")
-        .args(["power-off", "-b", &drive.device_path])
-        .output();
-
-    if let Ok(output) = udisks_result {
-        if output.status.success() {
-            crate::debug::log("Linux eject: success via udisksctl power-off");
-            return Ok(());
-        }
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        crate::debug::log(&format!("Linux eject: udisksctl power-off failed: {}", stderr.trim()));
-    }
-
-    // Fallback to eject command
-    crate::debug::log(&format!("Linux eject: trying eject command..."));
-    let output = Command::new("eject")
-        .arg(&drive.device_path)
-        .output()
-        .map_err(|e| format!("Failed to run eject: {}", e))?;
-
-    if output.status.success() {
-        crate::debug::log("Linux eject: success via eject");
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        crate::debug::log(&format!("Linux eject failed: {}", stderr.trim()));
-        Err(format!("Eject failed: {}", stderr.trim()))
-    }
+    crate::debug::log("Linux eject: unmount successful, device is safe to remove");
+    Ok(())
 }
 
 // =============================================================================

@@ -12,7 +12,7 @@ mod format;
 mod github;
 
 use app::InstallerApp;
-use config::{load_app_icon, COLOR_BG_DARK, WINDOW_MIN_SIZE, WINDOW_SIZE, WINDOW_TITLE};
+use config::{load_app_icon, WINDOW_MIN_SIZE, WINDOW_SIZE, WINDOW_TITLE};
 use eframe::egui;
 use std::sync::Arc;
 
@@ -108,14 +108,11 @@ fn main() -> eframe::Result<()> {
         WINDOW_TITLE,
         options,
         Box::new(|cc| {
-            // Set initial visuals (theme is fully applied in InstallerApp::new)
-            cc.egui_ctx.set_visuals(egui::Visuals {
-                panel_fill: COLOR_BG_DARK,
-                window_fill: COLOR_BG_DARK,
-                extreme_bg_color: COLOR_BG_DARK,
-                faint_bg_color: COLOR_BG_DARK,
-                ..egui::Visuals::dark()
-            });
+            // Theme is applied in InstallerApp::new using setup_theme
+
+            // Initialize image loaders for SVG support
+            egui_extras::install_image_loaders(&cc.egui_ctx);
+
             Ok(Box::new(InstallerApp::new(cc)))
         }),
     )

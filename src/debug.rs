@@ -18,12 +18,40 @@ pub struct DebugLog {
 impl DebugLog {
     fn new() -> Self {
         let log_filename = format!("{}_debug.txt", TEMP_PREFIX);
-        let path = std::env::temp_dir().join(&log_filename);
+        
+        // On macOS with elevation, current_dir changes and temp_dir changes.
+        // Use /tmp explicitly for finding logs easily.
+        #[cfg(target_os = "macos")]
+        let path = PathBuf::from("/tmp").join(&log_filename);
+        
+        #[cfg(not(target_os = "macos"))]
+        let path = std::env::current_dir()
+            .map(|cwd| {
+                let target = cwd.join("target");
+                if target.exists() {
+                    target.join(&log_filename)
+                } else {
+                    cwd.join(&log_filename)
+                }
+            })
+            .unwrap_or_else(|_| std::env::temp_dir().join(&log_filename));
 
-        // Clear existing log and write header
-        if let Ok(mut f) = std::fs::File::create(&path) {
+        println!("[DEBUG] Initializing log at: {:?}", path);
+
+        // Try to create the file to verify write permissions
+        // If it fails (e.g. running as different user in restricted dir), fall back to temp
+        let final_path = if std::fs::File::create(&path).is_ok() {
+            path
+        } else {
+            let temp_path = std::env::temp_dir().join(&log_filename);
+            println!("[DEBUG] Failed to write to preferred path, falling back to: {:?}", temp_path);
+            temp_path
+        };
+
+        // Write header
+        if let Ok(mut f) = std::fs::File::create(&final_path) {
             let _ = writeln!(f, "=== {} Installer Debug Log ===", APP_NAME);
-            let _ = writeln!(f, "Log file: {:?}", path);
+            let _ = writeln!(f, "Log file: {:?}", final_path);
             let _ = writeln!(f, "Timestamp: {:?}", std::time::SystemTime::now());
             let _ = writeln!(f, "Platform: {}", std::env::consts::OS);
             let _ = writeln!(f, "Arch: {}", std::env::consts::ARCH);
@@ -31,7 +59,7 @@ impl DebugLog {
         }
 
         Self {
-            path,
+            path: final_path,
             enabled: true,
         }
     }
@@ -39,6 +67,9 @@ impl DebugLog {
 
 /// Log a debug message
 pub fn log(message: &str) {
+    // Also print to stdout for VS Code debug console visibility
+    println!("[DEBUG] {}", message);
+
     if let Ok(debug_log) = DEBUG_LOG.lock() {
         if debug_log.enabled {
             if let Ok(mut f) = std::fs::OpenOptions::new()
