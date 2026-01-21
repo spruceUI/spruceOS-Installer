@@ -139,44 +139,77 @@ impl InstallerApp {
         app
     }
 
-    fn get_theme_config(&self, is_dark: bool) -> ThemeConfig {
-        let mut config = if is_dark {
-            ThemeConfig::gruvbox_dark_preset()
-        } else {
-            // TODO: not sure what light preset would fit spruceos branding,
-            // pick one from theme editor
-            ThemeConfig::gruvbox_dark_preset()
-        };
-
-        // Apply SpruceOS custom colors
-        config.name = "SpruceOS".to_string();
-
-        // Text colors
-        config.override_text_color = Some([251, 241, 199, 255]);        // #fbf1c7 - selected text
-        config.override_weak_text_color = Some([124, 111, 100, 255]);   // #7c6f64 - non-selected text
-
-        // Background colors
-        config.override_window_fill = Some([40, 40, 40, 255]);          // #282828 - main background
-        config.override_panel_fill = Some([40, 40, 40, 255]);           // #282828 - panel background
-        config.override_faint_bg_color = Some([48, 48, 48, 255]);       // Slightly lighter for contrast
-
-        // Status colors
-        config.override_error_fg_color = Some([204, 36, 29, 255]);      // #cc241d - red for errors
-        config.override_warn_fg_color = Some([215, 180, 95, 255]);      // #d7b45f - golden yellow for warnings
-
-        // Selection highlight
-        config.override_selection_bg = Some([215, 180, 95, 80]);        // #d7b45f with transparency
-
-        // Interactive widget colors (golden yellow accent)
-        config.override_widget_hovered_bg_fill = Some([215, 180, 95, 60]);     // Golden on hover
-        config.override_widget_active_bg_fill = Some([215, 180, 95, 100]);     // Golden when active
-
-        // Widget borders/strokes
-        config.override_widget_inactive_bg_stroke_color = Some([124, 111, 100, 100]);  // Subtle borders
-        config.override_widget_hovered_bg_stroke_color = Some([215, 180, 95, 255]);    // Golden borders on hover
-        config.override_widget_active_bg_stroke_color = Some([215, 180, 95, 255]);     // Golden borders when active
-
-        config
+    fn get_theme_config(&self, _is_dark: bool) -> ThemeConfig {
+        ThemeConfig {
+            name: "SpruceOS".to_string(),
+            dark_mode: true,
+            override_text_color: Some([251, 241, 199, 255]),
+            override_weak_text_color: Some([124, 111, 100, 255]),
+            override_hyperlink_color: Some([131, 165, 152, 255]),
+            override_faint_bg_color: Some([48, 48, 48, 255]),
+            override_extreme_bg_color: Some([29, 32, 33, 255]),
+            override_code_bg_color: Some([60, 56, 54, 255]),
+            override_warn_fg_color: Some([214, 93, 14, 255]),
+            override_error_fg_color: Some([204, 36, 29, 255]),
+            override_window_fill: Some([40, 40, 40, 255]),
+            override_window_stroke_color: None,
+            override_window_stroke_width: None,
+            override_window_corner_radius: None,
+            override_window_shadow_size: None,
+            override_panel_fill: Some([40, 40, 40, 255]),
+            override_popup_shadow_size: None,
+            override_selection_bg: Some([215, 180, 95, 255]),
+            override_selection_stroke_color: None,
+            override_selection_stroke_width: None,
+            override_widget_noninteractive_bg_fill: None,
+            override_widget_noninteractive_weak_bg_fill: None,
+            override_widget_noninteractive_bg_stroke_color: None,
+            override_widget_noninteractive_bg_stroke_width: None,
+            override_widget_noninteractive_corner_radius: None,
+            override_widget_noninteractive_fg_stroke_color: None,
+            override_widget_noninteractive_fg_stroke_width: None,
+            override_widget_noninteractive_expansion: None,
+            override_widget_inactive_bg_fill: Some([215, 180, 95, 255]),
+            override_widget_inactive_weak_bg_fill: None,
+            override_widget_inactive_bg_stroke_color: Some([124, 111, 100, 100]),
+            override_widget_inactive_bg_stroke_width: None,
+            override_widget_inactive_corner_radius: None,
+            override_widget_inactive_fg_stroke_color: Some([104, 157, 106, 255]),
+            override_widget_inactive_fg_stroke_width: None,
+            override_widget_inactive_expansion: None,
+            override_widget_hovered_bg_fill: Some([215, 180, 95, 60]),
+            override_widget_hovered_weak_bg_fill: None,
+            override_widget_hovered_bg_stroke_color: Some([215, 180, 95, 255]),
+            override_widget_hovered_bg_stroke_width: None,
+            override_widget_hovered_corner_radius: None,
+            override_widget_hovered_fg_stroke_color: None,
+            override_widget_hovered_fg_stroke_width: None,
+            override_widget_hovered_expansion: None,
+            override_widget_active_bg_fill: Some([215, 180, 95, 100]),
+            override_widget_active_weak_bg_fill: None,
+            override_widget_active_bg_stroke_color: Some([215, 180, 95, 255]),
+            override_widget_active_bg_stroke_width: None,
+            override_widget_active_corner_radius: None,
+            override_widget_active_fg_stroke_color: None,
+            override_widget_active_fg_stroke_width: None,
+            override_widget_active_expansion: None,
+            override_widget_open_bg_fill: None,
+            override_widget_open_weak_bg_fill: None,
+            override_widget_open_bg_stroke_color: None,
+            override_widget_open_bg_stroke_width: None,
+            override_widget_open_corner_radius: None,
+            override_widget_open_fg_stroke_color: None,
+            override_widget_open_fg_stroke_width: None,
+            override_widget_open_expansion: None,
+            override_resize_corner_size: None,
+            override_text_cursor_width: None,
+            override_clip_rect_margin: None,
+            override_button_frame: None,
+            override_collapsing_header_frame: None,
+            override_indent_has_left_vline: None,
+            override_striped: None,
+            override_slider_trailing_fill: None,
+        }
     }
 
     fn ensure_selection_valid(&mut self) {
