@@ -1,12 +1,10 @@
----
-
 ## To-Do
 
 - ~~x64 Linux hangs for a sec before ejecting safely, possible bug, it does eject though.~~ idk if this is really fixed it only happens sometimes for me?
 - arm64 fails to extract
 - inform user of where to find logfile
 
-## wishlist
+## Wishlist
 - merge twig flasher with rest of spruce version
 - checkboxes for various additional packages:
     - all themes
@@ -15,15 +13,10 @@
     - PortMaster (are we making this a separate archive?)
 - backup and restore (update current installation instead of just fresh ones?)
 - scrape boxart for roms
-<<<<<<< HEAD
-<<<<<<< HEAD
+
 - offline installer / updater mode - provide your own 7z or gz file instead of downloading
-=======
->>>>>>> 40b2a81 (Add wishlist section to README)
-=======
+
 - offline installer / updater mode - provide your own 7z or gz file instead of downloading
->>>>>>> 4e48455 (Revise README with extraction failure and wishlist)
----
 
 
 # SpruceOS Installer
@@ -37,7 +30,7 @@ It can be easily edited and adapted to work with **any custom firmware (CFW)** t
 GitHub Actions are set up to automatically **build and create releases per branch**.  
 If you’d like to use this program for your own project, let us know—we can create a branch for you or add you directly to the repository.
 
-> **Please do not remove the Spruce team from the authors section.**  
+> **Please do not remove the Spruce or NextUI teams from the authors section.**  
 > Instead, add your name alongside the existing credits.
 
 
