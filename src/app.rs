@@ -143,10 +143,39 @@ impl InstallerApp {
         let mut config = if is_dark {
             ThemeConfig::gruvbox_dark_preset()
         } else {
-            // TODO: not sure what light preset would fit spruceos branding, 
+            // TODO: not sure what light preset would fit spruceos branding,
             // pick one from theme editor
             ThemeConfig::gruvbox_dark_preset()
         };
+
+        // Apply SpruceOS custom colors
+        config.name = "SpruceOS".to_string();
+
+        // Text colors
+        config.override_text_color = Some([251, 241, 199, 255]);        // #fbf1c7 - selected text
+        config.override_weak_text_color = Some([124, 111, 100, 255]);   // #7c6f64 - non-selected text
+
+        // Background colors
+        config.override_window_fill = Some([40, 40, 40, 255]);          // #282828 - main background
+        config.override_panel_fill = Some([40, 40, 40, 255]);           // #282828 - panel background
+        config.override_faint_bg_color = Some([48, 48, 48, 255]);       // Slightly lighter for contrast
+
+        // Status colors
+        config.override_error_fg_color = Some([204, 36, 29, 255]);      // #cc241d - red for errors
+        config.override_warn_fg_color = Some([215, 180, 95, 255]);      // #d7b45f - golden yellow for warnings
+
+        // Selection highlight
+        config.override_selection_bg = Some([215, 180, 95, 80]);        // #d7b45f with transparency
+
+        // Interactive widget colors (golden yellow accent)
+        config.override_widget_hovered_bg_fill = Some([215, 180, 95, 60]);     // Golden on hover
+        config.override_widget_active_bg_fill = Some([215, 180, 95, 100]);     // Golden when active
+
+        // Widget borders/strokes
+        config.override_widget_inactive_bg_stroke_color = Some([124, 111, 100, 100]);  // Subtle borders
+        config.override_widget_hovered_bg_stroke_color = Some([215, 180, 95, 255]);    // Golden borders on hover
+        config.override_widget_active_bg_stroke_color = Some([215, 180, 95, 255]);     // Golden borders when active
+
         config
     }
 
@@ -987,7 +1016,7 @@ impl eframe::App for InstallerApp {
                             }
                             AppState::Complete => {
                                 ui.add_space(12.0);
-                                ui.colored_label(egui::Color32::from_rgb(91, 154, 91), "SUCCESS");
+                                ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "SUCCESS");
                                 ui.add_space(12.0);
                                 let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
                                 ui.label(format!("{} has been successfully installed.", selected_repo_name));
@@ -1048,7 +1077,7 @@ impl eframe::App for InstallerApp {
                                 ui.add_space(12.0);
                                 ui.label("SD card ejected!");
                                 ui.add_space(8.0);
-                                ui.colored_label(egui::Color32::from_rgb(91, 154, 91), "You may now safely remove it.");
+                                ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "You may now safely remove it.");
                                 ui.add_space(15.0);
                                 if ui.button("OK").clicked() {
                                     self.state = AppState::Idle;
