@@ -67,10 +67,10 @@ pub const ASSET_EXTENSION: &str = ".7z";
 // ----------------------------------------------------------------------------
 
 /// Default window size (width, height)
-pub const WINDOW_SIZE: (f32, f32) = (475.0, 275.0);
+pub const WINDOW_SIZE: (f32, f32) = (950.0, 412.5);
 
 /// Minimum window size (width, height)
-pub const WINDOW_MIN_SIZE: (f32, f32) = (475.0, 275.0);
+pub const WINDOW_MIN_SIZE: (f32, f32) = (950.0, 412.5);
 
 // ----------------------------------------------------------------------------
 // ICON CONFIGURATION
