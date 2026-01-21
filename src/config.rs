@@ -121,10 +121,10 @@ pub fn setup_theme(ctx: &egui::Context) {
     use egui_thematic::ThemeConfig;
 
     let is_dark = ctx.style().visuals.dark_mode;
-    let mut theme = if is_dark {
+    let theme = if is_dark {
         ThemeConfig::gruvbox_dark_preset()
     } else {
-        // TODO: not sure what light preset would fit spruceos branding, 
+        // TODO: not sure what light preset would fit spruceos branding,
         // pick one from theme editor
         ThemeConfig::gruvbox_dark_preset()
     };

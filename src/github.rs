@@ -10,6 +10,7 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug, Deserialize)]
 pub struct Release {
     pub tag_name: String,
+    #[allow(dead_code)]
     pub name: Option<String>,
     pub assets: Vec<Asset>,
 }
@@ -27,6 +28,7 @@ pub enum DownloadProgress {
     Progress { downloaded: u64, total: u64 },
     Completed,
     Cancelled,
+    #[allow(dead_code)]
     Error(String),
 }
 

@@ -7,6 +7,7 @@ use std::process::Stdio;
 #[cfg(target_os = "windows")]
 use tokio::io::AsyncWriteExt;
 #[cfg(target_os = "windows")]
+#[allow(unused_imports)]
 use std::os::windows::process::CommandExt;
 
 #[cfg(target_os = "windows")]
@@ -22,6 +23,7 @@ pub enum FormatProgress {
     Progress { percent: u8 },
     Completed,
     Cancelled,
+    #[allow(dead_code)]
     Error(String),
 }
 

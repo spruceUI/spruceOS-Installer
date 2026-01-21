@@ -10,7 +10,7 @@ use crate::drives::DriveInfo;
 #[cfg(target_os = "windows")]
 pub fn eject_drive(drive: &DriveInfo) -> Result<(), String> {
     use std::mem::size_of;
-    use windows::Win32::Foundation::{CloseHandle, HANDLE, GENERIC_READ, GENERIC_WRITE};
+    use windows::Win32::Foundation::{CloseHandle, GENERIC_READ, GENERIC_WRITE};
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ, FILE_SHARE_WRITE,
         OPEN_EXISTING,

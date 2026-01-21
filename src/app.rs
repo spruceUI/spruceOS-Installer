@@ -46,7 +46,7 @@ pub struct InstallerApp {
     drives: Vec<DriveInfo>,
     selected_drive_idx: Option<usize>,
     selected_repo_idx: usize,
-    release_info: Option<Release>,
+    _release_info: Option<Release>,
 
     // Progress tracking
     state: AppState,
@@ -54,7 +54,7 @@ pub struct InstallerApp {
     log_messages: Arc<Mutex<Vec<String>>>,
 
     // Temp file for downloads
-    temp_download_path: Option<PathBuf>,
+    _temp_download_path: Option<PathBuf>,
 
     // Drive that was installed to (for eject)
     installed_drive: Option<DriveInfo>,
@@ -111,7 +111,7 @@ impl InstallerApp {
             drives: Vec::new(),
             selected_drive_idx: None,
             selected_repo_idx: DEFAULT_REPO_INDEX,
-            release_info: None,
+            _release_info: None,
             state: AppState::Idle,
             progress: Arc::new(Mutex::new(ProgressInfo {
                 current: 0,
@@ -119,7 +119,7 @@ impl InstallerApp {
                 message: String::new(),
             })),
             log_messages: Arc::new(Mutex::new(Vec::new())),
-            temp_download_path: None,
+            _temp_download_path: None,
             installed_drive: None,
             cancel_token: None,
             drive_rx: rx,
@@ -973,7 +973,7 @@ impl eframe::App for InstallerApp {
                 .order(egui::Order::Foreground)
                 .fixed_pos(egui::pos2(0.0, 0.0))
                 .show(ctx, |ui| {
-                    let screen_rect = ui.ctx().screen_rect();
+                    let screen_rect = ui.ctx().content_rect();
                     ui.allocate_rect(screen_rect, egui::Sense::click()); // Block clicks
                     ui.painter()
                         .rect_filled(screen_rect, 0.0, egui::Color32::from_black_alpha(140));
@@ -1150,7 +1150,7 @@ impl eframe::App for InstallerApp {
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     if ui.button("X").on_hover_text("Close Log").clicked() {
                                         self.show_log = false;
-                                        let current_size = ui.ctx().screen_rect().size();
+                                        let current_size = ui.ctx().content_rect().size();
                                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(current_size.x - 320.0, current_size.y)));
                                     }
                                 });
@@ -1196,8 +1196,8 @@ impl eframe::App for InstallerApp {
                     columns[0].allocate_ui_with_layout(
                         egui::Vec2::ZERO,
                         egui::Layout::right_to_left(egui::Align::Center),
-                        |ui| {
-                            
+                        |_ui| {
+
                         }
                     );
 
@@ -1227,7 +1227,7 @@ impl eframe::App for InstallerApp {
                                 self.show_log = !self.show_log;
                                 
                                 // Adjust window size when toggling log
-                                let current_size = ctx.screen_rect().size();
+                                let current_size = ctx.content_rect().size();
                                 let new_width = if self.show_log {
                                     current_size.x + 320.0
                                 } else {

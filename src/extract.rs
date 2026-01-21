@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 #[cfg(target_os = "windows")]
+#[allow(unused_imports)]
 use std::os::windows::process::CommandExt;
 
 // Embed platform-specific 7z binaries

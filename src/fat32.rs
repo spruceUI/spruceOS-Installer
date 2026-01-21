@@ -211,7 +211,6 @@ pub async fn format_fat32_large(
     total_bytes: u64,
     progress_tx: mpsc::UnboundedSender<FormatProgress>,
 ) -> Result<(), String> {
-    use std::ptr;
     use windows::Win32::Foundation::{HANDLE, CloseHandle, GENERIC_READ, GENERIC_WRITE};
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, SetFilePointerEx, WriteFile, FILE_BEGIN,
