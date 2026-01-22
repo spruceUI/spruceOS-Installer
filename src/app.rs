@@ -1395,7 +1395,7 @@ impl eframe::App for InstallerApp {
                         if !is_busy {
                             ui.add_enabled_ui(!is_busy && self.selected_drive_idx.is_some() && !self.drives.is_empty(), |ui| {
                                 let button = egui::Button::new("Install")
-                                    .min_size(egui::vec2(160.0, 80.0))
+                                    .min_size(egui::vec2(107.0, 53.0))
                                     .fill(egui::Color32::from_rgb(104, 157, 106)); // Green
                                 if ui.add(button).clicked() {
                                     self.state = AppState::AwaitingConfirmation;
@@ -1415,7 +1415,7 @@ impl eframe::App for InstallerApp {
 
                         if can_cancel {
                             let button = egui::Button::new("Cancel")
-                                .min_size(egui::vec2(160.0, 80.0))
+                                .min_size(egui::vec2(107.0, 53.0))
                                 .fill(egui::Color32::from_rgb(251, 73, 52)); // Red
                             if ui.add(button).clicked() {
                                 self.cancel_installation();
