@@ -372,9 +372,11 @@ impl InstallerApp {
                             FormatProgress::Unmounting => {
                                 p.message = "Unmounting drive...".to_string();
                             }
+                            #[cfg(not(target_os = "macos"))]
                             FormatProgress::CleaningDisk => {
                                 p.message = "Cleaning disk...".to_string();
                             }
+                            #[cfg(not(target_os = "macos"))]
                             FormatProgress::CreatingPartition => {
                                 p.message = "Creating partition...".to_string();
                             }

@@ -174,6 +174,7 @@ fn create_boot_sector(params: &Fat32Params, volume_label: &str) -> [u8; 512] {
     boot
 }
 
+#[cfg(windows)]
 fn create_fsinfo_sector() -> [u8; 512] {
     let mut fsinfo = [0u8; 512];
 
@@ -195,6 +196,7 @@ fn create_fsinfo_sector() -> [u8; 512] {
     fsinfo
 }
 
+#[cfg(windows)]
 fn create_fat_sector_with_entries() -> [u8; 512] {
     let mut fat = [0u8; 512];
 
@@ -345,6 +347,7 @@ pub async fn format_fat32_large(
 }
 
 #[cfg(not(windows))]
+#[allow(dead_code)]
 pub async fn format_fat32_large(
     _disk_number: u32,
     _volume_label: &str,

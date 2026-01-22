@@ -17,7 +17,9 @@ const CREATE_NO_WINDOW: u32 = 0x08000000;
 pub enum FormatProgress {
     Started,
     Unmounting,
+    #[cfg(not(target_os = "macos"))]
     CleaningDisk,
+    #[cfg(not(target_os = "macos"))]
     CreatingPartition,
     Formatting,
     Progress { percent: u8 },
