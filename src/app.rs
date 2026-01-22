@@ -1368,7 +1368,7 @@ impl eframe::App for InstallerApp {
 
                                 ui.add(
                                     egui::ProgressBar::new(progress)
-                                        .fill(ui.visuals().selection.bg_fill).desired_height(12.0).desired_width(ui.available_width() / 2.0)
+                                        .fill(ui.visuals().selection.bg_fill).desired_height(16.0).desired_width(ui.available_width() / 2.0)
                                 );
                             }
                         });
