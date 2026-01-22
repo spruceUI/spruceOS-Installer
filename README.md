@@ -133,7 +133,39 @@ Customize the application icon:
 
 ---
 
-### 4. External Files to Update
+### 4. Custom Font
+
+The installer uses a custom font for all UI text. To use your own font:
+
+**Replace the font file:**
+```bash
+# Replace the existing font with your own TTF/OTF file
+cp /path/to/your/font.ttf assets/Fonts/nunwen.ttf
+```
+
+**Update the font configuration in `src/config.rs`:**
+
+| Constant | Purpose | Default |
+|----------|---------|---------|
+| `CUSTOM_FONT` | Path to the embedded font file | `"../assets/Fonts/nunwen.ttf"` |
+| `CUSTOM_FONT_NAME` | Display name for the font (optional, cosmetic) | `"Nunwen"` |
+
+**Example:**
+```rust
+// If you want to use a different filename:
+pub const CUSTOM_FONT: &[u8] = include_bytes!("../assets/Fonts/YourFont.ttf");
+pub const CUSTOM_FONT_NAME: &str = "YourFont";
+```
+
+> **Notes:**
+> - Supports TTF and OTF font formats
+> - The font is embedded in the binary, so no external font files are needed at runtime
+> - The custom font applies to all UI text (buttons, labels, dropdowns, etc.)
+> - To also use the font for monospace text (logs), uncomment the Monospace section in `load_custom_fonts()`
+
+---
+
+### 5. External Files to Update
 
 To fully rebrand the installer, also update:
 
@@ -161,8 +193,9 @@ To fully rebrand the installer, also update:
 2. Create a **new branch** for your customizations (or use an existing branch).
 3. Update `APP_NAME`, `VOLUME_LABEL`, and `REPO_OPTIONS` in `src/config.rs`
 4. Replace `assets/Icons/icon.png` and `icon.ico` with your branding
-5. Update `Cargo.toml` and `assets/Mac/Info.plist` with your project info
-6. Push your branch to GitHub.
+5. **(Optional)** Replace `assets/Fonts/nunwen.ttf` with your custom font
+6. Update `Cargo.toml` and `assets/Mac/Info.plist` with your project info
+7. Push your branch to GitHub.
 
 > GitHub Actions will automatically build Windows, Linux (x64 + ARM64), and macOS (ARM64 + x64) binaries — **no local build setup required**.
 

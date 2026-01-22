@@ -12,7 +12,7 @@ mod format;
 mod github;
 
 use app::InstallerApp;
-use config::{load_app_icon, WINDOW_MIN_SIZE, WINDOW_SIZE, WINDOW_TITLE};
+use config::{load_app_icon, load_custom_fonts, WINDOW_MIN_SIZE, WINDOW_SIZE, WINDOW_TITLE};
 use eframe::egui;
 use std::sync::Arc;
 
@@ -102,6 +102,9 @@ fn main() -> eframe::Result<()> {
         WINDOW_TITLE,
         options,
         Box::new(|cc| {
+            // Load custom fonts first (if configured)
+            load_custom_fonts(&cc.egui_ctx);
+
             // Theme is applied in InstallerApp::new using setup_theme
 
             // Initialize image loaders for SVG support
