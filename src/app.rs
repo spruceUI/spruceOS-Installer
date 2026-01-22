@@ -1132,7 +1132,7 @@ impl eframe::App for InstallerApp {
                         ui.vertical(|ui| {
                             ui.add_space(8.0);
                             ui.horizontal(|ui| {
-                                ui.heading("Installation Log");
+                                ui.heading("Debug Log");
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     if ui.button("X").on_hover_text("Close Log").clicked() {
                                         self.show_log = false;
@@ -1141,16 +1141,39 @@ impl eframe::App for InstallerApp {
                                     }
                                 });
                             });
+
+                            // Copy to Clipboard button
+                            ui.horizontal(|ui| {
+                                if ui.button("📋 Copy to Clipboard").clicked() {
+                                    let log_path = crate::debug::get_log_path();
+                                    if let Ok(contents) = std::fs::read_to_string(&log_path) {
+                                        ui.output_mut(|o| o.copied_text = contents);
+                                    }
+                                }
+                                ui.label(format!("Log: {:?}", crate::debug::get_log_path().file_name().unwrap_or_default()));
+                            });
+
                             ui.separator();
-                            
+
                             egui::ScrollArea::vertical()
                                 .stick_to_bottom(true)
                                 .auto_shrink([false, false])
                                 .show(ui, |ui| {
                                     ui.set_width(ui.available_width());
-                                    if let Ok(logs) = self.log_messages.lock() {
-                                        for msg in logs.iter() {
-                                            ui.label(msg);
+
+                                    // Read and display debug log file
+                                    let log_path = crate::debug::get_log_path();
+                                    match std::fs::read_to_string(&log_path) {
+                                        Ok(contents) => {
+                                            ui.add(
+                                                egui::TextEdit::multiline(&mut contents.as_str())
+                                                    .font(egui::TextStyle::Monospace)
+                                                    .desired_width(f32::INFINITY)
+                                                    .interactive(false)
+                                            );
+                                        }
+                                        Err(e) => {
+                                            ui.label(format!("Failed to read log file: {}", e));
                                         }
                                     }
                                 });
