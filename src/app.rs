@@ -1,5 +1,5 @@
 use crate::config::{
-    setup_theme, ASSET_EXTENSION, REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL, DEFAULT_REPO_INDEX,
+    setup_theme, REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL, DEFAULT_REPO_INDEX,
 };
 use crate::burn::{burn_image, BurnProgress};
 use crate::copy::{copy_directory_with_progress, CopyProgress};
@@ -400,8 +400,8 @@ impl InstallerApp {
             let asset = match find_release_asset(&release) {
                 Some(a) => a,
                 None => {
-                    log(&format!("Error: No {} file found in release", ASSET_EXTENSION));
-                    crate::debug::log(&format!("ERROR: No {} asset found in release", ASSET_EXTENSION));
+                    log("Error: No compatible file found in release (.7z, .zip, .img.gz, .img)");
+                    crate::debug::log("ERROR: No supported asset found in release");
                     let _ = state_tx_clone.send(AppState::Error);
                     let _ = drive_poll_tx_clone.send(true);
                     return;

@@ -60,8 +60,11 @@ pub const REPO_OPTIONS: &[(&str, &str)] = &[
 /// Index of the default repository selection (0 = first option)
 pub const DEFAULT_REPO_INDEX: usize = 0;
 
-/// File extension to look for in GitHub releases (e.g., ".7z", ".zip")
-/// The installer will download the first asset matching this extension
+/// DEPRECATED: File extension is now auto-detected from supported formats
+/// The installer automatically detects and downloads the first asset matching:
+/// - Archive mode: .7z, .zip (formats, extracts, and copies files)
+/// - Image mode: .img.gz, .img.xz, .img (burns raw image to device)
+/// This constant is kept for backward compatibility but is no longer used
 pub const ASSET_EXTENSION: &str = ".7z";
 
 // ----------------------------------------------------------------------------
