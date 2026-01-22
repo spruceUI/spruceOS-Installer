@@ -611,14 +611,14 @@ impl InstallerApp {
             };
 
             // Create a log file on the SD card for debugging (only for archive mode)
-            let write_card_log = if let Some(ref dest_path) = dest_path {
-                let log_file_path = dest_path.join("install_log.txt");
-                move |msg: &str| {
+            let log_file_path = dest_path.as_ref().map(|p| p.join("install_log.txt"));
+            let write_card_log = move |msg: &str| {
+                if let Some(ref path) = log_file_path {
                     use std::io::Write;
                     if let Ok(mut file) = std::fs::OpenOptions::new()
                         .create(true)
                         .append(true)
-                        .open(&log_file_path)
+                        .open(path)
                     {
                         let timestamp = std::time::SystemTime::now()
                             .duration_since(std::time::UNIX_EPOCH)
@@ -627,8 +627,6 @@ impl InstallerApp {
                         let _ = writeln!(file, "[{}] {}", timestamp, msg);
                     }
                 }
-            } else {
-                |_msg: &str| {} // No-op for image mode
             };
 
             if !is_raw_image {
@@ -805,7 +803,7 @@ impl InstallerApp {
                 crate::debug::log("Image extraction complete");
 
                 // Find the extracted .img file
-                let img_file = tokio::task::spawn_blocking({
+                let img_file_result = tokio::task::spawn_blocking({
                     let temp_extract_dir = temp_extract_dir.clone();
                     move || -> Result<PathBuf, String> {
                         let entries = std::fs::read_dir(&temp_extract_dir)
@@ -821,8 +819,29 @@ impl InstallerApp {
                         }
                         Err("No .img file found in extracted archive".to_string())
                     }
-                }).await
-                .map_err(|e| format!("Failed to find image file: {}", e))??;
+                }).await;
+
+                let img_file = match img_file_result {
+                    Ok(Ok(path)) => path,
+                    Ok(Err(e)) => {
+                        log(&format!("Error: {}", e));
+                        crate::debug::log(&format!("ERROR finding image: {}", e));
+                        let _ = std::fs::remove_dir_all(&temp_extract_dir);
+                        let _ = tokio::fs::remove_file(&download_path).await;
+                        let _ = state_tx_clone.send(AppState::Error);
+                        let _ = drive_poll_tx_clone.send(true);
+                        return;
+                    }
+                    Err(e) => {
+                        log(&format!("Error: Failed to search for image file"));
+                        crate::debug::log(&format!("ERROR: Task failed: {}", e));
+                        let _ = std::fs::remove_dir_all(&temp_extract_dir);
+                        let _ = tokio::fs::remove_file(&download_path).await;
+                        let _ = state_tx_clone.send(AppState::Error);
+                        let _ = drive_poll_tx_clone.send(true);
+                        return;
+                    }
+                };
 
                 crate::debug::log(&format!("Found image file: {:?}", img_file));
                 log(&format!("Found image: {}", img_file.file_name().unwrap_or_default().to_string_lossy()));
@@ -1068,12 +1087,14 @@ impl InstallerApp {
                 }
             });
 
+            let dest_path_unwrapped = dest_path.as_ref().expect("dest_path should be Some in archive mode");
+
             write_card_log(&format!(
                 "Copying files: {:?} -> {:?}",
-                temp_extract_dir, dest_path
+                temp_extract_dir, dest_path_unwrapped
             ));
 
-            if let Err(e) = copy_directory_with_progress(&temp_extract_dir, &dest_path, copy_tx, cancel_token_clone.clone()).await {
+            if let Err(e) = copy_directory_with_progress(&temp_extract_dir, dest_path_unwrapped, copy_tx, cancel_token_clone.clone()).await {
                 if e.contains("cancelled") {
                     write_card_log("Copy cancelled");
                     log("Copy cancelled");

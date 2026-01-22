@@ -271,7 +271,7 @@ async fn burn_image_windows(
     }
 
     crate::debug::log("Device unlocked and closed");
-    result
+    Ok(())
 }
 
 // =============================================================================
@@ -545,6 +545,7 @@ async fn verify_image(
         let cancel_token = cancel_token.clone();
 
         move || -> Result<String, String> {
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             use std::io::Read;
 
             #[cfg(target_os = "windows")]
