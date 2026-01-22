@@ -17,6 +17,7 @@
 // ============================================================================
 
 use eframe::egui;
+use std::sync::Arc;
 
 // ----------------------------------------------------------------------------
 // BRANDING
@@ -133,7 +134,7 @@ pub fn load_custom_fonts(ctx: &egui::Context) {
     // Load the custom font data
     fonts.font_data.insert(
         CUSTOM_FONT_NAME.to_owned(),
-        egui::FontData::from_static(CUSTOM_FONT),
+        Arc::new(egui::FontData::from_static(CUSTOM_FONT)),
     );
 
     // Set it as the first priority for proportional text (default UI text)
