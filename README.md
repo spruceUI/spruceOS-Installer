@@ -155,19 +155,107 @@ To fully rebrand the installer, also update:
 
 ## Recommended Workflow for Developers
 
+### Quick Start (Minimal Customization)
+
 1. Fork or clone the repository.
 2. Create a **new branch** for your customizations (or use an existing branch).
-3. **Quick customization** (minimal changes):
-   - Update `APP_NAME`, `VOLUME_LABEL`, and `REPO_OPTIONS` in `src/config.rs`
-   - Replace `assets/Icons/icon.png` and `icon.ico` with your branding
-   - Update `Cargo.toml` and `assets/Mac/Info.plist` with your project info
-4. **Full theme customization** (optional):
-   - Edit the `get_theme_config()` method in `src/app.rs` (line ~136)
-   - Adjust color overrides (RGBA format) to match your brand
-   - Search for `Color32::from_rgb` in `app.rs` to customize hardcoded UI colors (Install/Cancel buttons, success messages)
-5. Push your branch to GitHub.
+3. Update `APP_NAME`, `VOLUME_LABEL`, and `REPO_OPTIONS` in `src/config.rs`
+4. Replace `assets/Icons/icon.png` and `icon.ico` with your branding
+5. Update `Cargo.toml` and `assets/Mac/Info.plist` with your project info
+6. Push your branch to GitHub.
 
 > GitHub Actions will automatically build Windows, Linux (x64 + ARM64), and macOS (ARM64 + x64) binaries — **no local build setup required**.
+
+---
+
+### Full Theme Customization (Using the Live Theme Editor)
+
+The installer includes a **built-in theme editor** that lets you customize colors visually and export the theme config directly. This is much faster than manually editing RGBA values in code.
+
+#### Step 1: Build and Run the Installer
+
+First, build the installer locally so you can use the theme editor:
+
+```bash
+# Install Rust if you haven't already
+# https://rustup.rs/
+
+# Clone and build
+git clone https://github.com/spruceUI/spruceOS-Installer.git
+cd spruceOS-Installer
+cargo run
+```
+
+#### Step 2: Open the Theme Editor
+
+With the installer running, press **Ctrl+T** to open the theme editor panel. This will open on the right side of the window.
+
+#### Step 3: Customize Colors Visually
+
+The theme editor provides:
+- **Color pickers** for all theme elements (text, backgrounds, borders, buttons, etc.)
+- **Live preview** — changes apply immediately to the UI
+- **RGBA sliders** for precise color control
+- **Preset themes** you can use as starting points
+
+Adjust the colors until you're happy with how the installer looks with your branding.
+
+#### Step 4: Export the Theme Config
+
+At the bottom of the theme editor panel, there's a **"Copy Theme Config"** button (or similar export option). Click it to copy the complete `ThemeConfig` struct to your clipboard.
+
+The copied output will look like this:
+
+```rust
+ThemeConfig {
+    name: "YourTheme".to_string(),
+    dark_mode: true,
+    override_text_color: Some([251, 241, 199, 255]),
+    override_weak_text_color: Some([124, 111, 100, 255]),
+    // ... all other color overrides
+}
+```
+
+#### Step 5: Paste into Your Code
+
+1. Open `src/app.rs` and find the `get_theme_config()` method (around line 136)
+2. Replace the entire `ThemeConfig { ... }` block with your copied config
+3. Update the `name` field to match your project name
+4. Save the file
+
+#### Step 6: Customize Hardcoded UI Colors (Optional)
+
+Some UI elements use hardcoded colors outside the theme system. Search for `Color32::from_rgb` in `app.rs` to find and update:
+
+- **Line ~1036, 1097**: Success message green `(104, 157, 106)`
+- **Line ~1397**: Install button green `(104, 157, 106)`
+- **Line ~1417**: Cancel button red `(251, 73, 52)`
+
+Replace the RGB values to match your brand colors.
+
+#### Step 7: Test and Push
+
+```bash
+# Test your changes
+cargo run
+
+# Commit and push to your branch
+git add src/app.rs
+git commit -m "Update theme colors for [YourProject]"
+git push
+```
+
+GitHub Actions will automatically build your customized installer for all platforms.
+
+---
+
+### Tips for Theme Customization
+
+- **Start with a preset**: The theme editor includes several presets (Gruvbox, Solarized, etc.). Pick one close to your brand and adjust from there.
+- **Test readability**: Make sure text is readable against backgrounds, especially for secondary text colors.
+- **Match your brand**: Use your project's official brand colors for accents, buttons, and highlights.
+- **Check all states**: Interact with buttons, dropdowns, and inputs to see hover/active/inactive states.
+- **Dark mode only**: The installer currently only supports dark themes. Light theme support is not implemented.
 
 ---
 
