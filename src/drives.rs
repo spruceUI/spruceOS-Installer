@@ -308,7 +308,6 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
 
     // Enhanced detection
     let proto_lower = protocol.to_lowercase();
-    let mt_lower = media_type.to_lowercase();
     let loc_lower = device_location.to_lowercase();
 
     // Skip disk images (DMGs)

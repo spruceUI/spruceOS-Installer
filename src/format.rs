@@ -23,6 +23,7 @@ pub enum FormatProgress {
     Progress { percent: u8 },
     Completed,
     Cancelled,
+    #[allow(dead_code)]
     Error(String),
 }
 
@@ -516,7 +517,7 @@ pub async fn format_drive_fat32(
     progress_tx: mpsc::UnboundedSender<FormatProgress>,
     cancel_token: CancellationToken,
 ) -> Result<(), String> {
-    use tokio::time::{timeout, Duration, interval};
+    use tokio::time::{timeout, Duration};
 
     crate::debug::log_section("macOS Format Operation");
     crate::debug::log(&format!("Device path: {}", device_path));

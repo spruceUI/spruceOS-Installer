@@ -6,7 +6,7 @@ use crate::drives::{get_removable_drives, DriveInfo};
 use crate::eject::eject_drive;
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
-use crate::github::{download_asset, find_release_asset, get_latest_release, DownloadProgress, Release};
+use crate::github::{download_asset, find_release_asset, get_latest_release, DownloadProgress};
 use eframe::egui;
 use egui_thematic::{ThemeConfig, ThemeEditorState, render_theme_panel};
 use std::path::PathBuf;

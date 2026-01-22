@@ -6,11 +6,16 @@ use tokio::sync::mpsc;
 
 use crate::format::FormatProgress;
 
+#[cfg(windows)]
 const SECTOR_SIZE: u32 = 512;
+#[cfg(windows)]
 const RESERVED_SECTORS: u16 = 32;
+#[cfg(windows)]
 const NUM_FATS: u8 = 2;
+#[cfg(windows)]
 const PARTITION_START_SECTOR: u64 = 2048; // Standard 1MB alignment
 
+#[cfg(windows)]
 #[derive(Debug)]
 struct Fat32Params {
     sectors_per_cluster: u8,
@@ -19,6 +24,7 @@ struct Fat32Params {
     root_cluster: u32,
 }
 
+#[cfg(windows)]
 fn calculate_params(total_bytes: u64) -> Fat32Params {
     let total_sectors = total_bytes / SECTOR_SIZE as u64;
 
@@ -52,6 +58,7 @@ fn calculate_params(total_bytes: u64) -> Fat32Params {
     }
 }
 
+#[cfg(windows)]
 fn create_boot_sector(params: &Fat32Params, volume_label: &str) -> [u8; 512] {
     let mut boot = [0u8; 512];
 

@@ -9,6 +9,7 @@ pub enum CopyProgress {
     Progress { copied_bytes: u64, total_bytes: u64, current_file: String },
     Completed,
     Cancelled,
+    #[allow(dead_code)]
     Error(String),
 }
 
