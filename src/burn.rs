@@ -215,14 +215,15 @@ async fn burn_image_windows(
                 .collect();
 
             // Open the physical drive for writing
+            // Must use FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH for physical drives
             let handle = unsafe {
                 CreateFileW(
                     windows::core::PCWSTR(device_path_wide.as_ptr()),
-                    FILE_GENERIC_WRITE.0,
+                    FILE_GENERIC_WRITE.0 | FILE_GENERIC_READ.0,
                     FILE_SHARE_READ | FILE_SHARE_WRITE,
                     None,
                     OPEN_EXISTING,
-                    FILE_ATTRIBUTE_NORMAL,
+                    FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH,
                     None,
                 )
             };
@@ -274,6 +275,8 @@ async fn burn_image_windows(
                 Box::new(file)
             };
 
+            // For FILE_FLAG_NO_BUFFERING, all writes must be sector-aligned (typically 512 bytes)
+            const SECTOR_SIZE: usize = 512;
             let mut buffer = vec![0u8; CHUNK_SIZE];
             let mut total_written = 0u64;
 
@@ -306,22 +309,42 @@ async fn burn_image_windows(
                     break; // EOF
                 }
 
+                // For NO_BUFFERING, writes must be sector-aligned
+                // Pad the last chunk if necessary
+                let aligned_size = if bytes_read % SECTOR_SIZE != 0 {
+                    let padded = ((bytes_read / SECTOR_SIZE) + 1) * SECTOR_SIZE;
+                    // Zero out the padding bytes
+                    for i in bytes_read..padded.min(buffer.len()) {
+                        buffer[i] = 0;
+                    }
+                    padded
+                } else {
+                    bytes_read
+                };
+
                 let mut bytes_written = 0u32;
                 unsafe {
                     let write_result = WriteFile(
                         handle,
-                        Some(&buffer[..bytes_read]),
+                        Some(&buffer[..aligned_size]),
                         Some(&mut bytes_written),
                         None,
                     );
 
-                    if write_result.is_err() || bytes_written as usize != bytes_read {
+                    if write_result.is_err() {
+                        let err = windows::core::Error::from_win32();
                         let _ = CloseHandle(handle);
-                        return Err(format!("Failed to write to device at offset {}", total_written));
+                        return Err(format!("Failed to write to device at offset {}: {:?}", total_written, err));
+                    }
+
+                    if bytes_written as usize != aligned_size {
+                        let _ = CloseHandle(handle);
+                        return Err(format!("Incomplete write at offset {}: wrote {} of {} bytes",
+                            total_written, bytes_written, aligned_size));
                     }
                 }
 
-                total_written += bytes_written as u64;
+                total_written += bytes_read as u64;  // Track actual data written, not padding
                 let _ = progress_tx.send(BurnProgress::Writing {
                     written: total_written,
                     total: image_size,
