@@ -101,21 +101,78 @@ async fn unmount_device(device_path: &str) -> Result<(), String> {
 async fn unmount_device_windows(device_path: &str) -> Result<(), String> {
     use windows::Win32::Storage::FileSystem::*;
     use windows::Win32::Foundation::*;
-    use std::os::windows::ffi::OsStrExt;
+    use windows::Win32::System::Ioctl::*;
+    use windows::Win32::System::IO::DeviceIoControl;
 
-    // Extract drive letter if provided (e.g., "E:" from device path)
-    // For image burning, we might get the drive letter
-    if device_path.len() == 2 && device_path.chars().nth(1) == Some(':') {
-        let root_path: Vec<u16> = format!("{}\\", device_path)
-            .encode_utf16()
-            .chain(Some(0))
-            .collect();
+    // For physical drives (\\.\PhysicalDriveN), we need to find and unmount all volumes
+    if device_path.starts_with("\\\\.\\PhysicalDrive") {
+        crate::debug::log(&format!("Attempting to lock/dismount volumes on {}", device_path));
 
+        // We'll enumerate all drive letters and try to lock each one that might be on this physical drive
+        // This is a simple approach - just try to dismount all removable drives
         unsafe {
-            if !DeleteVolumeMountPointW(windows::core::PCWSTR(root_path.as_ptr())).is_ok() {
-                crate::debug::log(&format!("Warning: Could not unmount {}", device_path));
-            } else {
-                crate::debug::log(&format!("Unmounted {}", device_path));
+            let drive_bits = GetLogicalDrives();
+            for i in 0..26u8 {
+                if (drive_bits >> i) & 1 == 1 {
+                    let letter = (b'A' + i) as char;
+                    let root_path: Vec<u16> = format!("{}:\\", letter)
+                        .encode_utf16()
+                        .chain(Some(0))
+                        .collect();
+
+                    // Check if it's removable
+                    let drive_type = GetDriveTypeW(windows::core::PCWSTR(root_path.as_ptr()));
+                    if drive_type == 2 { // DRIVE_REMOVABLE
+                        let volume_path: Vec<u16> = format!("\\\\.\\{}:", letter)
+                            .encode_utf16()
+                            .chain(Some(0))
+                            .collect();
+
+                        let handle = CreateFileW(
+                            windows::core::PCWSTR(volume_path.as_ptr()),
+                            FILE_GENERIC_READ.0 | FILE_GENERIC_WRITE.0,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE,
+                            None,
+                            OPEN_EXISTING,
+                            Default::default(),
+                            None,
+                        );
+
+                        if let Ok(handle) = handle {
+                            let mut bytes_returned: u32 = 0;
+
+                            // Try to lock the volume
+                            let _ = DeviceIoControl(
+                                handle,
+                                FSCTL_LOCK_VOLUME,
+                                None,
+                                0,
+                                None,
+                                0,
+                                Some(&mut bytes_returned),
+                                None,
+                            );
+
+                            // Try to dismount
+                            let dismount_result = DeviceIoControl(
+                                handle,
+                                FSCTL_DISMOUNT_VOLUME,
+                                None,
+                                0,
+                                None,
+                                0,
+                                Some(&mut bytes_returned),
+                                None,
+                            );
+
+                            if dismount_result.is_ok() {
+                                crate::debug::log(&format!("Dismounted {}:", letter));
+                            }
+
+                            let _ = CloseHandle(handle);
+                        }
+                    }
+                }
             }
         }
     }
@@ -135,21 +192,13 @@ async fn burn_image_windows(
 ) -> Result<(), String> {
     use std::os::windows::ffi::OsStrExt;
 
-    // Convert device path to physical drive format if needed
-    let physical_drive_path = if device_path.starts_with("\\\\.\\PhysicalDrive") {
-        device_path.to_string()
-    } else {
-        // For now, assume it's already in the correct format
-        // TODO: Map drive letter to physical drive number
-        device_path.to_string()
-    };
-
-    crate::debug::log(&format!("Opening physical drive: {}", physical_drive_path));
+    // Device path should already be in \\.\PhysicalDriveN format from drives.rs
+    crate::debug::log(&format!("Opening physical drive: {}", device_path));
 
     // Move ALL Windows API operations into spawn_blocking since HANDLE is !Send
     let result = tokio::task::spawn_blocking({
         let image_path = image_path.to_path_buf();
-        let device_path = physical_drive_path.clone();
+        let device_path = device_path.to_string();
         let progress_tx = progress_tx.clone();
         let cancel_token = cancel_token.clone();
 
