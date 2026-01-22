@@ -267,6 +267,24 @@ impl InstallerApp {
         crate::debug::log(&format!("Mount path: {:?}", drive.mount_path));
         crate::debug::log(&format!("Repository: {} ({})", repo_name, repo_url));
 
+        // Check if running as root on Linux
+        #[cfg(target_os = "linux")]
+        {
+            if unsafe { libc::geteuid() } == 0 {
+                crate::debug::log("WARNING: Running as root user");
+                if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+                    crate::debug::log(&format!("Detected sudo execution by user: {}", sudo_user));
+                    self.log("Note: Running with sudo/root privileges");
+                } else if let Ok(pkexec_uid) = std::env::var("PKEXEC_UID") {
+                    crate::debug::log(&format!("Detected pkexec execution by UID: {}", pkexec_uid));
+                    self.log("Note: Running with elevated privileges (pkexec)");
+                } else {
+                    crate::debug::log("Running as actual root user (not via sudo/pkexec)");
+                    self.log("Note: Running as root user");
+                }
+            }
+        }
+
         let repo_url = repo_url.to_string();
         let progress = self.progress.clone();
         let log_messages = self.log_messages.clone();
@@ -346,10 +364,65 @@ impl InstallerApp {
             // Define temp/cache directory for later use
             // On Linux/macOS, use cache dir to avoid temp space issues
             // Linux: ~/.cache, macOS: ~/Library/Caches
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            #[cfg(target_os = "linux")]
+            let temp_dir = {
+                // If running as root via sudo or pkexec, try to use the actual user's cache directory
+                if unsafe { libc::geteuid() } == 0 {
+                    // First check for SUDO_USER (command-line sudo)
+                    if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+                        let user_home = std::path::PathBuf::from(format!("/home/{}", sudo_user));
+                        if user_home.exists() {
+                            let user_cache = user_home.join(".cache");
+                            crate::debug::log(&format!("Using cache dir for sudo user {}: {:?}", sudo_user, user_cache));
+                            user_cache
+                        } else {
+                            crate::debug::log(&format!("User home not found at {:?}, using default", user_home));
+                            dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                        }
+                    }
+                    // Check for PKEXEC_UID (GUI elevation via pkexec)
+                    else if let Ok(pkexec_uid) = std::env::var("PKEXEC_UID") {
+                        if let Ok(uid) = pkexec_uid.parse::<u32>() {
+                            // Get username from UID using libc
+                            let pwd = unsafe { libc::getpwuid(uid) };
+                            if !pwd.is_null() {
+                                let username = unsafe {
+                                    std::ffi::CStr::from_ptr((*pwd).pw_name)
+                                        .to_string_lossy()
+                                        .to_string()
+                                };
+                                let user_home = std::path::PathBuf::from(format!("/home/{}", username));
+                                if user_home.exists() {
+                                    let user_cache = user_home.join(".cache");
+                                    crate::debug::log(&format!("Using cache dir for pkexec user {} (UID {}): {:?}", username, uid, user_cache));
+                                    user_cache
+                                } else {
+                                    crate::debug::log(&format!("User home not found at {:?}, using default", user_home));
+                                    dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                                }
+                            } else {
+                                crate::debug::log(&format!("Failed to get username for UID {}, using default", uid));
+                                dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                            }
+                        } else {
+                            crate::debug::log(&format!("Failed to parse PKEXEC_UID '{}', using default", pkexec_uid));
+                            dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                        }
+                    }
+                    else {
+                        crate::debug::log("Running as root, using root's cache dir");
+                        dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                    }
+                } else {
+                    dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                }
+            };
+            #[cfg(target_os = "macos")]
             let temp_dir = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
             #[cfg(not(any(target_os = "linux", target_os = "macos")))]
             let temp_dir = std::env::temp_dir();
+
+            crate::debug::log(&format!("Cache/temp directory: {:?}", temp_dir));
 
             // Step 2: Format drive (do this first so we fail fast if the card has issues)
             let _ = state_tx_clone.send(AppState::Formatting);
@@ -514,11 +587,15 @@ impl InstallerApp {
             if let Err(e) = download_asset(&asset_clone, &download_path_clone, dl_tx, cancel_token_clone.clone()).await {
                 if e.contains("cancelled") {
                     log("Download cancelled");
+                    let _ = tokio::fs::remove_file(&download_path_clone).await;
+                    crate::debug::log("Cleaned up partial download file");
                     let _ = state_tx_clone.send(AppState::Idle);
                     let _ = drive_poll_tx_clone.send(true);
                     return;
                 }
                 log(&format!("Download error: {}", e));
+                let _ = tokio::fs::remove_file(&download_path_clone).await;
+                crate::debug::log("Cleaned up partial download file");
                 let _ = state_tx_clone.send(AppState::Error);
                 let _ = drive_poll_tx_clone.send(true);
                 return;
@@ -530,8 +607,11 @@ impl InstallerApp {
             write_card_log("Download complete, starting extraction...");
 
             // Step 4: Extract to temp folder on local PC
-            // On Linux/macOS, use cache dir to avoid temp space issues
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            // On Linux, use the same temp_dir we already determined
+            // On macOS, give cache_dir() another try (original behavior)
+            #[cfg(target_os = "linux")]
+            let extract_base_dir = temp_dir.clone();
+            #[cfg(target_os = "macos")]
             let extract_base_dir = dirs::cache_dir().unwrap_or_else(|| temp_dir.clone());
             #[cfg(not(any(target_os = "linux", target_os = "macos")))]
             let extract_base_dir = temp_dir.clone();
@@ -601,6 +681,8 @@ impl InstallerApp {
                     write_card_log("Extraction cancelled");
                     log("Extraction cancelled");
                     let _ = std::fs::remove_dir_all(&temp_extract_dir);
+                    let _ = tokio::fs::remove_file(&download_path).await;
+                    crate::debug::log("Cleaned up download file after cancellation");
                     let _ = state_tx_clone.send(AppState::Idle);
                     let _ = drive_poll_tx_clone.send(true);
                     return;
@@ -608,6 +690,8 @@ impl InstallerApp {
                 write_card_log(&format!("Extract error: {}", e));
                 log(&format!("Extract error: {}", e));
                 let _ = std::fs::remove_dir_all(&temp_extract_dir);
+                let _ = tokio::fs::remove_file(&download_path).await;
+                crate::debug::log("Cleaned up download file after error");
                 let _ = state_tx_clone.send(AppState::Error);
                 let _ = drive_poll_tx_clone.send(true);
                 return;
@@ -687,6 +771,8 @@ impl InstallerApp {
                     write_card_log("Copy cancelled");
                     log("Copy cancelled");
                     let _ = std::fs::remove_dir_all(&temp_extract_dir);
+                    let _ = tokio::fs::remove_file(&download_path).await;
+                    crate::debug::log("Cleaned up download file after cancellation");
                     let _ = state_tx_clone.send(AppState::Idle);
                     let _ = drive_poll_tx_clone.send(true);
                     return;
@@ -694,6 +780,8 @@ impl InstallerApp {
                 write_card_log(&format!("Copy error: {}", e));
                 log(&format!("Copy error: {}", e));
                 let _ = std::fs::remove_dir_all(&temp_extract_dir);
+                let _ = tokio::fs::remove_file(&download_path).await;
+                crate::debug::log("Cleaned up download file after error");
                 let _ = state_tx_clone.send(AppState::Error);
                 let _ = drive_poll_tx_clone.send(true);
                 return;
@@ -1418,7 +1506,7 @@ impl eframe::App for InstallerApp {
                         if !is_busy {
                             ui.add_enabled_ui(!is_busy && self.selected_drive_idx.is_some() && !self.drives.is_empty(), |ui| {
                                 let button = egui::Button::new("Install")
-                                    .min_size(egui::vec2(107.0, 53.0))
+                                    .min_size(egui::vec2(96.0, 48.0))
                                     .fill(egui::Color32::from_rgb(104, 157, 106)); // Green
                                 if ui.add(button).clicked() {
                                     self.state = AppState::AwaitingConfirmation;
@@ -1438,7 +1526,7 @@ impl eframe::App for InstallerApp {
 
                         if can_cancel {
                             let button = egui::Button::new("Cancel")
-                                .min_size(egui::vec2(107.0, 53.0))
+                                .min_size(egui::vec2(96.0, 48.0))
                                 .fill(egui::Color32::from_rgb(251, 73, 52)); // Red
                             if ui.add(button).clicked() {
                                 self.cancel_installation();
