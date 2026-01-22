@@ -54,6 +54,7 @@ pub const REPO_OPTIONS: &[(&str, &str)] = &[
     ("Stable", "spruceUI/spruceOS"),
     ("Nightlies", "spruceUI/spruceOSNightlies"),
     ("SprigUI", "spruceUI/sprigUI"),
+    ("TwigUI", "spruceUI/twigUI"),
 ];
 
 /// Index of the default repository selection (0 = first option)
