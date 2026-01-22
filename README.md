@@ -73,46 +73,51 @@ Edit these constants:
 |-------|---------|---------|
 | `APP_NAME` | Display name of your OS (window title, UI) | `"SpruceOS"` |
 | `VOLUME_LABEL` | FAT32 SD card label (max 11 chars, uppercase) | `"SPRUCEOS"` |
-| `REPO_OPTIONS` | Array of repositories to fetch | `[("SpruceOS stable", "LoveRetro/SpruceOS")]` |
-| `DEFAULT_REPO_INDEX` | Index of the default repo selection | `0` |
+| `REPO_OPTIONS` | Array of repositories to fetch releases from | `[("Stable", "spruceUI/spruceOS"), ("Nightlies", "spruceUI/spruceOSNightlies")]` |
+| `DEFAULT_REPO_INDEX` | Index of the default repo selection (0 = first) | `0` |
 | `ASSET_EXTENSION` | File extension to download from releases | `".7z"` or `".zip"` |
+| `WINDOW_SIZE` | Default window size (width, height) | `(679.5, 420.0)` |
+| `WINDOW_MIN_SIZE` | Minimum window size (width, height) | `(679.5, 420.0)` |
 
-> **Notes:**  
+> **Notes:**
 > - `WINDOW_TITLE`, `USER_AGENT`, and `TEMP_PREFIX` are auto-generated from `APP_NAME`. You usually **do not need to change these**.
+> - The `setup_theme()` function in `config.rs` uses the Gruvbox Dark preset. This is a fallback; the actual theme is customized in `app.rs`.
 
 ---
 
-### 2. Theme Colors
+### 2. `src/app.rs` — Theme Colors & UI Customization
 
-Customize the installer’s look and feel via RGB colors in `config.rs`:
+The installer's visual theme is defined in the `get_theme_config()` method (around line 136 in `app.rs`). This method returns a `ThemeConfig` with color overrides in **RGBA format** `[R, G, B, A]` (values 0-255).
 
-| Constant | Usage |
-|----------|-------|
-| `COLOR_BG_DARK` | Main window background |
-| `COLOR_BG_MEDIUM` | Panels, input fields |
-| `COLOR_BG_LIGHT` | Buttons and interactive elements |
-| `COLOR_ACCENT` | Primary accents (headings, highlights, progress bars) |
-| `COLOR_ACCENT_DIM` | Hover states, selections |
-| `COLOR_TEXT` | Primary text |
-| `COLOR_TEXT_DIM` | Secondary labels/text |
-| `COLOR_SUCCESS` | Success messages |
-| `COLOR_ERROR` | Error messages |
-| `COLOR_WARNING` | Warning/destructive alerts |
+**Key color fields to customize:**
 
-The theme is applied automatically via `setup_theme(ctx)` in the internal theme setup.
+| Field | Purpose | SpruceOS Default (RGBA) |
+|-------|---------|------------------------|
+| `override_text_color` | Primary text color | `[251, 241, 199, 255]` (cream) |
+| `override_weak_text_color` | Secondary/dimmed text | `[124, 111, 100, 255]` (gray) |
+| `override_hyperlink_color` | Clickable links | `[131, 165, 152, 255]` (teal) |
+| `override_faint_bg_color` | Input fields, panels | `[48, 48, 48, 255]` (dark gray) |
+| `override_extreme_bg_color` | Window background | `[29, 32, 33, 255]` (near black) |
+| `override_warn_fg_color` | Warning messages | `[214, 93, 14, 255]` (orange) |
+| `override_error_fg_color` | Error messages | `[204, 36, 29, 255]` (red) |
+| `override_selection_bg` | Text selection, highlights | `[215, 180, 95, 255]` (gold) |
+| `override_widget_inactive_bg_fill` | Inactive buttons | `[215, 180, 95, 255]` (gold) |
+| `override_widget_inactive_fg_stroke_color` | Inactive button border | `[104, 157, 106, 255]` (green) |
+| `override_widget_hovered_bg_stroke_color` | Hovered button border | `[215, 180, 95, 255]` (gold) |
+| `override_widget_active_bg_stroke_color` | Active button border | `[215, 180, 95, 255]` (gold) |
+
+> **Note:** Set a field to `None` to use the default egui value. The theme config has many more fields for fine-grained control — see the full list in the `ThemeConfig` struct.
+
+**Hardcoded UI colors** (also in `app.rs`):
+- Line ~1036, 1097: Success message color `Color32::from_rgb(104, 157, 106)` (green)
+- Line ~1397: Install button fill `Color32::from_rgb(104, 157, 106)` (green)
+- Line ~1417: Cancel button fill `Color32::from_rgb(251, 73, 52)` (red)
+
+To change these, search for `Color32::from_rgb` in `app.rs` and update the RGB values.
 
 ---
 
-### 3. Window Settings
-
-| Constant | Purpose |
-|----------|---------|
-| `WINDOW_SIZE` | Default window size `(width, height)` |
-| `WINDOW_MIN_SIZE` | Minimum window size `(width, height)` |
-
----
-
-### 4. Icons
+### 3. Icons
 
 Customize the application icon:
 
@@ -121,16 +126,14 @@ Customize the application icon:
 | PNG | `assets/Icons/icon.png` | Window, title bar (all platforms) |
 | ICO | `assets/Icons/icon.ico` | Windows Explorer, taskbar |
 
-> Notes:  
-> - PNG: Recommended 64x64 or 128x128 with transparency  
-> - ICO: Multi-resolution preferred (16x16, 32x32, 48x48, 256x256)  
-> - Update `APP_ICON_PNG` path if needed  
-
-> **Important:** Once your branch is pushed, GitHub Actions will automatically build your branch — no manual compilation is required.
+> Notes:
+> - PNG: Recommended 64x64 or 128x128 with transparency
+> - ICO: Multi-resolution preferred (16x16, 32x32, 48x48, 256x256)
+> - The icon is loaded via `APP_ICON_PNG` in `config.rs` (requires the `icon` feature enabled)
 
 ---
 
-### 5. External Files to Update
+### 4. External Files to Update
 
 To fully rebrand the installer, also update:
 
@@ -142,22 +145,29 @@ To fully rebrand the installer, also update:
 
 ## Advanced Notes
 
-- **Internal Identifiers** (`WINDOW_TITLE`, `USER_AGENT`, `TEMP_PREFIX`) are auto-generated; modifying them is optional.  
-- `setup_theme(ctx)` configures `egui` visuals for all widgets and windows. Editing it is **only recommended for advanced developers**.  
-- `REPO_OPTIONS` can include multiple repos for stable, nightlies, or forks.  
+- **Internal Identifiers** (`WINDOW_TITLE`, `USER_AGENT`, `TEMP_PREFIX`) are auto-generated from `APP_NAME`; modifying them is optional.
+- `setup_theme(ctx)` in `config.rs` is a fallback that applies the Gruvbox Dark preset. The actual theme used by the installer is defined in `app.rs` via `get_theme_config()`.
+- `REPO_OPTIONS` can include multiple repos (e.g., stable, nightlies, forks). The user can select between them via a dropdown in the UI.
+- The installer uses `egui` and `egui_thematic` for the UI. The theme can be edited live using the built-in theme editor (press Ctrl+T in the app).
+- All color values in `ThemeConfig` use RGBA format `[R, G, B, A]` where each value is 0-255.
 
 ---
 
 ## Recommended Workflow for Developers
 
-1. Fork or clone the repository.  
-2. Create a **new branch** for your customizations.  
-3. Update `APP_NAME`, `VOLUME_LABEL`, and `REPO_OPTIONS`.  
-4. Adjust theme colors if desired.  
-5. Replace icons and update `Info.plist` / `Cargo.toml`.  
-6. Push your branch to GitHub.  
+1. Fork or clone the repository.
+2. Create a **new branch** for your customizations (or use an existing branch).
+3. **Quick customization** (minimal changes):
+   - Update `APP_NAME`, `VOLUME_LABEL`, and `REPO_OPTIONS` in `src/config.rs`
+   - Replace `assets/Icons/icon.png` and `icon.ico` with your branding
+   - Update `Cargo.toml` and `assets/Mac/Info.plist` with your project info
+4. **Full theme customization** (optional):
+   - Edit the `get_theme_config()` method in `src/app.rs` (line ~136)
+   - Adjust color overrides (RGBA format) to match your brand
+   - Search for `Color32::from_rgb` in `app.rs` to customize hardcoded UI colors (Install/Cancel buttons, success messages)
+5. Push your branch to GitHub.
 
-> GitHub Actions will automatically build your branch and generate artifacts — **no local build setup required**.
+> GitHub Actions will automatically build Windows, Linux (x64 + ARM64), and macOS (ARM64 + x64) binaries — **no local build setup required**.
 
 ---
 
