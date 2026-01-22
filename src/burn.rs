@@ -611,7 +611,7 @@ async fn verify_image(
 ) -> Result<(), String> {
     crate::debug::log("Computing image hash...");
 
-    // Compute hash of original image
+    // Compute hash of original image (decompress if .gz)
     let image_hash = tokio::task::spawn_blocking({
         let image_path = image_path.to_path_buf();
         let cancel_token = cancel_token.clone();
@@ -619,8 +619,21 @@ async fn verify_image(
         move || -> Result<String, String> {
             use std::io::Read;
 
-            let mut image_file = std::fs::File::open(&image_path)
+            // Check if file is gzipped and create appropriate reader
+            let is_gzipped = image_path.extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.eq_ignore_ascii_case("gz"))
+                .unwrap_or(false);
+
+            let file = std::fs::File::open(&image_path)
                 .map_err(|e| format!("Failed to open image for verification: {}", e))?;
+
+            let mut image_reader: Box<dyn Read> = if is_gzipped {
+                crate::debug::log("Decompressing .gz file for hash verification");
+                Box::new(GzDecoder::new(file))
+            } else {
+                Box::new(file)
+            };
 
             let mut hasher = Sha256::new();
             let mut buffer = vec![0u8; CHUNK_SIZE];
@@ -630,7 +643,7 @@ async fn verify_image(
                     return Err("Verification cancelled".to_string());
                 }
 
-                let bytes_read = image_file.read(&mut buffer)
+                let bytes_read = image_reader.read(&mut buffer)
                     .map_err(|e| format!("Failed to read image: {}", e))?;
 
                 if bytes_read == 0 {
