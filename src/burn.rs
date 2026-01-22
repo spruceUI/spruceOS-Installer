@@ -131,14 +131,9 @@ async fn burn_image_windows(
     progress_tx: &UnboundedSender<BurnProgress>,
     cancel_token: &CancellationToken,
 ) -> Result<(), String> {
-    use windows::Win32::Foundation::*;
-    use windows::Win32::Storage::FileSystem::*;
-    use windows::Win32::System::IO::*;
-    use windows::Win32::System::Ioctl::*;
     use std::os::windows::ffi::OsStrExt;
 
     // Convert device path to physical drive format if needed
-    // If given "E:", convert to "\\.\PhysicalDrive#"
     let physical_drive_path = if device_path.starts_with("\\\\.\\PhysicalDrive") {
         device_path.to_string()
     } else {
@@ -149,63 +144,71 @@ async fn burn_image_windows(
 
     crate::debug::log(&format!("Opening physical drive: {}", physical_drive_path));
 
-    let device_path_wide: Vec<u16> = physical_drive_path
-        .encode_utf16()
-        .chain(Some(0))
-        .collect();
-
-    // Open the physical drive for writing
-    let handle = unsafe {
-        CreateFileW(
-            windows::core::PCWSTR(device_path_wide.as_ptr()),
-            FILE_GENERIC_WRITE.0,
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
-            None,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL,
-            None,
-        )
-    };
-
-    if handle.is_err() {
-        return Err(format!("Failed to open device for writing: {:?}", handle));
-    }
-
-    let handle = handle.unwrap();
-
-    // Lock the volume
-    let mut bytes_returned: u32 = 0;
-    unsafe {
-        let lock_result = DeviceIoControl(
-            handle,
-            FSCTL_LOCK_VOLUME,
-            None,
-            0,
-            None,
-            0,
-            Some(&mut bytes_returned),
-            None,
-        );
-
-        if lock_result.is_err() {
-            let _ = CloseHandle(handle);
-            return Err("Failed to lock volume for exclusive access".to_string());
-        }
-    }
-
-    crate::debug::log("Volume locked, beginning write...");
-
-    // Read image and write to device
+    // Move ALL Windows API operations into spawn_blocking since HANDLE is !Send
     let result = tokio::task::spawn_blocking({
         let image_path = image_path.to_path_buf();
+        let device_path = physical_drive_path.clone();
         let progress_tx = progress_tx.clone();
         let cancel_token = cancel_token.clone();
 
         move || -> Result<(), String> {
-            use std::io::{Read, Seek};
+            use windows::Win32::Foundation::*;
+            use windows::Win32::Storage::FileSystem::*;
+            use windows::Win32::System::IO::*;
+            use windows::Win32::System::Ioctl::*;
+            use std::io::Read;
+
+            let device_path_wide: Vec<u16> = device_path
+                .encode_utf16()
+                .chain(Some(0))
+                .collect();
+
+            // Open the physical drive for writing
+            let handle = unsafe {
+                CreateFileW(
+                    windows::core::PCWSTR(device_path_wide.as_ptr()),
+                    FILE_GENERIC_WRITE.0,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    None,
+                    OPEN_EXISTING,
+                    FILE_ATTRIBUTE_NORMAL,
+                    None,
+                )
+            };
+
+            if handle.is_err() {
+                return Err(format!("Failed to open device for writing: {:?}", handle));
+            }
+
+            let handle = handle.unwrap();
+
+            // Lock the volume
+            let mut bytes_returned: u32 = 0;
+            unsafe {
+                let lock_result = DeviceIoControl(
+                    handle,
+                    FSCTL_LOCK_VOLUME,
+                    None,
+                    0,
+                    None,
+                    0,
+                    Some(&mut bytes_returned),
+                    None,
+                );
+
+                if lock_result.is_err() {
+                    let _ = CloseHandle(handle);
+                    return Err("Failed to lock volume for exclusive access".to_string());
+                }
+            }
+
+            crate::debug::log("Volume locked, beginning write...");
 
             let mut image_file = std::fs::File::open(&image_path)
-                .map_err(|e| format!("Failed to open image file: {}", e))?;
+                .map_err(|e| {
+                    unsafe { let _ = CloseHandle(handle); }
+                    format!("Failed to open image file: {}", e)
+                })?;
 
             let mut buffer = vec![0u8; CHUNK_SIZE];
             let mut total_written = 0u64;
@@ -213,11 +216,27 @@ async fn burn_image_windows(
             loop {
                 if cancel_token.is_cancelled() {
                     crate::debug::log("Burn cancelled by user");
+                    unsafe {
+                        let _ = DeviceIoControl(
+                            handle,
+                            FSCTL_UNLOCK_VOLUME,
+                            None,
+                            0,
+                            None,
+                            0,
+                            Some(&mut bytes_returned),
+                            None,
+                        );
+                        let _ = CloseHandle(handle);
+                    }
                     return Err("Burn cancelled".to_string());
                 }
 
                 let bytes_read = image_file.read(&mut buffer)
-                    .map_err(|e| format!("Failed to read from image: {}", e))?;
+                    .map_err(|e| {
+                        unsafe { let _ = CloseHandle(handle); }
+                        format!("Failed to read from image: {}", e)
+                    })?;
 
                 if bytes_read == 0 {
                     break; // EOF
@@ -233,6 +252,7 @@ async fn burn_image_windows(
                     );
 
                     if write_result.is_err() || bytes_written as usize != bytes_read {
+                        let _ = CloseHandle(handle);
                         return Err(format!("Failed to write to device at offset {}", total_written));
                     }
                 }
@@ -250,27 +270,28 @@ async fn burn_image_windows(
             }
 
             crate::debug::log(&format!("Write complete: {} bytes written", total_written));
+
+            // Unlock and close
+            unsafe {
+                let _ = DeviceIoControl(
+                    handle,
+                    FSCTL_UNLOCK_VOLUME,
+                    None,
+                    0,
+                    None,
+                    0,
+                    Some(&mut bytes_returned),
+                    None,
+                );
+                let _ = CloseHandle(handle);
+            }
+
+            crate::debug::log("Device unlocked and closed");
             Ok(())
         }
     }).await
     .map_err(|e| format!("Write task failed: {}", e))??;
 
-    // Unlock and close
-    unsafe {
-        let _ = DeviceIoControl(
-            handle,
-            FSCTL_UNLOCK_VOLUME,
-            None,
-            0,
-            None,
-            0,
-            Some(&mut bytes_returned),
-            None,
-        );
-        let _ = CloseHandle(handle);
-    }
-
-    crate::debug::log("Device unlocked and closed");
     Ok(())
 }
 
@@ -382,7 +403,7 @@ async fn burn_image_linux(
     }).await
     .map_err(|e| format!("Write task failed: {}", e))??;
 
-    result
+    Ok(())
 }
 
 // =============================================================================
@@ -483,7 +504,7 @@ async fn burn_image_macos(
     }).await
     .map_err(|e| format!("Write task failed: {}", e))??;
 
-    result
+    Ok(())
 }
 
 // =============================================================================
