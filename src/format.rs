@@ -23,7 +23,6 @@ pub enum FormatProgress {
     Progress { percent: u8 },
     Completed,
     Cancelled,
-    #[allow(dead_code)]
     Error(String),
 }
 
@@ -617,11 +616,12 @@ pub async fn format_drive_fat32(
         
         // Channel to signal "success signature found" from background reader
         let (finish_tx, mut finish_rx) = mpsc::unbounded_channel();
-        
+
+        use tokio::io::{AsyncBufReadExt, BufReader};
+
         if let Some(stdout) = child_stdout {
             let finish_tx = finish_tx.clone();
             tokio::spawn(async move {
-                use tokio::io::{AsyncBufReadExt, BufReader};
                 let mut reader = BufReader::new(stdout).lines();
                 while let Ok(Some(line)) = reader.next_line().await {
                     crate::debug::log(&format!("diskutil: {}", line));
@@ -631,10 +631,9 @@ pub async fn format_drive_fat32(
                 }
             });
         }
-        
+
         if let Some(stderr) = child_stderr {
             tokio::spawn(async move {
-                use tokio::io::{AsyncBufReadExt, BufReader};
                 let mut reader = BufReader::new(stderr).lines();
                 while let Ok(Some(line)) = reader.next_line().await {
                     crate::debug::log(&format!("diskutil stderr: {}", line));
@@ -718,11 +717,6 @@ pub async fn format_drive_fat32(
         "Formatting failed, please check your SD Card".to_string()
     ));
     Err("Formatting failed, please check your SD Card".to_string())
-}
-
-#[cfg(target_os = "macos")]
-fn log_content(_path: &std::path::Path) {
-    // No-op, file logging removed
 }
 
 // =============================================================================

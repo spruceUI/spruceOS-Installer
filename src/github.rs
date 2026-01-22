@@ -28,7 +28,6 @@ pub enum DownloadProgress {
     Progress { downloaded: u64, total: u64 },
     Completed,
     Cancelled,
-    #[allow(dead_code)]
     Error(String),
 }
 

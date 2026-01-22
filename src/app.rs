@@ -46,15 +46,11 @@ pub struct InstallerApp {
     drives: Vec<DriveInfo>,
     selected_drive_idx: Option<usize>,
     selected_repo_idx: usize,
-    _release_info: Option<Release>,
 
     // Progress tracking
     state: AppState,
     progress: Arc<Mutex<ProgressInfo>>,
     log_messages: Arc<Mutex<Vec<String>>>,
-
-    // Temp file for downloads
-    _temp_download_path: Option<PathBuf>,
 
     // Drive that was installed to (for eject)
     installed_drive: Option<DriveInfo>,
@@ -111,7 +107,6 @@ impl InstallerApp {
             drives: Vec::new(),
             selected_drive_idx: None,
             selected_repo_idx: DEFAULT_REPO_INDEX,
-            _release_info: None,
             state: AppState::Idle,
             progress: Arc::new(Mutex::new(ProgressInfo {
                 current: 0,
@@ -119,7 +114,6 @@ impl InstallerApp {
                 message: String::new(),
             })),
             log_messages: Arc::new(Mutex::new(Vec::new())),
-            _temp_download_path: None,
             installed_drive: None,
             cancel_token: None,
             drive_rx: rx,
@@ -130,7 +124,7 @@ impl InstallerApp {
             last_system_dark_mode: is_dark,
         };
 
-        app.theme_state.current_config = app.get_theme_config(is_dark);
+        app.theme_state.current_config = app.get_theme_config();
 
         // Initial sync load
         app.drives = get_removable_drives();
@@ -139,7 +133,7 @@ impl InstallerApp {
         app
     }
 
-    fn get_theme_config(&self, _is_dark: bool) -> ThemeConfig {
+    fn get_theme_config(&self) -> ThemeConfig {
         ThemeConfig {
             name: "SpruceOS".to_string(),
             dark_mode: true,
@@ -873,7 +867,7 @@ impl eframe::App for InstallerApp {
         let is_dark = ctx.style().visuals.dark_mode;
         if is_dark != self.last_system_dark_mode {
             self.last_system_dark_mode = is_dark;
-            self.theme_state.current_config = self.get_theme_config(is_dark);
+            self.theme_state.current_config = self.get_theme_config();
         }
 
         // Theme editor panel
@@ -956,16 +950,6 @@ impl eframe::App for InstallerApp {
         if is_busy {
             ctx.request_repaint();
         }
-
-        // Show modal dialogs for confirmation or status
-        let show_modal = matches!(
-            self.state,
-            AppState::AwaitingConfirmation
-                | AppState::Complete
-                | AppState::Ejecting
-                | AppState::Ejected
-                | AppState::Error
-        );
 
         if show_modal {
             // Background Dimmer

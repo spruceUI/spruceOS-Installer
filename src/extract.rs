@@ -81,30 +81,14 @@ pub async fn extract_7z(
                 exe.parent()  // Contents/MacOS
                     .and_then(|p| p.parent())  // Contents
                     .map(|contents| contents.join("Resources/7zz"))
-            });
+            })
+            .filter(|path| path.exists());
 
-        if let Some(ref path) = bundled_path {
-            if path.exists() {
-                crate::debug::log(&format!("Using bundled 7zz from app bundle: {:?}", path));
-                (path.clone(), true)
-            } else {
-                crate::debug::log("Bundled 7zz not found, extracting to temp...");
-                // Fallback to temp extraction
-                let bin_dir = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
-                let temp_path = bin_dir.join(format!("7zr_{}", TEMP_PREFIX));
-                std::fs::write(&temp_path, SEVEN_ZIP_EXE)
-                    .map_err(|e| format!("Failed to extract 7z tool: {}", e))?;
-                use std::os::unix::fs::PermissionsExt;
-                let mut perms = std::fs::metadata(&temp_path)
-                    .map_err(|e| format!("Failed to get file permissions: {}", e))?
-                    .permissions();
-                perms.set_mode(0o755);
-                std::fs::set_permissions(&temp_path, perms)
-                    .map_err(|e| format!("Failed to set executable permission: {}", e))?;
-                crate::debug::log(&format!("Extracted 7z binary to: {:?}", temp_path));
-                (temp_path, false)
-            }
+        if let Some(path) = bundled_path {
+            crate::debug::log(&format!("Using bundled 7zz from app bundle: {:?}", path));
+            (path, true)
         } else {
+            crate::debug::log("Bundled 7zz not found, extracting to temp...");
             // Fallback to temp extraction
             let bin_dir = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
             let temp_path = bin_dir.join(format!("7zr_{}", TEMP_PREFIX));

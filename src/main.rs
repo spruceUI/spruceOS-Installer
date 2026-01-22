@@ -78,15 +78,9 @@ fn check_and_request_privileges() {
     }
 }
 
-// Windows platforms don't need this function as privilege elevation is handled by the manifest
-#[cfg(windows)] 
-fn check_and_request_privileges() {
-    // No-op for Windows
-}
-
-
 fn main() -> eframe::Result<()> {
-    // Call the privilege check at the very beginning of main
+    // Call the privilege check at the very beginning of main (not needed on Windows due to manifest)
+    #[cfg(not(windows))]
     check_and_request_privileges();
 
     let mut viewport = egui::ViewportBuilder::default()
