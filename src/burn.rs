@@ -2,6 +2,8 @@ use sha2::{Sha256, Digest};
 use std::path::Path;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
+use flate2::read::GzDecoder;
+use std::io::Read;
 
 const CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4MB chunks
 
@@ -204,11 +206,24 @@ async fn burn_image_windows(
 
             crate::debug::log("Volume locked, beginning write...");
 
-            let mut image_file = std::fs::File::open(&image_path)
+            // Check if file is gzipped and create appropriate reader
+            let is_gzipped = image_path.extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.eq_ignore_ascii_case("gz"))
+                .unwrap_or(false);
+
+            let file = std::fs::File::open(&image_path)
                 .map_err(|e| {
                     unsafe { let _ = CloseHandle(handle); }
                     format!("Failed to open image file: {}", e)
                 })?;
+
+            let mut image_reader: Box<dyn Read> = if is_gzipped {
+                crate::debug::log("Detected .gz file, decompressing on-the-fly during burn");
+                Box::new(GzDecoder::new(file))
+            } else {
+                Box::new(file)
+            };
 
             let mut buffer = vec![0u8; CHUNK_SIZE];
             let mut total_written = 0u64;
@@ -232,7 +247,7 @@ async fn burn_image_windows(
                     return Err("Burn cancelled".to_string());
                 }
 
-                let bytes_read = image_file.read(&mut buffer)
+                let bytes_read = image_reader.read(&mut buffer)
                     .map_err(|e| {
                         unsafe { let _ = CloseHandle(handle); }
                         format!("Failed to read from image: {}", e)
@@ -364,8 +379,21 @@ async fn burn_image_linux(
                 .open(&device_path)
                 .map_err(|e| format!("Failed to open device {}: {}. Are you running with sudo/root?", device_path, e))?;
 
-            let mut image_file = std::fs::File::open(&image_path)
+            // Check if file is gzipped and create appropriate reader
+            let is_gzipped = image_path.extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.eq_ignore_ascii_case("gz"))
+                .unwrap_or(false);
+
+            let file = std::fs::File::open(&image_path)
                 .map_err(|e| format!("Failed to open image file: {}", e))?;
+
+            let mut image_reader: Box<dyn Read> = if is_gzipped {
+                crate::debug::log("Detected .gz file, decompressing on-the-fly during burn");
+                Box::new(GzDecoder::new(file))
+            } else {
+                Box::new(file)
+            };
 
             let mut buffer = vec![0u8; CHUNK_SIZE];
             let mut total_written = 0u64;
@@ -376,7 +404,7 @@ async fn burn_image_linux(
                     return Err("Burn cancelled".to_string());
                 }
 
-                let bytes_read = image_file.read(&mut buffer)
+                let bytes_read = image_reader.read(&mut buffer)
                     .map_err(|e| format!("Failed to read from image: {}", e))?;
 
                 if bytes_read == 0 {
@@ -465,8 +493,21 @@ async fn burn_image_macos(
                 .open(&device_path)
                 .map_err(|e| format!("Failed to open device {}: {}. Are you running with sudo?", device_path, e))?;
 
-            let mut image_file = std::fs::File::open(&image_path)
+            // Check if file is gzipped and create appropriate reader
+            let is_gzipped = image_path.extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.eq_ignore_ascii_case("gz"))
+                .unwrap_or(false);
+
+            let file = std::fs::File::open(&image_path)
                 .map_err(|e| format!("Failed to open image file: {}", e))?;
+
+            let mut image_reader: Box<dyn Read> = if is_gzipped {
+                crate::debug::log("Detected .gz file, decompressing on-the-fly during burn");
+                Box::new(GzDecoder::new(file))
+            } else {
+                Box::new(file)
+            };
 
             let mut buffer = vec![0u8; CHUNK_SIZE];
             let mut total_written = 0u64;
@@ -477,7 +518,7 @@ async fn burn_image_macos(
                     return Err("Burn cancelled".to_string());
                 }
 
-                let bytes_read = image_file.read(&mut buffer)
+                let bytes_read = image_reader.read(&mut buffer)
                     .map_err(|e| format!("Failed to read from image: {}", e))?;
 
                 if bytes_read == 0 {

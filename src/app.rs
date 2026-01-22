@@ -714,139 +714,11 @@ impl InstallerApp {
             // ======================================================================
 
             if is_raw_image {
-                // ===== RAW IMAGE MODE: Extract .img.gz → Burn → Verify =====
+                // ===== RAW IMAGE MODE: Burn (with decompression) → Verify =====
                 crate::debug::log_section("Raw Image Mode");
-                write_card_log("Download complete, starting image extraction...");
+                write_card_log("Download complete, preparing to burn image...");
 
-                // Step 4a: Extract .img.gz to .img file
-                let _ = state_tx_clone.send(AppState::Extracting);
-                log("Extracting disk image...");
-                crate::debug::log_section("Extracting Disk Image");
-
-                #[cfg(target_os = "linux")]
-                let extract_base_dir = temp_dir.clone();
-                #[cfg(target_os = "macos")]
-                let extract_base_dir = dirs::cache_dir().unwrap_or_else(|| temp_dir.clone());
-                #[cfg(not(any(target_os = "linux", target_os = "macos")))]
-                let extract_base_dir = temp_dir.clone();
-
-                let temp_extract_dir = extract_base_dir.join(format!("{}_img", TEMP_PREFIX));
-                crate::debug::log(&format!("Image extract dir: {:?}", temp_extract_dir));
-
-                // Clean up any previous extraction
-                let _ = std::fs::remove_dir_all(&temp_extract_dir);
-                if let Err(e) = std::fs::create_dir_all(&temp_extract_dir) {
-                    let err_msg = format!("Failed to create image extract dir: {}", e);
-                    log(&err_msg);
-                    crate::debug::log(&format!("ERROR: {}", err_msg));
-                    let _ = state_tx_clone.send(AppState::Error);
-                    let _ = drive_poll_tx_clone.send(true);
-                    return;
-                }
-
-                let (ext_tx, mut ext_rx) = mpsc::unbounded_channel::<ExtractProgress>();
-                let progress_ext = progress.clone();
-                let ctx_ext = ctx_clone.clone();
-
-                // Spawn extract progress handler
-                let ext_handle = tokio::spawn(async move {
-                    while let Some(prog) = ext_rx.recv().await {
-                        if let Ok(mut p) = progress_ext.lock() {
-                            match prog {
-                                ExtractProgress::Started => {
-                                    p.message = "Starting extraction...".to_string();
-                                }
-                                ExtractProgress::Extracting => {
-                                    p.message = "Extracting disk image...".to_string();
-                                }
-                                ExtractProgress::Progress { percent } => {
-                                    p.current = percent as u64;
-                                    p.total = 100;
-                                    p.message = format!("Extracting... {}%", percent);
-                                }
-                                ExtractProgress::Completed => {
-                                    p.current = 100;
-                                    p.total = 100;
-                                    p.message = "Extraction complete".to_string();
-                                }
-                                ExtractProgress::Cancelled => {
-                                    p.message = "Extraction cancelled".to_string();
-                                }
-                                ExtractProgress::Error(e) => {
-                                    p.message = format!("Extract error: {}", e);
-                                }
-                            }
-                        }
-                        ctx_ext.request_repaint();
-                    }
-                });
-
-                if let Err(e) = extract_7z_with_progress(&download_path, &temp_extract_dir, ext_tx, cancel_token_clone.clone()).await {
-                    if e.contains("cancelled") {
-                        log("Extraction cancelled");
-                        let _ = std::fs::remove_dir_all(&temp_extract_dir);
-                        let _ = tokio::fs::remove_file(&download_path).await;
-                        let _ = state_tx_clone.send(AppState::Idle);
-                        let _ = drive_poll_tx_clone.send(true);
-                        return;
-                    }
-                    log(&format!("Extract error: {}", e));
-                    let _ = std::fs::remove_dir_all(&temp_extract_dir);
-                    let _ = tokio::fs::remove_file(&download_path).await;
-                    let _ = state_tx_clone.send(AppState::Error);
-                    let _ = drive_poll_tx_clone.send(true);
-                    return;
-                }
-
-                let _ = ext_handle.await;
-                log("Image extraction complete");
-                crate::debug::log("Image extraction complete");
-
-                // Find the extracted .img file
-                let img_file_result = tokio::task::spawn_blocking({
-                    let temp_extract_dir = temp_extract_dir.clone();
-                    move || -> Result<PathBuf, String> {
-                        let entries = std::fs::read_dir(&temp_extract_dir)
-                            .map_err(|e| format!("Failed to read extract directory: {}", e))?;
-
-                        for entry in entries.flatten() {
-                            let path = entry.path();
-                            if let Some(ext) = path.extension() {
-                                if ext == "img" {
-                                    return Ok(path);
-                                }
-                            }
-                        }
-                        Err("No .img file found in extracted archive".to_string())
-                    }
-                }).await;
-
-                let img_file = match img_file_result {
-                    Ok(Ok(path)) => path,
-                    Ok(Err(e)) => {
-                        log(&format!("Error: {}", e));
-                        crate::debug::log(&format!("ERROR finding image: {}", e));
-                        let _ = std::fs::remove_dir_all(&temp_extract_dir);
-                        let _ = tokio::fs::remove_file(&download_path).await;
-                        let _ = state_tx_clone.send(AppState::Error);
-                        let _ = drive_poll_tx_clone.send(true);
-                        return;
-                    }
-                    Err(e) => {
-                        log(&format!("Error: Failed to search for image file"));
-                        crate::debug::log(&format!("ERROR: Task failed: {}", e));
-                        let _ = std::fs::remove_dir_all(&temp_extract_dir);
-                        let _ = tokio::fs::remove_file(&download_path).await;
-                        let _ = state_tx_clone.send(AppState::Error);
-                        let _ = drive_poll_tx_clone.send(true);
-                        return;
-                    }
-                };
-
-                crate::debug::log(&format!("Found image file: {:?}", img_file));
-                log(&format!("Found image: {}", img_file.file_name().unwrap_or_default().to_string_lossy()));
-
-                // Step 4b: Burn image to device
+                // Step 4: Burn image to device (burn.rs handles .gz decompression automatically)
                 let _ = state_tx_clone.send(AppState::Burning);
                 log(&format!("Burning image to {}...", drive.name));
                 crate::debug::log_section("Burning Image");
@@ -896,17 +768,15 @@ impl InstallerApp {
                     }
                 });
 
-                if let Err(e) = burn_image(&img_file, &drive.device_path, burn_tx, cancel_token_clone.clone()).await {
+                if let Err(e) = burn_image(&download_path, &drive.device_path, burn_tx, cancel_token_clone.clone()).await {
                     if e.contains("cancelled") {
                         log("Burn cancelled");
-                        let _ = std::fs::remove_dir_all(&temp_extract_dir);
                         let _ = tokio::fs::remove_file(&download_path).await;
                         let _ = state_tx_clone.send(AppState::Idle);
                         let _ = drive_poll_tx_clone.send(true);
                         return;
                     }
                     log(&format!("Burn error: {}", e));
-                    let _ = std::fs::remove_dir_all(&temp_extract_dir);
                     let _ = tokio::fs::remove_file(&download_path).await;
                     let _ = state_tx_clone.send(AppState::Error);
                     let _ = drive_poll_tx_clone.send(true);
@@ -917,8 +787,7 @@ impl InstallerApp {
                 log("Image burn and verification complete");
                 crate::debug::log("Image burn and verification complete");
 
-                // Clean up
-                let _ = std::fs::remove_dir_all(&temp_extract_dir);
+                // Clean up downloaded image
                 let _ = tokio::fs::remove_file(&download_path).await;
                 crate::debug::log("Cleaned up temp files");
 

@@ -5,8 +5,6 @@ use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
-use flate2::read::GzDecoder;
-use std::io::{Read, Write};
 
 #[cfg(target_os = "windows")]
 #[allow(unused_imports)]
@@ -379,143 +377,6 @@ fn parse_last_percentage(text: &str) -> Option<u8> {
         })
 }
 
-/// Extract a gzip file (.gz) to destination directory
-async fn extract_gzip(
-    gz_path: &Path,
-    dest_dir: &Path,
-    progress_tx: mpsc::UnboundedSender<ExtractProgress>,
-    cancel_token: CancellationToken,
-) -> Result<(), String> {
-    crate::debug::log_section("Gzip Extraction");
-    crate::debug::log(&format!("Gzip file: {:?}", gz_path));
-    crate::debug::log(&format!("Destination: {:?}", dest_dir));
-
-    // Check for cancellation before starting
-    if cancel_token.is_cancelled() {
-        let _ = progress_tx.send(ExtractProgress::Cancelled);
-        return Err("Extraction cancelled".to_string());
-    }
-
-    let _ = progress_tx.send(ExtractProgress::Started);
-
-    // Verify archive exists
-    if !gz_path.exists() {
-        crate::debug::log("ERROR: Gzip file not found");
-        return Err(format!("Gzip file not found: {:?}", gz_path));
-    }
-
-    // Get file size for progress tracking
-    let gz_size = std::fs::metadata(gz_path)
-        .map_err(|e| format!("Failed to get gzip file size: {}", e))?
-        .len();
-
-    crate::debug::log(&format!("Gzip file size: {} bytes", gz_size));
-
-    // Ensure destination directory exists
-    if !dest_dir.exists() {
-        crate::debug::log("Creating destination directory...");
-        std::fs::create_dir_all(dest_dir)
-            .map_err(|e| format!("Failed to create destination directory: {}", e))?;
-    }
-
-    let _ = progress_tx.send(ExtractProgress::Extracting);
-
-    // Determine output filename (remove .gz extension)
-    let output_filename = gz_path
-        .file_stem()
-        .ok_or_else(|| "Invalid gzip filename".to_string())?;
-    let output_path = dest_dir.join(output_filename);
-
-    crate::debug::log(&format!("Output file: {:?}", output_path));
-
-    // Perform extraction in blocking task
-    let result = tokio::task::spawn_blocking({
-        let gz_path = gz_path.to_path_buf();
-        let output_path = output_path.clone();
-        let progress_tx = progress_tx.clone();
-        let cancel_token = cancel_token.clone();
-
-        move || -> Result<(), String> {
-            let gz_file = std::fs::File::open(&gz_path)
-                .map_err(|e| format!("Failed to open gzip file: {}", e))?;
-
-            let mut decoder = GzDecoder::new(gz_file);
-            let mut output_file = std::fs::File::create(&output_path)
-                .map_err(|e| format!("Failed to create output file: {}", e))?;
-
-            let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer
-            let mut total_read = 0u64;
-            let mut last_percent = 0u8;
-
-            loop {
-                if cancel_token.is_cancelled() {
-                    crate::debug::log("Gzip extraction cancelled by user");
-                    let _ = std::fs::remove_file(&output_path);
-                    return Err("Extraction cancelled".to_string());
-                }
-
-                match decoder.read(&mut buffer) {
-                    Ok(0) => break, // EOF
-                    Ok(n) => {
-                        output_file.write_all(&buffer[..n])
-                            .map_err(|e| format!("Failed to write to output file: {}", e))?;
-
-                        total_read += n as u64;
-
-                        // Calculate progress (approximate, based on compressed size)
-                        let percent = ((total_read.min(gz_size) as f64 / gz_size as f64) * 100.0) as u8;
-                        if percent != last_percent && percent <= 100 {
-                            last_percent = percent;
-                            let _ = progress_tx.send(ExtractProgress::Progress { percent });
-                            crate::debug::log(&format!("Extraction progress: {}%", percent));
-                        }
-                    }
-                    Err(e) => {
-                        let _ = std::fs::remove_file(&output_path);
-                        return Err(format!("Failed to decompress gzip: {}", e));
-                    }
-                }
-            }
-
-            output_file.flush()
-                .map_err(|e| format!("Failed to flush output file: {}", e))?;
-
-            crate::debug::log(&format!("Gzip extraction complete: {} bytes written", total_read));
-            Ok(())
-        }
-    }).await
-    .map_err(|e| format!("Extraction task failed: {}", e))??;
-
-    let _ = progress_tx.send(ExtractProgress::Completed);
-    crate::debug::log("Gzip extraction completed successfully");
-    Ok(())
-}
-
-/// Auto-detect file type and extract appropriately
-async fn extract_with_detection(
-    archive_path: &Path,
-    dest_dir: &Path,
-    progress_tx: mpsc::UnboundedSender<ExtractProgress>,
-    cancel_token: CancellationToken,
-) -> Result<(), String> {
-    // Check file extension to determine extraction method
-    let extension = archive_path
-        .extension()
-        .and_then(|s| s.to_str())
-        .unwrap_or("");
-
-    match extension.to_lowercase().as_str() {
-        "gz" => {
-            crate::debug::log("Detected gzip format, using native decompression");
-            extract_gzip(archive_path, dest_dir, progress_tx, cancel_token).await
-        }
-        _ => {
-            crate::debug::log("Using 7z extraction");
-            extract_7z(archive_path, dest_dir, progress_tx, cancel_token).await
-        }
-    }
-}
-
 /// Main entry point for extraction with cancellation support
 pub async fn extract_7z_with_progress(
     archive_path: &Path,
@@ -523,5 +384,5 @@ pub async fn extract_7z_with_progress(
     progress_tx: mpsc::UnboundedSender<ExtractProgress>,
     cancel_token: CancellationToken,
 ) -> Result<(), String> {
-    extract_with_detection(archive_path, dest_dir, progress_tx, cancel_token).await
+    extract_7z(archive_path, dest_dir, progress_tx, cancel_token).await
 }
