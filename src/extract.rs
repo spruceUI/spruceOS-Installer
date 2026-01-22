@@ -120,18 +120,45 @@ pub async fn extract_7z(
     let (seven_zip_path, is_bundled) = {
         #[cfg(target_os = "linux")]
         let bin_dir = {
-            // If running as root via sudo, try to use the actual user's cache directory
+            // If running as root via sudo or pkexec, try to use the actual user's cache directory
             if unsafe { libc::geteuid() } == 0 {
+                // First check for SUDO_USER (command-line sudo)
                 if let Ok(sudo_user) = std::env::var("SUDO_USER") {
                     let user_home = std::path::PathBuf::from(format!("/home/{}", sudo_user));
                     if user_home.exists() {
                         let user_cache = user_home.join(".cache");
-                        crate::debug::log(&format!("Extracting 7z binary using cache dir for user {}: {:?}", sudo_user, user_cache));
+                        crate::debug::log(&format!("Extracting 7z binary using cache dir for sudo user {}: {:?}", sudo_user, user_cache));
                         user_cache
                     } else {
                         dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
                     }
-                } else {
+                }
+                // Check for PKEXEC_UID (GUI elevation via pkexec)
+                else if let Ok(pkexec_uid) = std::env::var("PKEXEC_UID") {
+                    if let Ok(uid) = pkexec_uid.parse::<u32>() {
+                        let pwd = unsafe { libc::getpwuid(uid) };
+                        if !pwd.is_null() {
+                            let username = unsafe {
+                                std::ffi::CStr::from_ptr((*pwd).pw_name)
+                                    .to_string_lossy()
+                                    .to_string()
+                            };
+                            let user_home = std::path::PathBuf::from(format!("/home/{}", username));
+                            if user_home.exists() {
+                                let user_cache = user_home.join(".cache");
+                                crate::debug::log(&format!("Extracting 7z binary using cache dir for pkexec user {} (UID {}): {:?}", username, uid, user_cache));
+                                user_cache
+                            } else {
+                                dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                            }
+                        } else {
+                            dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                        }
+                    } else {
+                        dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                    }
+                }
+                else {
                     dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
                 }
             } else {

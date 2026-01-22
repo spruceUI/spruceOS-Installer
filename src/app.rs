@@ -275,8 +275,11 @@ impl InstallerApp {
                 if let Ok(sudo_user) = std::env::var("SUDO_USER") {
                     crate::debug::log(&format!("Detected sudo execution by user: {}", sudo_user));
                     self.log("Note: Running with sudo/root privileges");
+                } else if let Ok(pkexec_uid) = std::env::var("PKEXEC_UID") {
+                    crate::debug::log(&format!("Detected pkexec execution by UID: {}", pkexec_uid));
+                    self.log("Note: Running with elevated privileges (pkexec)");
                 } else {
-                    crate::debug::log("Running as actual root user (not via sudo)");
+                    crate::debug::log("Running as actual root user (not via sudo/pkexec)");
                     self.log("Note: Running as root user");
                 }
             }
@@ -363,20 +366,50 @@ impl InstallerApp {
             // Linux: ~/.cache, macOS: ~/Library/Caches
             #[cfg(target_os = "linux")]
             let temp_dir = {
-                // If running as root via sudo, try to use the actual user's cache directory
+                // If running as root via sudo or pkexec, try to use the actual user's cache directory
                 if unsafe { libc::geteuid() } == 0 {
+                    // First check for SUDO_USER (command-line sudo)
                     if let Ok(sudo_user) = std::env::var("SUDO_USER") {
-                        // Try to get the actual user's home directory
                         let user_home = std::path::PathBuf::from(format!("/home/{}", sudo_user));
                         if user_home.exists() {
                             let user_cache = user_home.join(".cache");
-                            crate::debug::log(&format!("Using cache dir for user {}: {:?}", sudo_user, user_cache));
+                            crate::debug::log(&format!("Using cache dir for sudo user {}: {:?}", sudo_user, user_cache));
                             user_cache
                         } else {
                             crate::debug::log(&format!("User home not found at {:?}, using default", user_home));
                             dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
                         }
-                    } else {
+                    }
+                    // Check for PKEXEC_UID (GUI elevation via pkexec)
+                    else if let Ok(pkexec_uid) = std::env::var("PKEXEC_UID") {
+                        if let Ok(uid) = pkexec_uid.parse::<u32>() {
+                            // Get username from UID using libc
+                            let pwd = unsafe { libc::getpwuid(uid) };
+                            if !pwd.is_null() {
+                                let username = unsafe {
+                                    std::ffi::CStr::from_ptr((*pwd).pw_name)
+                                        .to_string_lossy()
+                                        .to_string()
+                                };
+                                let user_home = std::path::PathBuf::from(format!("/home/{}", username));
+                                if user_home.exists() {
+                                    let user_cache = user_home.join(".cache");
+                                    crate::debug::log(&format!("Using cache dir for pkexec user {} (UID {}): {:?}", username, uid, user_cache));
+                                    user_cache
+                                } else {
+                                    crate::debug::log(&format!("User home not found at {:?}, using default", user_home));
+                                    dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                                }
+                            } else {
+                                crate::debug::log(&format!("Failed to get username for UID {}, using default", uid));
+                                dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                            }
+                        } else {
+                            crate::debug::log(&format!("Failed to parse PKEXEC_UID '{}', using default", pkexec_uid));
+                            dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                        }
+                    }
+                    else {
                         crate::debug::log("Running as root, using root's cache dir");
                         dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
                     }
