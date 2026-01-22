@@ -105,7 +105,8 @@ fn get_available_disk_space(path: &std::path::Path) -> u64 {
         unsafe {
             if libc::statvfs(path_cstr.as_ptr(), &mut stat) == 0 {
                 // Available space = block size * available blocks
-                return stat.f_bavail * stat.f_bsize as u64;
+                // Cast both to u64 to handle platforms where they're u32 (macOS, ARM32)
+                return (stat.f_bavail as u64) * (stat.f_bsize as u64);
             }
         }
         crate::debug::log("WARNING: Failed to get disk space on Unix, assuming sufficient space");
