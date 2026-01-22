@@ -1147,7 +1147,7 @@ impl eframe::App for InstallerApp {
                                 if ui.button("📋 Copy to Clipboard").clicked() {
                                     let log_path = crate::debug::get_log_path();
                                     if let Ok(contents) = std::fs::read_to_string(&log_path) {
-                                        ui.output_mut(|o| o.copied_text = contents);
+                                        ui.ctx().copy_text(contents);
                                     }
                                 }
                                 ui.label(format!("Log: {:?}", crate::debug::get_log_path().file_name().unwrap_or_default()));
