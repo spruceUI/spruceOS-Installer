@@ -36,23 +36,40 @@ pub async fn get_latest_release(repo_url: &str) -> Result<Release, String> {
     let (owner, repo) = parse_github_url(repo_url)?;
     let api_url = format!("https://api.github.com/repos/{}/{}/releases/latest", owner, repo);
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
     let response = client
         .get(&api_url)
         .header("User-Agent", USER_AGENT)
         .header("Accept", "application/vnd.github.v3+json")
         .send()
         .await
-        .map_err(|e| format!("Failed to fetch release: {}", e))?;
+        .map_err(|e| {
+            if e.is_timeout() {
+                "Connection timed out. Please check your internet connection and try again.".to_string()
+            } else if e.is_connect() {
+                "Cannot reach GitHub. Please check your internet connection and firewall settings.".to_string()
+            } else {
+                format!("Failed to fetch release: {}", e)
+            }
+        })?;
+
+    // Check for rate limiting (HTTP 403)
+    if response.status() == 403 {
+        return Err("GitHub API rate limit exceeded. Please wait an hour and try again, or check your internet connection.".to_string());
+    }
 
     if !response.status().is_success() {
-        return Err(format!("GitHub API error: {}", response.status()));
+        return Err(format!("GitHub API returned error: {}. Please try again later.", response.status()));
     }
 
     response
         .json::<Release>()
         .await
-        .map_err(|e| format!("Failed to parse release: {}", e))
+        .map_err(|e| format!("Failed to parse release data: {}. The release format may be invalid.", e))
 }
 
 pub fn find_release_asset(release: &Release) -> Option<&Asset> {
@@ -75,19 +92,37 @@ pub async fn download_asset(
         return Err("Download cancelled".to_string());
     }
 
-    let client = reqwest::Client::new();
+    // Create client with connection timeout (but no overall timeout for large downloads)
+    let client = reqwest::Client::builder()
+        .connect_timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
     let response = client
         .get(&asset.browser_download_url)
         .header("User-Agent", USER_AGENT)
         .send()
         .await
-        .map_err(|e| format!("Failed to start download: {}", e))?;
+        .map_err(|e| {
+            if e.is_timeout() {
+                "Connection timed out while starting download. Please check your internet connection.".to_string()
+            } else if e.is_connect() {
+                "Cannot reach download server. Please check your internet connection and firewall settings.".to_string()
+            } else {
+                format!("Failed to start download: {}", e)
+            }
+        })?;
 
     if !response.status().is_success() {
-        return Err(format!("Download failed: {}", response.status()));
+        return Err(format!("Download failed with status {}: Please try again later.", response.status()));
     }
 
     let total_size = response.content_length().unwrap_or(asset.size);
+
+    // Log download size for user awareness
+    let size_mb = total_size as f64 / 1_048_576.0;
+    crate::debug::log(&format!("Download size: {:.1} MB ({} bytes)", size_mb, total_size));
+
     let _ = progress_tx.send(DownloadProgress::Started { total_bytes: total_size });
 
     let mut file = File::create(dest_path)

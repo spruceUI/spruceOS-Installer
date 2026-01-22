@@ -69,6 +69,56 @@ pub struct InstallerApp {
     last_system_dark_mode: bool,
 }
 
+/// Get available disk space for a given path (in bytes)
+fn get_available_disk_space(path: &std::path::Path) -> u64 {
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows::Win32::Storage::FileSystem::GetDiskFreeSpaceExW;
+
+        let path_wide: Vec<u16> = path.as_os_str()
+            .encode_wide()
+            .chain(Some(0))
+            .collect();
+
+        let mut free_bytes = 0u64;
+        unsafe {
+            if GetDiskFreeSpaceExW(
+                windows::core::PCWSTR(path_wide.as_ptr()),
+                None,
+                None,
+                Some(&mut free_bytes),
+            ).is_ok() {
+                return free_bytes;
+            }
+        }
+        crate::debug::log("WARNING: Failed to get disk space on Windows, assuming sufficient space");
+        u64::MAX // Assume sufficient space if we can't check
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        let path_cstr = std::ffi::CString::new(path.as_os_str().as_bytes()).unwrap_or_default();
+        let mut stat: libc::statvfs = unsafe { std::mem::zeroed() };
+
+        unsafe {
+            if libc::statvfs(path_cstr.as_ptr(), &mut stat) == 0 {
+                // Available space = block size * available blocks
+                return stat.f_bavail * stat.f_bsize as u64;
+            }
+        }
+        crate::debug::log("WARNING: Failed to get disk space on Unix, assuming sufficient space");
+        u64::MAX // Assume sufficient space if we can't check
+    }
+
+    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
+    {
+        crate::debug::log("WARNING: Disk space check not supported on this platform");
+        u64::MAX // Assume sufficient space on unsupported platforms
+    }
+}
+
 impl InstallerApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         // Apply theme from config
@@ -424,6 +474,30 @@ impl InstallerApp {
 
             crate::debug::log(&format!("Cache/temp directory: {:?}", temp_dir));
 
+            // Check available disk space before starting
+            // We need space for: download (asset.size) + extraction (~3x asset.size)
+            let required_space = asset.size * 4; // 4x for safety margin
+            let available_space = get_available_disk_space(&temp_dir);
+
+            crate::debug::log(&format!("Required disk space: {} MB", required_space / 1_048_576));
+            crate::debug::log(&format!("Available disk space: {} MB", available_space / 1_048_576));
+
+            if available_space < required_space {
+                let required_mb = required_space / 1_048_576;
+                let available_mb = available_space / 1_048_576;
+                let err_msg = format!(
+                    "Insufficient disk space. Need {} MB, but only {} MB available in cache directory. Please free up disk space and try again.",
+                    required_mb, available_mb
+                );
+                log(&err_msg);
+                crate::debug::log(&format!("ERROR: {}", err_msg));
+                let _ = state_tx_clone.send(AppState::Error);
+                let _ = drive_poll_tx_clone.send(true);
+                return;
+            }
+
+            log(&format!("Disk space check passed: {} MB available", available_space / 1_048_576));
+
             // Step 2: Format drive (do this first so we fail fast if the card has issues)
             let _ = state_tx_clone.send(AppState::Formatting);
             log(&format!("Formatting {}...", drive.name));
@@ -532,7 +606,8 @@ impl InstallerApp {
 
             // Step 3: Download
             let _ = state_tx_clone.send(AppState::Downloading);
-            log("Downloading release...");
+            let size_mb = asset.size as f64 / 1_048_576.0;
+            log(&format!("Downloading release ({:.1} MB)...", size_mb));
             crate::debug::log_section("Downloading Release");
 
             let download_path = temp_dir.join(&asset.name);
