@@ -119,7 +119,25 @@ pub async fn extract_7z(
     #[cfg(not(target_os = "macos"))]
     let (seven_zip_path, is_bundled) = {
         #[cfg(target_os = "linux")]
-        let bin_dir = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
+        let bin_dir = {
+            // If running as root via sudo, try to use the actual user's cache directory
+            if unsafe { libc::geteuid() } == 0 {
+                if let Ok(sudo_user) = std::env::var("SUDO_USER") {
+                    let user_home = std::path::PathBuf::from(format!("/home/{}", sudo_user));
+                    if user_home.exists() {
+                        let user_cache = user_home.join(".cache");
+                        crate::debug::log(&format!("Extracting 7z binary using cache dir for user {}: {:?}", sudo_user, user_cache));
+                        user_cache
+                    } else {
+                        dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                    }
+                } else {
+                    dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+                }
+            } else {
+                dirs::cache_dir().unwrap_or_else(std::env::temp_dir)
+            }
+        };
         #[cfg(not(target_os = "linux"))]
         let bin_dir = std::env::temp_dir();
 
@@ -177,25 +195,42 @@ pub async fn extract_7z(
         .spawn()
         .map_err(|e| format!("Failed to start 7z: {}", e))?;
 
+    crate::debug::log(&format!("7z process started (PID: {:?})", child.id()));
+
     // Take stdout for progress parsing
     let mut stdout = child.stdout.take()
         .ok_or_else(|| "Failed to capture 7z stdout".to_string())?;
 
-    // Take stderr for error capture and read in background to prevent deadlock
+    // Take stderr for real-time logging
     let mut stderr = child.stderr.take()
         .ok_or_else(|| "Failed to capture 7z stderr".to_string())?;
-    
+
+    // Log stderr in real-time instead of buffering
     let stderr_handle = tokio::spawn(async move {
         let mut buffer = Vec::new();
-        if stderr.read_to_end(&mut buffer).await.is_ok() {
-            buffer
-        } else {
-            Vec::new()
+        let mut chunk = [0u8; 512];
+        loop {
+            match stderr.read(&mut chunk).await {
+                Ok(0) => break, // EOF
+                Ok(n) => {
+                    let text = String::from_utf8_lossy(&chunk[..n]);
+                    if !text.trim().is_empty() {
+                        crate::debug::log(&format!("7z stderr: {}", text.trim()));
+                    }
+                    buffer.extend_from_slice(&chunk[..n]);
+                }
+                Err(e) => {
+                    crate::debug::log(&format!("Error reading 7z stderr: {}", e));
+                    break;
+                }
+            }
         }
+        buffer
     });
 
     let mut last_percent: u8 = 0;
     let mut buffer = [0u8; 1024];
+    let mut last_output_time = std::time::Instant::now();
 
     // Read stdout looking for progress
     // 7z with -bsp1 uses backspaces or carriage returns, so we read raw chunks
@@ -211,18 +246,34 @@ pub async fn extract_7z(
                 let _ = progress_tx.send(ExtractProgress::Cancelled);
                 return Err("Extraction cancelled".to_string());
             }
+            _ = tokio::time::sleep(std::time::Duration::from_secs(30)) => {
+                // Check if we've received output recently (within 5 minutes)
+                let elapsed = last_output_time.elapsed();
+                if elapsed > std::time::Duration::from_secs(300) {
+                    crate::debug::log(&format!("Extraction timeout: no output for {} seconds", elapsed.as_secs()));
+                    let _ = child.kill().await;
+                    if !is_bundled {
+                        let _ = std::fs::remove_file(&seven_zip_path);
+                    }
+                    let _ = progress_tx.send(ExtractProgress::Error("Extraction timed out (no progress for 5 minutes)".to_string()));
+                    return Err("Extraction timed out - the process may have hung".to_string());
+                }
+            }
             read_result = stdout.read(&mut buffer) => {
                 match read_result {
                     Ok(0) => {
                         // EOF - process finished output
+                        crate::debug::log("7z stdout reached EOF");
                         break;
                     }
                     Ok(n) => {
+                        last_output_time = std::time::Instant::now();
                         // Parse the buffer for percentage
                         let text = String::from_utf8_lossy(&buffer[..n]);
                         if let Some(percent) = parse_last_percentage(&text) {
                             if percent != last_percent {
                                 last_percent = percent;
+                                crate::debug::log(&format!("Extraction progress: {}%", percent));
                                 let _ = progress_tx.send(ExtractProgress::Progress { percent });
                             }
                         }
