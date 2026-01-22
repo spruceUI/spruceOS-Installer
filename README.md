@@ -1,19 +1,13 @@
 ## To-Do
-
-- ~~x64 Linux hangs for a sec before ejecting safely, possible bug, it does eject though.~~ idk if this is really fixed it only happens sometimes for me?
-- arm64 fails to extract
-- inform user of where to find logfile
-
-## Wishlist
-- merge twig flasher with rest of spruce version
-- checkboxes for various additional packages:
+- Merge twig flasher with rest of spruce version
+- Checkboxes for various additional packages:
     - all themes
     - all A30 ports
     - all free games
     - PortMaster (are we making this a separate archive?)
-- backup and restore (update current installation instead of just fresh ones?)
-- scrape boxart for roms
-- offline installer / updater mode - provide your own 7z or gz file instead of downloading
+- Backup and restore (update current installation instead of just fresh ones?)
+- Scrape boxart for roms
+- Offline installer / updater mode - provide your own 7z or gz file instead of downloading (i'll be honest i am probably not gonna do this one).
 
 # SpruceOS Installer
 
