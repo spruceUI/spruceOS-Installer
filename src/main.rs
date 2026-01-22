@@ -12,7 +12,7 @@ mod format;
 mod github;
 
 use app::InstallerApp;
-use config::{load_app_icon, WINDOW_MIN_SIZE, WINDOW_SIZE, WINDOW_TITLE};
+use config::{load_app_icon, load_custom_fonts, WINDOW_MIN_SIZE, WINDOW_SIZE, WINDOW_TITLE};
 use eframe::egui;
 use std::sync::Arc;
 
@@ -78,15 +78,9 @@ fn check_and_request_privileges() {
     }
 }
 
-// Windows platforms don't need this function as privilege elevation is handled by the manifest
-#[cfg(windows)] 
-fn check_and_request_privileges() {
-    // No-op for Windows
-}
-
-
 fn main() -> eframe::Result<()> {
-    // Call the privilege check at the very beginning of main
+    // Call the privilege check at the very beginning of main (not needed on Windows due to manifest)
+    #[cfg(not(windows))]
     check_and_request_privileges();
 
     let mut viewport = egui::ViewportBuilder::default()
@@ -108,6 +102,9 @@ fn main() -> eframe::Result<()> {
         WINDOW_TITLE,
         options,
         Box::new(|cc| {
+            // Load custom fonts first (if configured)
+            load_custom_fonts(&cc.egui_ctx);
+
             // Theme is applied in InstallerApp::new using setup_theme
 
             // Initialize image loaders for SVG support

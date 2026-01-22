@@ -17,6 +17,7 @@
 // ============================================================================
 
 use eframe::egui;
+use std::sync::Arc;
 
 // ----------------------------------------------------------------------------
 // BRANDING
@@ -111,6 +112,42 @@ pub fn load_app_icon() -> Option<egui::IconData> {
     {
         None
     }
+}
+
+// ----------------------------------------------------------------------------
+// CUSTOM FONT CONFIGURATION
+// ----------------------------------------------------------------------------
+// To use a different font, replace the file at assets/Fonts/nunwen.ttf
+// with your own TTF/OTF file and update CUSTOM_FONT_NAME if desired
+
+/// Embedded custom font (TTF/OTF format)
+pub const CUSTOM_FONT: &[u8] = include_bytes!("../assets/Fonts/nunwen.ttf");
+
+/// Font family name (used to reference the font in the UI)
+pub const CUSTOM_FONT_NAME: &str = "Nunwen";
+
+/// Load custom fonts into egui
+/// Call this during app initialization, before creating the UI
+pub fn load_custom_fonts(ctx: &egui::Context) {
+    let mut fonts = egui::FontDefinitions::default();
+
+    // Load the custom font data
+    fonts.font_data.insert(
+        CUSTOM_FONT_NAME.to_owned(),
+        Arc::new(egui::FontData::from_static(CUSTOM_FONT)),
+    );
+
+    // Set it as the first priority for proportional text (default UI text)
+    fonts.families.entry(egui::FontFamily::Proportional)
+        .or_default()
+        .insert(0, CUSTOM_FONT_NAME.to_owned());
+
+    // Optionally also use it for monospace text (code, logs)
+    // fonts.families.entry(egui::FontFamily::Monospace)
+    //     .or_default()
+    //     .insert(0, CUSTOM_FONT_NAME.to_owned());
+
+    ctx.set_fonts(fonts);
 }
 
 // ============================================================================

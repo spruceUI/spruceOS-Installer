@@ -6,7 +6,7 @@ use crate::drives::{get_removable_drives, DriveInfo};
 use crate::eject::eject_drive;
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
-use crate::github::{download_asset, find_release_asset, get_latest_release, DownloadProgress, Release};
+use crate::github::{download_asset, find_release_asset, get_latest_release, DownloadProgress};
 use eframe::egui;
 use egui_thematic::{ThemeConfig, ThemeEditorState, render_theme_panel};
 use std::path::PathBuf;
@@ -46,15 +46,11 @@ pub struct InstallerApp {
     drives: Vec<DriveInfo>,
     selected_drive_idx: Option<usize>,
     selected_repo_idx: usize,
-    _release_info: Option<Release>,
 
     // Progress tracking
     state: AppState,
     progress: Arc<Mutex<ProgressInfo>>,
     log_messages: Arc<Mutex<Vec<String>>>,
-
-    // Temp file for downloads
-    _temp_download_path: Option<PathBuf>,
 
     // Drive that was installed to (for eject)
     installed_drive: Option<DriveInfo>,
@@ -111,7 +107,6 @@ impl InstallerApp {
             drives: Vec::new(),
             selected_drive_idx: None,
             selected_repo_idx: DEFAULT_REPO_INDEX,
-            _release_info: None,
             state: AppState::Idle,
             progress: Arc::new(Mutex::new(ProgressInfo {
                 current: 0,
@@ -119,7 +114,6 @@ impl InstallerApp {
                 message: String::new(),
             })),
             log_messages: Arc::new(Mutex::new(Vec::new())),
-            _temp_download_path: None,
             installed_drive: None,
             cancel_token: None,
             drive_rx: rx,
@@ -130,7 +124,7 @@ impl InstallerApp {
             last_system_dark_mode: is_dark,
         };
 
-        app.theme_state.current_config = app.get_theme_config(is_dark);
+        app.theme_state.current_config = app.get_theme_config();
 
         // Initial sync load
         app.drives = get_removable_drives();
@@ -139,7 +133,7 @@ impl InstallerApp {
         app
     }
 
-    fn get_theme_config(&self, _is_dark: bool) -> ThemeConfig {
+    fn get_theme_config(&self) -> ThemeConfig {
         ThemeConfig {
             name: "SpruceOS".to_string(),
             dark_mode: true,
@@ -378,9 +372,11 @@ impl InstallerApp {
                             FormatProgress::Unmounting => {
                                 p.message = "Unmounting drive...".to_string();
                             }
+                            #[cfg(not(target_os = "macos"))]
                             FormatProgress::CleaningDisk => {
                                 p.message = "Cleaning disk...".to_string();
                             }
+                            #[cfg(not(target_os = "macos"))]
                             FormatProgress::CreatingPartition => {
                                 p.message = "Creating partition...".to_string();
                             }
@@ -873,7 +869,7 @@ impl eframe::App for InstallerApp {
         let is_dark = ctx.style().visuals.dark_mode;
         if is_dark != self.last_system_dark_mode {
             self.last_system_dark_mode = is_dark;
-            self.theme_state.current_config = self.get_theme_config(is_dark);
+            self.theme_state.current_config = self.get_theme_config();
         }
 
         // Theme editor panel
@@ -956,16 +952,6 @@ impl eframe::App for InstallerApp {
         if is_busy {
             ctx.request_repaint();
         }
-
-        // Show modal dialogs for confirmation or status
-        let show_modal = matches!(
-            self.state,
-            AppState::AwaitingConfirmation
-                | AppState::Complete
-                | AppState::Ejecting
-                | AppState::Ejected
-                | AppState::Error
-        );
 
         if show_modal {
             // Background Dimmer
@@ -1382,7 +1368,7 @@ impl eframe::App for InstallerApp {
 
                                 ui.add(
                                     egui::ProgressBar::new(progress)
-                                        .fill(ui.visuals().selection.bg_fill).desired_height(6.0).desired_width(ui.available_width() / 2.0)
+                                        .fill(ui.visuals().selection.bg_fill).desired_height(12.0).desired_width(ui.available_width() / 2.0)
                                 );
                             }
                         });
@@ -1408,7 +1394,10 @@ impl eframe::App for InstallerApp {
                         
                         if !is_busy {
                             ui.add_enabled_ui(!is_busy && self.selected_drive_idx.is_some() && !self.drives.is_empty(), |ui| {
-                                if ui.button("Install").clicked() {
+                                let button = egui::Button::new("Install")
+                                    .min_size(egui::vec2(107.0, 53.0))
+                                    .fill(egui::Color32::from_rgb(104, 157, 106)); // Green
+                                if ui.add(button).clicked() {
                                     self.state = AppState::AwaitingConfirmation;
                                 }
                             });
@@ -1425,7 +1414,10 @@ impl eframe::App for InstallerApp {
                         ) && self.cancel_token.is_some();
 
                         if can_cancel {
-                            if ui.button("Cancel").clicked() {
+                            let button = egui::Button::new("Cancel")
+                                .min_size(egui::vec2(107.0, 53.0))
+                                .fill(egui::Color32::from_rgb(251, 73, 52)); // Red
+                            if ui.add(button).clicked() {
                                 self.cancel_installation();
                             }
                         }
