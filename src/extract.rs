@@ -14,8 +14,17 @@ use std::os::windows::process::CommandExt;
 #[cfg(target_os = "windows")]
 const SEVEN_ZIP_EXE: &[u8] = include_bytes!("../assets/Windows/7zr.exe");
 
-#[cfg(target_os = "linux")]
-const SEVEN_ZIP_EXE: &[u8] = include_bytes!("../assets/Linux/7zzs");
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+const SEVEN_ZIP_EXE: &[u8] = include_bytes!("../assets/Linux-x86_64/7zzs");
+
+#[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+const SEVEN_ZIP_EXE: &[u8] = include_bytes!("../assets/Linux-aarch64/7zzs");
+
+#[cfg(all(target_os = "linux", target_arch = "x86"))]
+const SEVEN_ZIP_EXE: &[u8] = include_bytes!("../assets/Linux-i686/7zzs");
+
+#[cfg(all(target_os = "linux", target_arch = "arm"))]
+const SEVEN_ZIP_EXE: &[u8] = include_bytes!("../assets/Linux-armv7/7zzs");
 
 #[cfg(target_os = "macos")]
 const SEVEN_ZIP_EXE: &[u8] = include_bytes!("../assets/Mac/7zz");
