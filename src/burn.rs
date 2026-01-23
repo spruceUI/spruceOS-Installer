@@ -256,7 +256,8 @@ async fn burn_image_windows(
                 .collect();
 
             // Open the physical drive for writing
-            // Use FILE_FLAG_WRITE_THROUGH to ensure data is written directly to disk
+            // Use FILE_FLAG_WRITE_THROUGH and FILE_FLAG_NO_BUFFERING for direct disk access
+            // NO_BUFFERING requires sector-aligned writes, which we now guarantee
             let handle = unsafe {
                 CreateFileW(
                     windows::core::PCWSTR(device_path_wide.as_ptr()),
@@ -264,7 +265,7 @@ async fn burn_image_windows(
                     FILE_SHARE_READ | FILE_SHARE_WRITE,
                     None,
                     OPEN_EXISTING,
-                    FILE_FLAG_WRITE_THROUGH,
+                    FILE_FLAG_WRITE_THROUGH | FILE_FLAG_NO_BUFFERING,
                     None,
                 )
             };
@@ -274,28 +275,7 @@ async fn burn_image_windows(
             }
 
             let handle = handle.unwrap();
-
-            // Lock the volume
-            let mut bytes_returned: u32 = 0;
-            unsafe {
-                let lock_result = DeviceIoControl(
-                    handle,
-                    FSCTL_LOCK_VOLUME,
-                    None,
-                    0,
-                    None,
-                    0,
-                    Some(&mut bytes_returned),
-                    None,
-                );
-
-                if lock_result.is_err() {
-                    let _ = CloseHandle(handle);
-                    return Err("Failed to lock volume for exclusive access".to_string());
-                }
-            }
-
-            crate::debug::log("Volume locked, beginning write...");
+            crate::debug::log("Physical drive opened successfully, beginning write...");
 
             // Check if file is gzipped and create appropriate reader
             let is_gzipped = image_path.extension()
@@ -327,16 +307,6 @@ async fn burn_image_windows(
                 if cancel_token.is_cancelled() {
                     crate::debug::log("Burn cancelled by user");
                     unsafe {
-                        let _ = DeviceIoControl(
-                            handle,
-                            FSCTL_UNLOCK_VOLUME,
-                            None,
-                            0,
-                            None,
-                            0,
-                            Some(&mut bytes_returned),
-                            None,
-                        );
                         let _ = CloseHandle(handle);
                     }
                     return Err("Burn cancelled".to_string());
@@ -431,22 +401,12 @@ async fn burn_image_windows(
 
             crate::debug::log(&format!("Write complete: {} bytes written", total_written));
 
-            // Unlock and close
+            // Close the handle
             unsafe {
-                let _ = DeviceIoControl(
-                    handle,
-                    FSCTL_UNLOCK_VOLUME,
-                    None,
-                    0,
-                    None,
-                    0,
-                    Some(&mut bytes_returned),
-                    None,
-                );
                 let _ = CloseHandle(handle);
             }
 
-            crate::debug::log("Device unlocked and closed");
+            crate::debug::log("Device closed");
             Ok(total_written)
         }
     })
