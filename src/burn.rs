@@ -789,7 +789,7 @@ async fn verify_image(
     device_path: &str,
     #[allow(unused_variables)] image_size: u64,
     progress_tx: &UnboundedSender<BurnProgress>,
-    _cancel_token: &CancellationToken,
+    cancel_token: &CancellationToken,
 ) -> Result<(), String> {
     crate::debug::log("Computing image hash...");
 
@@ -847,8 +847,8 @@ async fn verify_image(
     // Read back device and compute hash
     let device_hash = tokio::task::spawn_blocking({
         let device_path = device_path.to_string();
-        let _progress_tx = progress_tx.clone();
-        let _cancel_token = cancel_token.clone();
+        let progress_tx = progress_tx.clone();
+        let cancel_token = cancel_token.clone();
 
         move || -> Result<String, String> {
             #[cfg(any(target_os = "linux", target_os = "macos"))]
