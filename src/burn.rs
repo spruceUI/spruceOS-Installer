@@ -316,7 +316,11 @@ async fn burn_image_windows(
                 Box::new(file)
             };
 
-            let mut buffer = vec![0u8; CHUNK_SIZE];
+            // Windows requires 512-byte sector-aligned writes for physical drives
+            const SECTOR_SIZE: usize = 512;
+            let mut read_buffer = vec![0u8; CHUNK_SIZE];
+            let mut sector_buffer = vec![0u8; CHUNK_SIZE + SECTOR_SIZE]; // Extra space for alignment
+            let mut sector_buffer_pos = 0usize;
             let mut total_written = 0u64;
 
             loop {
@@ -338,43 +342,86 @@ async fn burn_image_windows(
                     return Err("Burn cancelled".to_string());
                 }
 
-                let bytes_read = image_reader.read(&mut buffer)
+                // Read from image into read_buffer
+                let bytes_read = image_reader.read(&mut read_buffer)
                     .map_err(|e| {
                         unsafe { let _ = CloseHandle(handle); }
                         format!("Failed to read from image: {}", e)
                     })?;
 
                 if bytes_read == 0 {
-                    break; // EOF
+                    // EOF - handle any remaining partial sector
+                    if sector_buffer_pos > 0 {
+                        // Pad to sector boundary with zeros
+                        let padded_size = ((sector_buffer_pos + SECTOR_SIZE - 1) / SECTOR_SIZE) * SECTOR_SIZE;
+                        sector_buffer[sector_buffer_pos..padded_size].fill(0);
+
+                        crate::debug::log(&format!("Writing final sector: {} bytes (padded from {})", padded_size, sector_buffer_pos));
+
+                        let mut bytes_written = 0u32;
+                        unsafe {
+                            let write_result = WriteFile(
+                                handle,
+                                Some(&sector_buffer[..padded_size]),
+                                Some(&mut bytes_written),
+                                None,
+                            );
+
+                            if write_result.is_err() {
+                                let err = windows::core::Error::from_win32();
+                                let _ = CloseHandle(handle);
+                                return Err(format!("Failed to write final sector at offset {}: {:?}", total_written, err));
+                            }
+                        }
+
+                        total_written += sector_buffer_pos as u64; // Count only actual data, not padding
+                    }
+                    break;
                 }
 
-                let mut bytes_written = 0u32;
-                unsafe {
-                    let write_result = WriteFile(
-                        handle,
-                        Some(&buffer[..bytes_read]),
-                        Some(&mut bytes_written),
-                        None,
-                    );
+                // Append new data to sector buffer
+                sector_buffer[sector_buffer_pos..sector_buffer_pos + bytes_read]
+                    .copy_from_slice(&read_buffer[..bytes_read]);
+                sector_buffer_pos += bytes_read;
 
-                    if write_result.is_err() {
-                        let err = windows::core::Error::from_win32();
-                        let _ = CloseHandle(handle);
-                        return Err(format!("Failed to write to device at offset {}: {:?}", total_written, err));
+                // Write all complete sectors
+                let sectors_to_write = (sector_buffer_pos / SECTOR_SIZE) * SECTOR_SIZE;
+                if sectors_to_write > 0 {
+                    let mut bytes_written = 0u32;
+                    unsafe {
+                        let write_result = WriteFile(
+                            handle,
+                            Some(&sector_buffer[..sectors_to_write]),
+                            Some(&mut bytes_written),
+                            None,
+                        );
+
+                        if write_result.is_err() {
+                            let err = windows::core::Error::from_win32();
+                            let _ = CloseHandle(handle);
+                            return Err(format!("Failed to write to device at offset {}: {:?}", total_written, err));
+                        }
+
+                        if bytes_written as usize != sectors_to_write {
+                            let _ = CloseHandle(handle);
+                            return Err(format!("Incomplete write at offset {}: wrote {} of {} bytes",
+                                total_written, bytes_written, sectors_to_write));
+                        }
                     }
 
-                    if bytes_written as usize != bytes_read {
-                        let _ = CloseHandle(handle);
-                        return Err(format!("Incomplete write at offset {}: wrote {} of {} bytes",
-                            total_written, bytes_written, bytes_read));
+                    total_written += bytes_written as u64;
+                    let _ = progress_tx.send(BurnProgress::Writing {
+                        written: total_written,
+                        total: image_size,
+                    });
+
+                    // Move remaining partial sector to start of buffer
+                    let remaining = sector_buffer_pos - sectors_to_write;
+                    if remaining > 0 {
+                        sector_buffer.copy_within(sectors_to_write..sector_buffer_pos, 0);
                     }
+                    sector_buffer_pos = remaining;
                 }
-
-                total_written += bytes_written as u64;
-                let _ = progress_tx.send(BurnProgress::Writing {
-                    written: total_written,
-                    total: image_size,
-                });
             }
 
             // Flush buffers
