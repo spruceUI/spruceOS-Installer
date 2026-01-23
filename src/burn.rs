@@ -255,14 +255,15 @@ async fn burn_image_windows(
                 .chain(Some(0))
                 .collect();
 
-            // Open the physical drive for writing
+            // Open the physical drive for writing with exclusive access
             // Use FILE_FLAG_WRITE_THROUGH to ensure data is written directly
             // We maintain sector alignment for compatibility with Windows physical drive requirements
+            // Note: We use share mode 0 (no sharing) to get exclusive access
             let handle = unsafe {
                 CreateFileW(
                     windows::core::PCWSTR(device_path_wide.as_ptr()),
                     FILE_GENERIC_WRITE.0 | FILE_GENERIC_READ.0,
-                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    FILE_SHARE_MODE(0), // Exclusive access - no sharing
                     None,
                     OPEN_EXISTING,
                     FILE_FLAG_WRITE_THROUGH,
