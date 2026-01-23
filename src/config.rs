@@ -37,7 +37,7 @@ pub const VOLUME_LABEL: &str = "SPRUCEOS";
 // ----------------------------------------------------------------------------
 
 /// Window title (displayed in title bar)
-pub const WINDOW_TITLE: &str = concat!(env!("CARGO_PKG_NAME"), " Installer");
+pub const WINDOW_TITLE: &str = env!("CARGO_PKG_NAME");
 
 /// User-Agent string for HTTP requests to GitHub
 pub const USER_AGENT: &str = env!("CARGO_PKG_NAME");
