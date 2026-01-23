@@ -1602,7 +1602,7 @@ impl eframe::App for InstallerApp {
                                         if ui.add(egui::Button::selectable(
                                             self.selected_repo_idx == idx,
                                             *name,
-                                        )).clicked() {
+                                        ).frame_when_inactive(true)).clicked() {
                                             self.selected_repo_idx = idx;
                                         }
                                     });
