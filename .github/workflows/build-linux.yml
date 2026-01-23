@@ -23,6 +23,16 @@ jobs:
             artifact: spruceos-installer-linux-arm64
             build_cmd: cargo zigbuild --release --target aarch64-unknown-linux-gnu.2.17 --features icon
 
+          - arch: i686
+            target: i686-unknown-linux-gnu
+            artifact: spruceos-installer-linux-i686
+            build_cmd: cargo zigbuild --release --target i686-unknown-linux-gnu.2.17 --features icon
+
+          - arch: armv7
+            target: armv7-unknown-linux-gnueabihf
+            artifact: spruceos-installer-linux-armv7
+            build_cmd: cargo zigbuild --release --target armv7-unknown-linux-gnueabihf.2.17 --features icon
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,7 +49,7 @@ jobs:
 
       - name: Install cargo-zigbuild
         run: cargo install cargo-zigbuild
-  
+
       - name: Cache cargo + target
         uses: actions/cache@v4
         with:
