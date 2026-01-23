@@ -1,4 +1,6 @@
 ## To-Do
+- BUG: clicking anywhere but on the newly popped up button when the install finishes causes the window to go grey and uninteractable
+- info box that updates depending on which OS/branch you've selected, including supported devices and any nightly warnings
 - Merge twig flasher with rest of spruce version
 - Checkboxes for various additional packages:
     - all themes
