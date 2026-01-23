@@ -256,8 +256,8 @@ async fn burn_image_windows(
                 .collect();
 
             // Open the physical drive for writing
-            // Use FILE_FLAG_WRITE_THROUGH and FILE_FLAG_NO_BUFFERING for direct disk access
-            // NO_BUFFERING requires sector-aligned writes, which we now guarantee
+            // Use FILE_FLAG_WRITE_THROUGH to ensure data is written directly
+            // We maintain sector alignment for compatibility with Windows physical drive requirements
             let handle = unsafe {
                 CreateFileW(
                     windows::core::PCWSTR(device_path_wide.as_ptr()),
@@ -265,13 +265,14 @@ async fn burn_image_windows(
                     FILE_SHARE_READ | FILE_SHARE_WRITE,
                     None,
                     OPEN_EXISTING,
-                    FILE_FLAG_WRITE_THROUGH | FILE_FLAG_NO_BUFFERING,
+                    FILE_FLAG_WRITE_THROUGH,
                     None,
                 )
             };
 
             if handle.is_err() {
-                return Err(format!("Failed to open device for writing: {:?}", handle));
+                let err = unsafe { windows::core::Error::from_win32() };
+                return Err(format!("Failed to open device for writing: {:?}", err));
             }
 
             let handle = handle.unwrap();
