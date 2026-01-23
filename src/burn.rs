@@ -28,13 +28,53 @@ pub async fn burn_image(
     crate::debug::log(&format!("Image: {:?}", image_path));
     crate::debug::log(&format!("Device: {}", device_path));
 
-    // Get image size
-    let image_size = tokio::fs::metadata(image_path)
+    // Get image size - for .gz files, we need to determine decompressed size
+    let compressed_size = tokio::fs::metadata(image_path)
         .await
         .map_err(|e| format!("Failed to get image size: {}", e))?
         .len();
 
-    crate::debug::log(&format!("Image size: {} bytes ({:.2} GB)", image_size, image_size as f64 / 1_073_741_824.0));
+    // Check if file is gzipped
+    let is_gzipped = image_path.extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.eq_ignore_ascii_case("gz"))
+        .unwrap_or(false);
+
+    let image_size = if is_gzipped {
+        crate::debug::log(&format!("Compressed size: {} bytes ({:.2} GB)", compressed_size, compressed_size as f64 / 1_073_741_824.0));
+        crate::debug::log("Pre-scanning .gz file to determine decompressed size...");
+
+        // Determine decompressed size by reading through the file
+        let decompressed_size = tokio::task::spawn_blocking({
+            let image_path = image_path.to_path_buf();
+            move || -> Result<u64, String> {
+                use std::io::Read;
+                let file = std::fs::File::open(&image_path)
+                    .map_err(|e| format!("Failed to open image for size check: {}", e))?;
+                let mut decoder = GzDecoder::new(file);
+                let mut total = 0u64;
+                let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer for faster scanning
+
+                loop {
+                    let bytes_read = decoder.read(&mut buffer)
+                        .map_err(|e| format!("Failed to read compressed image: {}", e))?;
+                    if bytes_read == 0 {
+                        break;
+                    }
+                    total += bytes_read as u64;
+                }
+
+                Ok(total)
+            }
+        }).await
+        .map_err(|e| format!("Size scan task failed: {}", e))??;
+
+        crate::debug::log(&format!("Decompressed size: {} bytes ({:.2} GB)", decompressed_size, decompressed_size as f64 / 1_073_741_824.0));
+        decompressed_size
+    } else {
+        crate::debug::log(&format!("Image size: {} bytes ({:.2} GB)", compressed_size, compressed_size as f64 / 1_073_741_824.0));
+        compressed_size
+    };
 
     let _ = progress_tx.send(BurnProgress::Started { total_bytes: image_size });
 
@@ -364,7 +404,7 @@ async fn burn_image_windows(
             Ok(total_written)
         }
     }).await
-    .map_err(|e| format!("Write task failed: {}", e))?
+    .map_err(|e| format!("Write task failed: {}", e))??
 }
 
 // =============================================================================
@@ -486,7 +526,7 @@ async fn burn_image_linux(
             Ok(total_written)
         }
     }).await
-    .map_err(|e| format!("Write task failed: {}", e))?
+    .map_err(|e| format!("Write task failed: {}", e))??
 }
 
 // =============================================================================
@@ -598,7 +638,7 @@ async fn burn_image_macos(
             Ok(total_written)
         }
     }).await
-    .map_err(|e| format!("Write task failed: {}", e))?
+    .map_err(|e| format!("Write task failed: {}", e))??
 }
 
 // =============================================================================
