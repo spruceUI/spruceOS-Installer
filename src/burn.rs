@@ -3,7 +3,6 @@ use std::path::Path;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
 use flate2::read::GzDecoder;
-use std::io::Read;
 
 const CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4MB chunks
 
@@ -244,7 +243,7 @@ async fn burn_image_windows(
         let progress_tx = progress_tx.clone();
         let cancel_token = cancel_token.clone();
 
-        move || -> Result<(), String> {
+        move || -> Result<u64, String> {
             use windows::Win32::Foundation::*;
             use windows::Win32::Storage::FileSystem::*;
             use windows::Win32::System::IO::*;
@@ -458,7 +457,7 @@ async fn burn_image_linux(
     cancel_token: &CancellationToken,
 ) -> Result<u64, String> {
     use std::os::unix::fs::OpenOptionsExt;
-    use std::io::{Read, Write, Seek};
+    use std::io::{Read, Write};
 
     crate::debug::log(&format!("Opening device: {}", device_path));
 
@@ -468,7 +467,7 @@ async fn burn_image_linux(
         let progress_tx = progress_tx.clone();
         let cancel_token = cancel_token.clone();
 
-        move || -> Result<(), String> {
+        move || -> Result<u64, String> {
             // Open device with O_WRONLY | O_SYNC | O_DIRECT flags
             let mut device = std::fs::OpenOptions::new()
                 .write(true)
@@ -581,7 +580,7 @@ async fn burn_image_macos(
         let progress_tx = progress_tx.clone();
         let cancel_token = cancel_token.clone();
 
-        move || -> Result<(), String> {
+        move || -> Result<u64, String> {
             let mut device = std::fs::OpenOptions::new()
                 .write(true)
                 .custom_flags(libc::O_SYNC)
