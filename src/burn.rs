@@ -205,7 +205,7 @@ async fn burn_image_windows(
                         // Open the volume to check which physical drive it belongs to
                         let check_handle = CreateFileW(
                             windows::core::PCWSTR(volume_path.as_ptr()),
-                            GENERIC_READ,
+                            GENERIC_READ.0,
                             FILE_SHARE_READ | FILE_SHARE_WRITE,
                             None,
                             OPEN_EXISTING,
