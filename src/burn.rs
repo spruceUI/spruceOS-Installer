@@ -42,6 +42,7 @@ pub async fn burn_image(
     unmount_device(device_path).await?;
 
     // Platform-specific burn implementation
+    // Returns the actual number of bytes written (decompressed size)
     #[cfg(target_os = "windows")]
     let result = burn_image_windows(image_path, device_path, image_size, &progress_tx, &cancel_token).await;
 
@@ -52,11 +53,12 @@ pub async fn burn_image(
     let result = burn_image_macos(image_path, device_path, image_size, &progress_tx, &cancel_token).await;
 
     match result {
-        Ok(_) => {
+        Ok(actual_bytes_written) => {
             crate::debug::log("Image write completed, starting verification...");
+            crate::debug::log(&format!("Actual bytes written: {} ({:.2} GB)", actual_bytes_written, actual_bytes_written as f64 / 1_073_741_824.0));
 
-            // Verify the written image
-            verify_image(image_path, device_path, image_size, &progress_tx, &cancel_token).await?;
+            // Verify the written image using the actual decompressed size
+            verify_image(image_path, device_path, actual_bytes_written, &progress_tx, &cancel_token).await?;
 
             let _ = progress_tx.send(BurnProgress::Completed);
             crate::debug::log("Image burn and verification complete");
@@ -189,7 +191,7 @@ async fn burn_image_windows(
     image_size: u64,
     progress_tx: &UnboundedSender<BurnProgress>,
     cancel_token: &CancellationToken,
-) -> Result<(), String> {
+) -> Result<u64, String> {
     use std::os::windows::ffi::OsStrExt;
 
     // Device path should already be in \\.\PhysicalDriveN format from drives.rs
@@ -374,12 +376,10 @@ async fn burn_image_windows(
             }
 
             crate::debug::log("Device unlocked and closed");
-            Ok(())
+            Ok(total_written)
         }
     }).await
-    .map_err(|e| format!("Write task failed: {}", e))??;
-
-    Ok(())
+    .map_err(|e| format!("Write task failed: {}", e))?
 }
 
 // =============================================================================
@@ -431,7 +431,7 @@ async fn burn_image_linux(
     image_size: u64,
     progress_tx: &UnboundedSender<BurnProgress>,
     cancel_token: &CancellationToken,
-) -> Result<(), String> {
+) -> Result<u64, String> {
     use std::os::unix::fs::OpenOptionsExt;
     use std::io::{Read, Write, Seek};
 
@@ -498,12 +498,10 @@ async fn burn_image_linux(
                 .map_err(|e| format!("Failed to sync device: {}", e))?;
 
             crate::debug::log(&format!("Write complete: {} bytes written", total_written));
-            Ok(())
+            Ok(total_written)
         }
     }).await
-    .map_err(|e| format!("Write task failed: {}", e))??;
-
-    Ok(())
+    .map_err(|e| format!("Write task failed: {}", e))?
 }
 
 // =============================================================================
@@ -544,7 +542,7 @@ async fn burn_image_macos(
     image_size: u64,
     progress_tx: &UnboundedSender<BurnProgress>,
     cancel_token: &CancellationToken,
-) -> Result<(), String> {
+) -> Result<u64, String> {
     use std::os::unix::fs::OpenOptionsExt;
     use std::io::{Read, Write};
 
@@ -612,12 +610,10 @@ async fn burn_image_macos(
                 .map_err(|e| format!("Failed to sync device: {}", e))?;
 
             crate::debug::log(&format!("Write complete: {} bytes written", total_written));
-            Ok(())
+            Ok(total_written)
         }
     }).await
-    .map_err(|e| format!("Write task failed: {}", e))??;
-
-    Ok(())
+    .map_err(|e| format!("Write task failed: {}", e))?
 }
 
 // =============================================================================
