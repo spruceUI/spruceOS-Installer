@@ -256,12 +256,9 @@ async fn burn_image_windows(
                 .collect();
 
             // Open the physical drive for writing with exclusive access
-            // FILE_FLAG_NO_BUFFERING: Bypasses OS cache, requires sector-aligned writes (which we guarantee)
             // FILE_FLAG_WRITE_THROUGH: Ensures data is physically written before returning
             // FILE_SHARE_MODE(0): Exclusive access - no sharing allowed
-            const FILE_FLAG_NO_BUFFERING: FILE_FLAGS_AND_ATTRIBUTES = FILE_FLAGS_AND_ATTRIBUTES(0x20000000);
-            const FILE_ATTRIBUTE_NORMAL_VAL: FILE_FLAGS_AND_ATTRIBUTES = FILE_FLAGS_AND_ATTRIBUTES(0x80);
-
+            // Note: Not using FILE_FLAG_NO_BUFFERING for now to avoid parameter errors
             let handle = unsafe {
                 CreateFileW(
                     windows::core::PCWSTR(device_path_wide.as_ptr()),
@@ -269,7 +266,7 @@ async fn burn_image_windows(
                     FILE_SHARE_MODE(0), // Exclusive access - no sharing
                     None,
                     OPEN_EXISTING,
-                    FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH | FILE_ATTRIBUTE_NORMAL_VAL,
+                    FILE_FLAG_WRITE_THROUGH,
                     None,
                 )
             };
