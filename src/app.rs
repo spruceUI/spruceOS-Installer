@@ -290,6 +290,8 @@ impl InstallerApp {
             self.log("Cancelling installation...");
             token.cancel();
             self.state = AppState::Cancelling;
+            // Clear the cancel token so we don't try to cancel again
+            self.cancel_token = None;
         }
     }
 
@@ -1256,7 +1258,8 @@ impl eframe::App for InstallerApp {
                 .fixed_pos(egui::pos2(0.0, 0.0))
                 .show(ctx, |ui| {
                     let screen_rect = ui.ctx().content_rect();
-                    ui.allocate_rect(screen_rect, egui::Sense::click()); // Block clicks
+                    let response = ui.allocate_rect(screen_rect, egui::Sense::click());
+                    response.clicked(); // Consume the click event to prevent UI from becoming unresponsive
                     ui.painter()
                         .rect_filled(screen_rect, 0.0, egui::Color32::from_black_alpha(140));
                 });
