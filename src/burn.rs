@@ -250,18 +250,18 @@ async fn burn_image_windows(
             use windows::Win32::System::Ioctl::*;
             use std::io::Read;
 
-            // FSCTL_ALLOW_EXTENDED_DASD_IO allows unfettered access to the disk
-            const FSCTL_ALLOW_EXTENDED_DASD_IO: u32 = 0x00090083;
-
             let device_path_wide: Vec<u16> = device_path
                 .encode_utf16()
                 .chain(Some(0))
                 .collect();
 
             // Open the physical drive for writing with exclusive access
-            // Use FILE_FLAG_WRITE_THROUGH to ensure data is written directly
-            // We maintain sector alignment for compatibility with Windows physical drive requirements
-            // Note: We use share mode 0 (no sharing) to get exclusive access
+            // FILE_FLAG_NO_BUFFERING: Bypasses OS cache, requires sector-aligned writes (which we guarantee)
+            // FILE_FLAG_WRITE_THROUGH: Ensures data is physically written before returning
+            // FILE_SHARE_MODE(0): Exclusive access - no sharing allowed
+            const FILE_FLAG_NO_BUFFERING: u32 = 0x20000000;
+            const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+
             let handle = unsafe {
                 CreateFileW(
                     windows::core::PCWSTR(device_path_wide.as_ptr()),
@@ -269,7 +269,7 @@ async fn burn_image_windows(
                     FILE_SHARE_MODE(0), // Exclusive access - no sharing
                     None,
                     OPEN_EXISTING,
-                    FILE_FLAG_WRITE_THROUGH,
+                    FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH | FILE_ATTRIBUTE_NORMAL,
                     None,
                 )
             };
@@ -280,30 +280,55 @@ async fn burn_image_windows(
             }
 
             let handle = handle.unwrap();
+            crate::debug::log("Physical drive opened successfully");
 
-            // Enable extended DASD I/O to allow writing beyond mounted volumes
-            // This prevents Windows from interfering when it detects new partitions
-            let mut bytes_returned: u32 = 0;
+            // CRITICAL: Wipe the first 1MB of the disk to clear partition tables
+            // This prevents Windows from auto-mounting partitions as we write them,
+            // which would cause access denied errors partway through the burn
+            const WIPE_SIZE: usize = 1 * 1024 * 1024; // 1 MB
+            const SECTOR_SIZE: usize = 512;
+            let wipe_size_aligned = ((WIPE_SIZE + SECTOR_SIZE - 1) / SECTOR_SIZE) * SECTOR_SIZE;
+            let wipe_buffer = vec![0u8; wipe_size_aligned];
+
+            crate::debug::log(&format!("Wiping first {} bytes to clear partition table...", wipe_size_aligned));
+
+            let mut bytes_written = 0u32;
             unsafe {
-                let dasd_result = DeviceIoControl(
+                let wipe_result = WriteFile(
                     handle,
-                    FSCTL_ALLOW_EXTENDED_DASD_IO,
-                    None,
-                    0,
-                    None,
-                    0,
-                    Some(&mut bytes_returned),
+                    Some(&wipe_buffer),
+                    Some(&mut bytes_written),
                     None,
                 );
 
-                if dasd_result.is_ok() {
-                    crate::debug::log("Extended DASD I/O enabled");
-                } else {
-                    crate::debug::log("Warning: Could not enable extended DASD I/O (may not be critical)");
+                if wipe_result.is_err() || bytes_written as usize != wipe_size_aligned {
+                    let err = windows::core::Error::from_win32();
+                    let _ = CloseHandle(handle);
+                    return Err(format!("Failed to wipe partition table: {:?}", err));
                 }
             }
 
-            crate::debug::log("Physical drive opened successfully, beginning write...");
+            crate::debug::log(&format!("Partition table wiped ({} bytes), resetting file pointer...", bytes_written));
+
+            // Reset file pointer to the beginning of the disk
+            unsafe {
+                use windows::Win32::Storage::FileSystem::SetFilePointerEx;
+                use windows::Win32::Storage::FileSystem::FILE_BEGIN;
+
+                let seek_result = SetFilePointerEx(
+                    handle,
+                    0,
+                    None,
+                    FILE_BEGIN,
+                );
+
+                if seek_result.is_err() {
+                    let _ = CloseHandle(handle);
+                    return Err("Failed to reset file pointer after wipe".to_string());
+                }
+            }
+
+            crate::debug::log("File pointer reset, beginning image write...");
 
             // Check if file is gzipped and create appropriate reader
             let is_gzipped = image_path.extension()
@@ -324,10 +349,12 @@ async fn burn_image_windows(
                 Box::new(file)
             };
 
-            // Windows requires 512-byte sector-aligned writes for physical drives
-            const SECTOR_SIZE: usize = 512;
+            // Windows requires 512-byte sector-aligned writes for physical drives (SECTOR_SIZE already defined above)
+            // Allocate buffers: read buffer for decompression, sector buffer for aligned writes
             let mut read_buffer = vec![0u8; CHUNK_SIZE];
-            let mut sector_buffer = vec![0u8; CHUNK_SIZE + SECTOR_SIZE]; // Extra space for alignment
+            // Sector buffer must hold at least CHUNK_SIZE rounded up to next sector boundary
+            let sector_buffer_size = ((CHUNK_SIZE + SECTOR_SIZE - 1) / SECTOR_SIZE) * SECTOR_SIZE + SECTOR_SIZE;
+            let mut sector_buffer = vec![0u8; sector_buffer_size];
             let mut sector_buffer_pos = 0usize;
             let mut total_written = 0u64;
 
