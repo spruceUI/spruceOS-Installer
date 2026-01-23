@@ -259,8 +259,8 @@ async fn burn_image_windows(
             // FILE_FLAG_NO_BUFFERING: Bypasses OS cache, requires sector-aligned writes (which we guarantee)
             // FILE_FLAG_WRITE_THROUGH: Ensures data is physically written before returning
             // FILE_SHARE_MODE(0): Exclusive access - no sharing allowed
-            const FILE_FLAG_NO_BUFFERING: u32 = 0x20000000;
-            const FILE_ATTRIBUTE_NORMAL: u32 = 0x80;
+            const FILE_FLAG_NO_BUFFERING: FILE_FLAGS_AND_ATTRIBUTES = FILE_FLAGS_AND_ATTRIBUTES(0x20000000);
+            const FILE_ATTRIBUTE_NORMAL_VAL: FILE_FLAGS_AND_ATTRIBUTES = FILE_FLAGS_AND_ATTRIBUTES(0x80);
 
             let handle = unsafe {
                 CreateFileW(
@@ -269,7 +269,7 @@ async fn burn_image_windows(
                     FILE_SHARE_MODE(0), // Exclusive access - no sharing
                     None,
                     OPEN_EXISTING,
-                    FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH | FILE_ATTRIBUTE_NORMAL,
+                    FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH | FILE_ATTRIBUTE_NORMAL_VAL,
                     None,
                 )
             };
