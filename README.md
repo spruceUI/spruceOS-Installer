@@ -1,6 +1,7 @@
 ## To-Do
 - BUG: clicking anywhere but on the newly popped up button when the install finishes causes the window to go grey and uninteractable
 - info box that updates depending on which OS/branch you've selected, including supported devices and any nightly warnings
+- File name sorting function? like be able to pick specific downloads from the same release. Example: 3326CLONE.uOS.img.gz vs 3655BSP.uOS.img.gz etc
 - Merge twig flasher with rest of spruce version
 - Checkboxes for various additional packages:
     - all themes
