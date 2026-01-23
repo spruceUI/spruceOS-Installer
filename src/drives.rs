@@ -36,14 +36,79 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
     use windows::Win32::Storage::FileSystem::{
         GetDiskFreeSpaceExW, GetDriveTypeW, GetLogicalDrives, GetVolumeInformationW,
     };
+    use windows::Win32::System::Ioctl::{IOCTL_STORAGE_GET_DEVICE_NUMBER};
+    use windows::Win32::Storage::FileSystem::{CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING};
+    use windows::Win32::System::IO::DeviceIoControl;
+    use windows::Win32::Foundation::{GENERIC_READ, CloseHandle};
 
     const DRIVE_REMOVABLE: u32 = 2;
+
+    #[repr(C)]
+    struct STORAGE_DEVICE_NUMBER {
+        device_type: u32,
+        device_number: u32,
+        partition_number: u32,
+    }
 
     crate::debug::log_section("Windows Drive Detection");
 
     let mut drives = Vec::new();
     let drive_bits = unsafe { GetLogicalDrives() };
     crate::debug::log(&format!("Drive bitmask: 0x{:08X}", drive_bits));
+
+    // Helper function to get physical drive number from logical drive letter
+    let get_physical_drive_number = |letter: char| -> Option<u32> {
+        let volume_path: Vec<u16> = format!("\\\\.\\{}:", letter)
+            .encode_utf16()
+            .chain(Some(0))
+            .collect();
+
+        unsafe {
+            let handle = CreateFileW(
+                windows::core::PCWSTR(volume_path.as_ptr()),
+                GENERIC_READ.0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                None,
+                OPEN_EXISTING,
+                Default::default(),
+                None,
+            );
+
+            if handle.is_err() {
+                crate::debug::log(&format!("  Failed to open volume {}:", letter));
+                return None;
+            }
+
+            let handle = handle.unwrap();
+            let mut device_number = STORAGE_DEVICE_NUMBER {
+                device_type: 0,
+                device_number: 0,
+                partition_number: 0,
+            };
+            let mut bytes_returned: u32 = 0;
+
+            let result = DeviceIoControl(
+                handle,
+                IOCTL_STORAGE_GET_DEVICE_NUMBER,
+                None,
+                0,
+                Some(&mut device_number as *mut _ as *mut _),
+                std::mem::size_of::<STORAGE_DEVICE_NUMBER>() as u32,
+                Some(&mut bytes_returned),
+                None,
+            );
+
+            let _ = CloseHandle(handle);
+
+            if result.is_ok() {
+                crate::debug::log(&format!("  Physical drive number: {}", device_number.device_number));
+                Some(device_number.device_number)
+            } else {
+                crate::debug::log("  Failed to get device number");
+                None
+            }
+        }
+    };
 
     for i in 0..26u8 {
         if (drive_bits >> i) & 1 == 1 {
@@ -95,14 +160,24 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
                     );
                 }
 
+                // Get physical drive number for burning
+                let physical_drive_num = get_physical_drive_number(letter);
+                let device_path = if let Some(num) = physical_drive_num {
+                    format!("\\\\.\\PhysicalDrive{}", num)
+                } else {
+                    // Fallback to logical drive if we can't get physical drive number
+                    crate::debug::log(&format!("  WARNING: Could not determine physical drive number for {}:", letter));
+                    format!("{}:", letter)
+                };
+
                 crate::debug::log(&format!(
-                    "  ACCEPTED: {}: label='{}' size={} bytes",
-                    letter, label, total_bytes
+                    "  ACCEPTED: {}: label='{}' size={} bytes device_path='{}'",
+                    letter, label, total_bytes, device_path
                 ));
 
                 drives.push(DriveInfo {
                     name: format!("{}:", letter),
-                    device_path: format!("{}:", letter),
+                    device_path,
                     mount_path: Some(PathBuf::from(format!("{}:\\", letter))),
                     label,
                     size_bytes: total_bytes,

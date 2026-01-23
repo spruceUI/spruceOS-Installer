@@ -27,6 +27,8 @@ tempfile = "3"
 image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
 lazy_static = "1.4"
 libc = "0.2"
+sha2 = "0.10"
+flate2 = "1.0"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [

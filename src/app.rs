@@ -1,6 +1,7 @@
 use crate::config::{
-    setup_theme, ASSET_EXTENSION, REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL, DEFAULT_REPO_INDEX,
+    setup_theme, REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL, DEFAULT_REPO_INDEX,
 };
+use crate::burn::{burn_image, BurnProgress};
 use crate::copy::{copy_directory_with_progress, CopyProgress};
 use crate::drives::{get_removable_drives, DriveInfo};
 use crate::eject::eject_drive;
@@ -24,6 +25,8 @@ enum AppState {
     Formatting,
     Extracting,
     Copying,
+    Burning,
+    Verifying,
     Complete,
     Ejecting,
     Ejected,
@@ -397,8 +400,8 @@ impl InstallerApp {
             let asset = match find_release_asset(&release) {
                 Some(a) => a,
                 None => {
-                    log(&format!("Error: No {} file found in release", ASSET_EXTENSION));
-                    crate::debug::log(&format!("ERROR: No {} asset found in release", ASSET_EXTENSION));
+                    log("Error: No compatible file found in release (.7z, .zip, .img.gz, .img)");
+                    crate::debug::log("ERROR: No supported asset found in release");
                     let _ = state_tx_clone.send(AppState::Error);
                     let _ = drive_poll_tx_clone.send(true);
                     return;
@@ -499,7 +502,21 @@ impl InstallerApp {
 
             log(&format!("Disk space check passed: {} MB available", available_space / 1_048_576));
 
-            // Step 2: Format drive (do this first so we fail fast if the card has issues)
+            // Detect installation mode: raw image vs archive
+            let is_raw_image = asset.name.ends_with(".img.gz") ||
+                               asset.name.ends_with(".img.xz") ||
+                               asset.name.ends_with(".img");
+
+            if is_raw_image {
+                crate::debug::log("Detected RAW IMAGE mode - will burn image to device");
+                log("Note: Raw image mode - this will erase the entire drive");
+            } else {
+                crate::debug::log("Detected ARCHIVE mode - will format, extract, and copy files");
+            }
+
+            // Step 2: Format drive (only for archive mode - skip for raw images)
+            if !is_raw_image {
+                // Format drive (do this first so we fail fast if the card has issues)
             let _ = state_tx_clone.send(AppState::Formatting);
             log(&format!("Formatting {}...", drive.name));
             crate::debug::log_section("Formatting Drive");
@@ -553,7 +570,14 @@ impl InstallerApp {
                 }
             });
 
-            if let Err(e) = format_drive_fat32(&drive.device_path, &volume_label, fmt_tx, cancel_token_clone.clone()).await {
+            // On Windows, format function expects drive letter (e.g., "E:"), not physical drive path
+            // On other platforms, device_path is correct (e.g., "/dev/sdb")
+            #[cfg(target_os = "windows")]
+            let format_path = &drive.name;
+            #[cfg(not(target_os = "windows"))]
+            let format_path = &drive.device_path;
+
+            if let Err(e) = format_drive_fat32(format_path, &volume_label, fmt_tx, cancel_token_clone.clone()).await {
                 if e.contains("cancelled") {
                     log("Format cancelled");
                     let _ = state_tx_clone.send(AppState::Idle);
@@ -566,44 +590,55 @@ impl InstallerApp {
                 return;
             }
 
-            let _ = fmt_handle.await;
-            log("Format complete");
-            crate::debug::log("Format complete");
+                let _ = fmt_handle.await;
+                log("Format complete");
+                crate::debug::log("Format complete");
+            } // End of format block for archive mode
 
-            // Get the destination path for extraction (platform-specific)
-            crate::debug::log("Getting mount path after format...");
-            let dest_path = match get_mount_path_after_format(&drive, &volume_label).await {
-                Ok(path) => path,
-                Err(e) => {
-                    log(&format!("Error getting mount path: {}", e));
-                    crate::debug::log(&format!("ERROR getting mount path: {}", e));
-                    let _ = state_tx_clone.send(AppState::Error);
-                    let _ = drive_poll_tx_clone.send(true);
-                    return;
+            // Get the destination path for extraction (only for archive mode)
+            // For image mode, we don't need this until after burning
+            let dest_path = if !is_raw_image {
+                crate::debug::log("Getting mount path after format...");
+                match get_mount_path_after_format(&drive, &volume_label).await {
+                    Ok(path) => {
+                        log(&format!("Destination: {}", path.display()));
+                        crate::debug::log(&format!("Mount path: {:?}", path));
+                        Some(path)
+                    }
+                    Err(e) => {
+                        log(&format!("Error getting mount path: {}", e));
+                        crate::debug::log(&format!("ERROR getting mount path: {}", e));
+                        let _ = state_tx_clone.send(AppState::Error);
+                        let _ = drive_poll_tx_clone.send(true);
+                        return;
+                    }
+                }
+            } else {
+                None // Image mode doesn't need mount path yet
+            };
+
+            // Create a log file on the SD card for debugging (only for archive mode)
+            let log_file_path = dest_path.as_ref().map(|p| p.join("install_log.txt"));
+            let write_card_log = move |msg: &str| {
+                if let Some(ref path) = log_file_path {
+                    use std::io::Write;
+                    if let Ok(mut file) = std::fs::OpenOptions::new()
+                        .create(true)
+                        .append(true)
+                        .open(path)
+                    {
+                        let timestamp = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .map(|d| d.as_secs())
+                            .unwrap_or(0);
+                        let _ = writeln!(file, "[{}] {}", timestamp, msg);
+                    }
                 }
             };
 
-            log(&format!("Destination: {}", dest_path.display()));
-            crate::debug::log(&format!("Mount path: {:?}", dest_path));
-
-            // Create a log file on the SD card for debugging
-            let log_file_path = dest_path.join("install_log.txt");
-            let write_card_log = |msg: &str| {
-                use std::io::Write;
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&log_file_path)
-                {
-                    let timestamp = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs())
-                        .unwrap_or(0);
-                    let _ = writeln!(file, "[{}] {}", timestamp, msg);
-                }
-            };
-
-            write_card_log("Format complete, starting download...");
+            if !is_raw_image {
+                write_card_log("Format complete, starting download...");
+            }
 
             // Step 3: Download
             let _ = state_tx_clone.send(AppState::Downloading);
@@ -680,7 +715,98 @@ impl InstallerApp {
             let _ = dl_handle.await;
             log("Download complete");
             crate::debug::log("Download complete");
-            write_card_log("Download complete, starting extraction...");
+
+            // ======================================================================
+            // BRANCHING POINT: Archive mode vs Raw Image mode
+            // ======================================================================
+
+            if is_raw_image {
+                // ===== RAW IMAGE MODE: Burn (with decompression) → Verify =====
+                crate::debug::log_section("Raw Image Mode");
+                write_card_log("Download complete, preparing to burn image...");
+
+                // Step 4: Burn image to device (burn.rs handles .gz decompression automatically)
+                let _ = state_tx_clone.send(AppState::Burning);
+                log(&format!("Burning image to {}...", drive.name));
+                crate::debug::log_section("Burning Image");
+                crate::debug::log(&format!("Device: {}", drive.device_path));
+
+                let (burn_tx, mut burn_rx) = mpsc::unbounded_channel::<BurnProgress>();
+                let progress_burn = progress.clone();
+                let ctx_burn = ctx_clone.clone();
+
+                // Spawn burn progress handler
+                let burn_handle = tokio::spawn(async move {
+                    while let Some(prog) = burn_rx.recv().await {
+                        if let Ok(mut p) = progress_burn.lock() {
+                            match prog {
+                                BurnProgress::Started { total_bytes } => {
+                                    p.total = total_bytes;
+                                    p.current = 0;
+                                    p.message = "Starting burn...".to_string();
+                                }
+                                BurnProgress::Writing { written, total } => {
+                                    p.current = written;
+                                    p.total = total;
+                                    let pct = (written as f64 / total as f64 * 100.0) as u32;
+                                    let mb_written = written / 1_048_576;
+                                    let mb_total = total / 1_048_576;
+                                    p.message = format!("Writing... {}% ({}/{} MB)", pct, mb_written, mb_total);
+                                }
+                                BurnProgress::Verifying { verified, total } => {
+                                    p.current = verified;
+                                    p.total = total;
+                                    let pct = (verified as f64 / total as f64 * 100.0) as u32;
+                                    p.message = format!("Verifying... {}%", pct);
+                                }
+                                BurnProgress::Completed => {
+                                    p.current = p.total;
+                                    p.message = "Burn complete".to_string();
+                                }
+                                BurnProgress::Cancelled => {
+                                    p.message = "Burn cancelled".to_string();
+                                }
+                                BurnProgress::Error(e) => {
+                                    p.message = format!("Burn error: {}", e);
+                                }
+                            }
+                        }
+                        ctx_burn.request_repaint();
+                    }
+                });
+
+                if let Err(e) = burn_image(&download_path, &drive.device_path, burn_tx, cancel_token_clone.clone()).await {
+                    if e.contains("cancelled") {
+                        log("Burn cancelled");
+                        let _ = tokio::fs::remove_file(&download_path).await;
+                        let _ = state_tx_clone.send(AppState::Idle);
+                        let _ = drive_poll_tx_clone.send(true);
+                        return;
+                    }
+                    log(&format!("Burn error: {}", e));
+                    let _ = tokio::fs::remove_file(&download_path).await;
+                    let _ = state_tx_clone.send(AppState::Error);
+                    let _ = drive_poll_tx_clone.send(true);
+                    return;
+                }
+
+                let _ = burn_handle.await;
+                log("Image burn and verification complete");
+                crate::debug::log("Image burn and verification complete");
+
+                // Clean up downloaded image
+                let _ = tokio::fs::remove_file(&download_path).await;
+                crate::debug::log("Cleaned up temp files");
+
+                log("Installation complete! You can now safely eject the drive.");
+                crate::debug::log("Installation complete!");
+                let _ = state_tx_clone.send(AppState::Complete);
+                let _ = drive_poll_tx_clone.send(true);
+
+            } else {
+                // ===== ARCHIVE MODE: Format → Extract → Copy =====
+                crate::debug::log_section("Archive Mode");
+                write_card_log("Download complete, starting extraction...");
 
             // Step 4: Extract to temp folder on local PC
             // On Linux, use the same temp_dir we already determined
@@ -837,12 +963,14 @@ impl InstallerApp {
                 }
             });
 
+            let dest_path_unwrapped = dest_path.as_ref().expect("dest_path should be Some in archive mode");
+
             write_card_log(&format!(
                 "Copying files: {:?} -> {:?}",
-                temp_extract_dir, dest_path
+                temp_extract_dir, dest_path_unwrapped
             ));
 
-            if let Err(e) = copy_directory_with_progress(&temp_extract_dir, &dest_path, copy_tx, cancel_token_clone.clone()).await {
+            if let Err(e) = copy_directory_with_progress(&temp_extract_dir, dest_path_unwrapped, copy_tx, cancel_token_clone.clone()).await {
                 if e.contains("cancelled") {
                     write_card_log("Copy cancelled");
                     log("Copy cancelled");
@@ -880,7 +1008,8 @@ impl InstallerApp {
             // Copy debug log to SD card
             log("Writing debug log to SD card...");
             crate::debug::log("Copying debug log to SD card...");
-            match crate::debug::copy_log_to(&dest_path) {
+            let dest_path_unwrapped = dest_path.expect("dest_path should be Some in archive mode");
+            match crate::debug::copy_log_to(&dest_path_unwrapped) {
                 Ok(log_path) => {
                     log(&format!("Debug log saved to: {}", log_path.display()));
                     crate::debug::log(&format!("Debug log copied to: {:?}", log_path));
@@ -891,11 +1020,12 @@ impl InstallerApp {
                 }
             }
 
-            log("Installation complete! You can now safely eject the SD card.");
-            write_card_log("Installation complete!");
-            crate::debug::log("Installation complete!");
-            let _ = state_tx_clone.send(AppState::Complete);
-            let _ = drive_poll_tx_clone.send(true);
+                log("Installation complete! You can now safely eject the SD card.");
+                write_card_log("Installation complete!");
+                crate::debug::log("Installation complete!");
+                let _ = state_tx_clone.send(AppState::Complete);
+                let _ = drive_poll_tx_clone.send(true);
+            } // End of archive mode
         });
 
         // Spawn a task to update state from the channel
@@ -912,6 +1042,8 @@ impl InstallerApp {
                         AppState::Formatting => "Formatting...".to_string(),
                         AppState::Extracting => "Extracting...".to_string(),
                         AppState::Copying => "Copying...".to_string(),
+                        AppState::Burning => "Burning image...".to_string(),
+                        AppState::Verifying => "Verifying...".to_string(),
                         AppState::Complete => "COMPLETE".to_string(),
                         AppState::Error => "ERROR".to_string(),
                         AppState::Idle => "CANCELLED".to_string(),
@@ -1477,7 +1609,7 @@ impl eframe::App for InstallerApp {
                                         if ui.add(egui::Button::selectable(
                                             self.selected_repo_idx == idx,
                                             *name,
-                                        )).clicked() {
+                                        ).frame_when_inactive(true)).clicked() {
                                             self.selected_repo_idx = idx;
                                         }
                                     });

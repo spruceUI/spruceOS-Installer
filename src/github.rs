@@ -1,4 +1,4 @@
-use crate::config::{ASSET_EXTENSION, USER_AGENT};
+use crate::config::USER_AGENT;
 use futures_util::StreamExt;
 use serde::Deserialize;
 use std::path::Path;
@@ -73,11 +73,41 @@ pub async fn get_latest_release(repo_url: &str) -> Result<Release, String> {
 }
 
 pub fn find_release_asset(release: &Release) -> Option<&Asset> {
-    // Find the largest file with the matching extension
-    // (handles cases where multiple files have the same extension)
-    release.assets.iter()
-        .filter(|a| a.name.ends_with(ASSET_EXTENSION))
-        .max_by_key(|a| a.size)
+    // Supported extensions for both archive and image modes
+    const SUPPORTED_EXTENSIONS: &[&str] = &[
+        ".7z",       // Archive mode
+        ".zip",      // Archive mode
+        ".img.gz",   // Image mode
+        ".img.xz",   // Image mode
+        ".img",      // Image mode
+    ];
+
+    // Filter function to exclude GitHub's auto-generated source code archives
+    let is_valid_asset = |asset: &&Asset| -> bool {
+        // GitHub automatically adds these to every release - ignore them
+        if asset.name.starts_with("Source code") {
+            return false;
+        }
+        // Also check for common source archive patterns
+        if asset.name == "source.zip" || asset.name == "source.tar.gz" {
+            return false;
+        }
+        true
+    };
+
+    // Find the largest file with any supported extension
+    // Priority: try to find archive first (for backward compatibility), then images
+    for ext in SUPPORTED_EXTENSIONS {
+        if let Some(asset) = release.assets.iter()
+            .filter(is_valid_asset)
+            .filter(|a| a.name.ends_with(ext))
+            .max_by_key(|a| a.size)
+        {
+            return Some(asset);
+        }
+    }
+
+    None
 }
 
 pub async fn download_asset(
