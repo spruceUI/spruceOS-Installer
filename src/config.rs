@@ -65,6 +65,7 @@ pub const DEFAULT_REPO_INDEX: usize = 0;
 /// - Archive mode: .7z, .zip (formats, extracts, and copies files)
 /// - Image mode: .img.gz, .img.xz, .img (burns raw image to device)
 /// This constant is kept for backward compatibility but is no longer used
+#[allow(dead_code)]
 pub const ASSET_EXTENSION: &str = ".7z";
 
 // ----------------------------------------------------------------------------

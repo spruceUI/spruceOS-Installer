@@ -10,8 +10,10 @@ const CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4MB chunks
 pub enum BurnProgress {
     Started { total_bytes: u64 },
     Writing { written: u64, total: u64 },
+    #[allow(dead_code)]
     Verifying { verified: u64, total: u64 },
     Completed,
+    #[allow(dead_code)]
     Cancelled,
     Error(String),
 }
@@ -152,8 +154,6 @@ async fn burn_image_windows(
     progress_tx: &UnboundedSender<BurnProgress>,
     cancel_token: &CancellationToken,
 ) -> Result<u64, String> {
-    use std::os::windows::ffi::OsStrExt;
-
     // Device path should already be in \\.\PhysicalDriveN format from drives.rs
     crate::debug::log(&format!("Opening physical drive: {}", device_path));
 
@@ -331,7 +331,7 @@ async fn burn_image_windows(
             };
 
             if handle.is_err() {
-                let err = unsafe { windows::core::Error::from_win32() };
+                let err = windows::core::Error::from_win32();
                 cleanup_volumes(&volume_handles);
                 return Err(format!("Failed to open device for writing: {:?}", err));
             }
@@ -787,9 +787,9 @@ async fn burn_image_macos(
 async fn verify_image(
     image_path: &Path,
     device_path: &str,
-    image_size: u64,
+    #[allow(unused_variables)] image_size: u64,
     progress_tx: &UnboundedSender<BurnProgress>,
-    cancel_token: &CancellationToken,
+    _cancel_token: &CancellationToken,
 ) -> Result<(), String> {
     crate::debug::log("Computing image hash...");
 
@@ -847,18 +847,17 @@ async fn verify_image(
     // Read back device and compute hash
     let device_hash = tokio::task::spawn_blocking({
         let device_path = device_path.to_string();
-        let progress_tx = progress_tx.clone();
-        let cancel_token = cancel_token.clone();
+        let _progress_tx = progress_tx.clone();
+        let _cancel_token = cancel_token.clone();
 
         move || -> Result<String, String> {
             #[cfg(any(target_os = "linux", target_os = "macos"))]
             use std::io::Read;
 
             #[cfg(target_os = "windows")]
-            let mut device = {
+            let mut _device = {
                 use windows::Win32::Foundation::*;
                 use windows::Win32::Storage::FileSystem::*;
-                use std::os::windows::ffi::OsStrExt;
 
                 let device_path_wide: Vec<u16> = device_path
                     .encode_utf16()
