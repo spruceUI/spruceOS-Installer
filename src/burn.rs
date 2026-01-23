@@ -237,7 +237,7 @@ async fn burn_image_windows(
     crate::debug::log(&format!("Opening physical drive: {}", device_path));
 
     // Move ALL Windows API operations into spawn_blocking since HANDLE is !Send
-    let result = tokio::task::spawn_blocking({
+    let bytes_written = tokio::task::spawn_blocking({
         let image_path = image_path.to_path_buf();
         let device_path = device_path.to_string();
         let progress_tx = progress_tx.clone();
@@ -402,8 +402,11 @@ async fn burn_image_windows(
             crate::debug::log("Device unlocked and closed");
             Ok(total_written)
         }
-    }).await
-    .map_err(|e| format!("Write task failed: {}", e))?
+    })
+    .await
+    .map_err(|e| format!("Write task failed: {}", e))?;
+
+    bytes_written
 }
 
 // =============================================================================
@@ -461,7 +464,7 @@ async fn burn_image_linux(
 
     crate::debug::log(&format!("Opening device: {}", device_path));
 
-    let result = tokio::task::spawn_blocking({
+    let bytes_written = tokio::task::spawn_blocking({
         let image_path = image_path.to_path_buf();
         let device_path = device_path.to_string();
         let progress_tx = progress_tx.clone();
@@ -524,8 +527,11 @@ async fn burn_image_linux(
             crate::debug::log(&format!("Write complete: {} bytes written", total_written));
             Ok(total_written)
         }
-    }).await
-    .map_err(|e| format!("Write task failed: {}", e))?
+    })
+    .await
+    .map_err(|e| format!("Write task failed: {}", e))?;
+
+    bytes_written
 }
 
 // =============================================================================
@@ -574,7 +580,7 @@ async fn burn_image_macos(
     let raw_device_path = device_path.replace("/dev/disk", "/dev/rdisk");
     crate::debug::log(&format!("Using raw device: {}", raw_device_path));
 
-    let result = tokio::task::spawn_blocking({
+    let bytes_written = tokio::task::spawn_blocking({
         let image_path = image_path.to_path_buf();
         let device_path = raw_device_path.clone();
         let progress_tx = progress_tx.clone();
@@ -636,8 +642,11 @@ async fn burn_image_macos(
             crate::debug::log(&format!("Write complete: {} bytes written", total_written));
             Ok(total_written)
         }
-    }).await
-    .map_err(|e| format!("Write task failed: {}", e))?
+    })
+    .await
+    .map_err(|e| format!("Write task failed: {}", e))?;
+
+    bytes_written
 }
 
 // =============================================================================
