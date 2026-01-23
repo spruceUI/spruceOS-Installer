@@ -139,87 +139,8 @@ async fn unmount_device(device_path: &str) -> Result<(), String> {
 // =============================================================================
 
 #[cfg(target_os = "windows")]
-async fn unmount_device_windows(device_path: &str) -> Result<(), String> {
-    use windows::Win32::Storage::FileSystem::*;
-    use windows::Win32::Foundation::*;
-    use windows::Win32::System::Ioctl::*;
-    use windows::Win32::System::IO::DeviceIoControl;
-
-    // For physical drives (\\.\PhysicalDriveN), we need to find and unmount all volumes
-    if device_path.starts_with("\\\\.\\PhysicalDrive") {
-        crate::debug::log(&format!("Attempting to lock/dismount volumes on {}", device_path));
-
-        // We'll enumerate all drive letters and try to lock each one that might be on this physical drive
-        // This is a simple approach - just try to dismount all removable drives
-        unsafe {
-            let drive_bits = GetLogicalDrives();
-            for i in 0..26u8 {
-                if (drive_bits >> i) & 1 == 1 {
-                    let letter = (b'A' + i) as char;
-                    let root_path: Vec<u16> = format!("{}:\\", letter)
-                        .encode_utf16()
-                        .chain(Some(0))
-                        .collect();
-
-                    // Check if it's removable
-                    let drive_type = GetDriveTypeW(windows::core::PCWSTR(root_path.as_ptr()));
-                    if drive_type == 2 { // DRIVE_REMOVABLE
-                        let volume_path: Vec<u16> = format!("\\\\.\\{}:", letter)
-                            .encode_utf16()
-                            .chain(Some(0))
-                            .collect();
-
-                        let handle = CreateFileW(
-                            windows::core::PCWSTR(volume_path.as_ptr()),
-                            FILE_GENERIC_READ.0 | FILE_GENERIC_WRITE.0,
-                            FILE_SHARE_READ | FILE_SHARE_WRITE,
-                            None,
-                            OPEN_EXISTING,
-                            Default::default(),
-                            None,
-                        );
-
-                        if let Ok(handle) = handle {
-                            let mut bytes_returned: u32 = 0;
-
-                            // Try to lock the volume
-                            let _ = DeviceIoControl(
-                                handle,
-                                FSCTL_LOCK_VOLUME,
-                                None,
-                                0,
-                                None,
-                                0,
-                                Some(&mut bytes_returned),
-                                None,
-                            );
-
-                            // Try to dismount
-                            let dismount_result = DeviceIoControl(
-                                handle,
-                                FSCTL_DISMOUNT_VOLUME,
-                                None,
-                                0,
-                                None,
-                                0,
-                                Some(&mut bytes_returned),
-                                None,
-                            );
-
-                            if dismount_result.is_ok() {
-                                crate::debug::log(&format!("Dismounted {}:", letter));
-                            }
-
-                            let _ = CloseHandle(handle);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Wait a moment for the OS to process the unmount
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+async fn unmount_device_windows(_device_path: &str) -> Result<(), String> {
+    // Volume locking is now handled inside burn_image_windows to keep handles open
     Ok(())
 }
 
@@ -250,6 +171,98 @@ async fn burn_image_windows(
             use windows::Win32::System::Ioctl::*;
             use std::io::Read;
 
+            // CRITICAL: Lock and dismount all removable volumes FIRST and KEEP HANDLES OPEN
+            // This prevents Windows from auto-mounting partitions during the burn
+            crate::debug::log("Locking and dismounting removable volumes...");
+            let mut volume_handles: Vec<HANDLE> = Vec::new();
+
+            unsafe {
+                let drive_bits = GetLogicalDrives();
+                for i in 0..26u8 {
+                    if (drive_bits >> i) & 1 == 1 {
+                        let letter = (b'A' + i) as char;
+                        let root_path: Vec<u16> = format!("{}:\\", letter)
+                            .encode_utf16()
+                            .chain(Some(0))
+                            .collect();
+
+                        // Check if it's removable
+                        let drive_type = GetDriveTypeW(windows::core::PCWSTR(root_path.as_ptr()));
+                        if drive_type == 2 { // DRIVE_REMOVABLE
+                            let volume_path: Vec<u16> = format!("\\\\.\\{}:", letter)
+                                .encode_utf16()
+                                .chain(Some(0))
+                                .collect();
+
+                            let vol_handle = CreateFileW(
+                                windows::core::PCWSTR(volume_path.as_ptr()),
+                                FILE_GENERIC_READ.0 | FILE_GENERIC_WRITE.0,
+                                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                                None,
+                                OPEN_EXISTING,
+                                Default::default(),
+                                None,
+                            );
+
+                            if let Ok(vol_handle) = vol_handle {
+                                let mut bytes_returned: u32 = 0;
+
+                                // Lock the volume
+                                let _ = DeviceIoControl(
+                                    vol_handle,
+                                    FSCTL_LOCK_VOLUME,
+                                    None,
+                                    0,
+                                    None,
+                                    0,
+                                    Some(&mut bytes_returned),
+                                    None,
+                                );
+
+                                // Dismount the volume
+                                let dismount_result = DeviceIoControl(
+                                    vol_handle,
+                                    FSCTL_DISMOUNT_VOLUME,
+                                    None,
+                                    0,
+                                    None,
+                                    0,
+                                    Some(&mut bytes_returned),
+                                    None,
+                                );
+
+                                if dismount_result.is_ok() {
+                                    crate::debug::log(&format!("Locked/dismounted {}:", letter));
+                                }
+
+                                // KEEP THE HANDLE OPEN - add to list for cleanup later
+                                volume_handles.push(vol_handle);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Helper function to cleanup volume handles
+            let cleanup_volumes = |volume_handles: &Vec<HANDLE>| {
+                unsafe {
+                    for vol_handle in volume_handles {
+                        let mut bytes_returned: u32 = 0;
+                        let _ = DeviceIoControl(
+                            *vol_handle,
+                            FSCTL_UNLOCK_VOLUME,
+                            None,
+                            0,
+                            None,
+                            0,
+                            Some(&mut bytes_returned),
+                            None,
+                        );
+                        let _ = CloseHandle(*vol_handle);
+                    }
+                }
+            };
+
             let device_path_wide: Vec<u16> = device_path
                 .encode_utf16()
                 .chain(Some(0))
@@ -273,6 +286,7 @@ async fn burn_image_windows(
 
             if handle.is_err() {
                 let err = unsafe { windows::core::Error::from_win32() };
+                cleanup_volumes(&volume_handles);
                 return Err(format!("Failed to open device for writing: {:?}", err));
             }
 
@@ -301,6 +315,7 @@ async fn burn_image_windows(
                 if wipe_result.is_err() || bytes_written as usize != wipe_size_aligned {
                     let err = windows::core::Error::from_win32();
                     let _ = CloseHandle(handle);
+                    cleanup_volumes(&volume_handles);
                     return Err(format!("Failed to wipe partition table: {:?}", err));
                 }
             }
@@ -321,6 +336,7 @@ async fn burn_image_windows(
 
                 if seek_result.is_err() {
                     let _ = CloseHandle(handle);
+                    cleanup_volumes(&volume_handles);
                     return Err("Failed to reset file pointer after wipe".to_string());
                 }
             }
@@ -336,6 +352,7 @@ async fn burn_image_windows(
             let file = std::fs::File::open(&image_path)
                 .map_err(|e| {
                     unsafe { let _ = CloseHandle(handle); }
+                    cleanup_volumes(&volume_handles);
                     format!("Failed to open image file: {}", e)
                 })?;
 
@@ -361,6 +378,7 @@ async fn burn_image_windows(
                     unsafe {
                         let _ = CloseHandle(handle);
                     }
+                    cleanup_volumes(&volume_handles);
                     return Err("Burn cancelled".to_string());
                 }
 
@@ -368,6 +386,7 @@ async fn burn_image_windows(
                 let bytes_read = image_reader.read(&mut read_buffer)
                     .map_err(|e| {
                         unsafe { let _ = CloseHandle(handle); }
+                        cleanup_volumes(&volume_handles);
                         format!("Failed to read from image: {}", e)
                     })?;
 
@@ -392,6 +411,7 @@ async fn burn_image_windows(
                             if write_result.is_err() {
                                 let err = windows::core::Error::from_win32();
                                 let _ = CloseHandle(handle);
+                                cleanup_volumes(&volume_handles);
                                 return Err(format!("Failed to write final sector at offset {}: {:?}", total_written, err));
                             }
                         }
@@ -421,11 +441,13 @@ async fn burn_image_windows(
                         if write_result.is_err() {
                             let err = windows::core::Error::from_win32();
                             let _ = CloseHandle(handle);
+                            cleanup_volumes(&volume_handles);
                             return Err(format!("Failed to write to device at offset {}: {:?}", total_written, err));
                         }
 
                         if bytes_written as usize != sectors_to_write {
                             let _ = CloseHandle(handle);
+                            cleanup_volumes(&volume_handles);
                             return Err(format!("Incomplete write at offset {}: wrote {} of {} bytes",
                                 total_written, bytes_written, sectors_to_write));
                         }
@@ -453,12 +475,15 @@ async fn burn_image_windows(
 
             crate::debug::log(&format!("Write complete: {} bytes written", total_written));
 
-            // Close the handle
+            // Close the physical drive handle
             unsafe {
                 let _ = CloseHandle(handle);
             }
 
-            crate::debug::log("Device closed");
+            // Unlock and close all volume handles
+            crate::debug::log("Unlocking and closing volume handles...");
+            cleanup_volumes(&volume_handles);
+            crate::debug::log("Device closed, volumes unlocked");
             Ok(total_written)
         }
     })
