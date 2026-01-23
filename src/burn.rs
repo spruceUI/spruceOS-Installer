@@ -404,7 +404,7 @@ async fn burn_image_windows(
             Ok(total_written)
         }
     }).await
-    .map_err(|e| format!("Write task failed: {}", e))??
+    .map_err(|e| format!("Write task failed: {}", e))?
 }
 
 // =============================================================================
@@ -526,7 +526,7 @@ async fn burn_image_linux(
             Ok(total_written)
         }
     }).await
-    .map_err(|e| format!("Write task failed: {}", e))??
+    .map_err(|e| format!("Write task failed: {}", e))?
 }
 
 // =============================================================================
@@ -638,7 +638,7 @@ async fn burn_image_macos(
             Ok(total_written)
         }
     }).await
-    .map_err(|e| format!("Write task failed: {}", e))??
+    .map_err(|e| format!("Write task failed: {}", e))?
 }
 
 // =============================================================================
