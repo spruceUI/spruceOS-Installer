@@ -570,7 +570,14 @@ impl InstallerApp {
                 }
             });
 
-            if let Err(e) = format_drive_fat32(&drive.device_path, &volume_label, fmt_tx, cancel_token_clone.clone()).await {
+            // On Windows, format function expects drive letter (e.g., "E:"), not physical drive path
+            // On other platforms, device_path is correct (e.g., "/dev/sdb")
+            #[cfg(target_os = "windows")]
+            let format_path = &drive.name;
+            #[cfg(not(target_os = "windows"))]
+            let format_path = &drive.device_path;
+
+            if let Err(e) = format_drive_fat32(format_path, &volume_label, fmt_tx, cancel_token_clone.clone()).await {
                 if e.contains("cancelled") {
                     log("Format cancelled");
                     let _ = state_tx_clone.send(AppState::Idle);
