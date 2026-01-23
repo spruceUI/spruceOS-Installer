@@ -1254,14 +1254,13 @@ impl eframe::App for InstallerApp {
         }
 
         if show_modal {
-            // Background Dimmer
+            // Background Dimmer - use hover() instead of click() to avoid UI freeze
             egui::Area::new(egui::Id::from("modal_dimmer"))
                 .order(egui::Order::Foreground)
                 .fixed_pos(egui::pos2(0.0, 0.0))
                 .show(ctx, |ui| {
                     let screen_rect = ui.ctx().content_rect();
-                    let response = ui.allocate_rect(screen_rect, egui::Sense::click());
-                    response.clicked(); // Consume the click event to prevent UI from becoming unresponsive
+                    ui.allocate_rect(screen_rect, egui::Sense::hover());
                     ui.painter()
                         .rect_filled(screen_rect, 0.0, egui::Color32::from_black_alpha(140));
                 });
