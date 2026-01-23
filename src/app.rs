@@ -310,7 +310,9 @@ impl InstallerApp {
         self.installed_drive = Some(drive.clone());
 
         self.state = AppState::FetchingRelease;
-        let (repo_name, repo_url) = REPO_OPTIONS[self.selected_repo_idx];
+        let repo = &REPO_OPTIONS[self.selected_repo_idx];
+        let repo_name = repo.name;
+        let repo_url = repo.url;
         self.log(&format!(
             "Starting installation to {} using {}",
             drive.name, repo_name
@@ -1270,7 +1272,7 @@ impl eframe::App for InstallerApp {
 
             let window_title = match self.state {
                 AppState::AwaitingConfirmation => {
-                    let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
+                    let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].name;
                     format!("Confirm {} Installation", selected_repo_name)
                 }
                 AppState::Complete => "Installation Complete".to_string(),
@@ -1336,7 +1338,7 @@ impl eframe::App for InstallerApp {
                                 ui.add_space(12.0);
                                 ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "SUCCESS");
                                 ui.add_space(12.0);
-                                let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
+                                let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].name;
                                 ui.label(format!("{} has been successfully installed.", selected_repo_name));
                                 ui.add_space(15.0);
                                 ui.separator();
@@ -1405,7 +1407,7 @@ impl eframe::App for InstallerApp {
                                 ui.add_space(12.0);
                                 ui.colored_label(ui.visuals().error_fg_color, "FAILED");
                                 ui.add_space(12.0);
-                                let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
+                                let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].name;
                                 ui.label(format!("{} installation failed.", selected_repo_name));
                                 ui.add_space(8.0);
                                 ui.label("Check the log for details.");
@@ -1593,7 +1595,7 @@ impl eframe::App for InstallerApp {
                                 ui.spacing_mut().item_spacing.x = 0.0;
                                 let count = REPO_OPTIONS.len();
 
-                                for (idx, (name, _url)) in REPO_OPTIONS.iter().enumerate() {
+                                for (idx, repo) in REPO_OPTIONS.iter().enumerate() {
                                     let corner_radius = if count == 1 {
                                         egui::CornerRadius::same(4)
                                     } else if idx == 0 {
@@ -1611,7 +1613,7 @@ impl eframe::App for InstallerApp {
 
                                         if ui.add(egui::Button::selectable(
                                             self.selected_repo_idx == idx,
-                                            *name,
+                                            repo.name,
                                         ).frame_when_inactive(true)).clicked() {
                                             self.selected_repo_idx = idx;
                                         }
@@ -1745,6 +1747,22 @@ impl eframe::App for InstallerApp {
                         }
                     });
                 });
+
+                // Repository info text (shown below Install button when not busy)
+                if !show_progress {
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.vertical_centered(|ui| {
+                            let repo_info = REPO_OPTIONS[self.selected_repo_idx].info;
+                            let text_color = egui::Color32::from_rgba_unmultiplied(251, 241, 199, 255);
+
+                            // Split by \n and display each line
+                            for line in repo_info.split('\n') {
+                                ui.colored_label(text_color, line);
+                            }
+                        });
+                    });
+                }
 
                 ui.add_space(10.0);
             });

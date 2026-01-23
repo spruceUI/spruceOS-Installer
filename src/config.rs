@@ -48,13 +48,50 @@ pub const TEMP_PREFIX: &str = env!("CARGO_PKG_NAME");
 // ----------------------------------------------------------------------------
 // REPOSITORY OPTIONS
 // ----------------------------------------------------------------------------
-// Each entry is (Display Name, GitHub repo in "owner/repo" format)
 
-pub const REPO_OPTIONS: &[(&str, &str)] = &[
-    ("Stable", "spruceUI/spruceOS"),
-    ("Nightlies", "spruceUI/spruceOSNightlies"),
-    ("SprigUI", "spruceUI/sprigUI"),
-    ("TwigUI", "spruceUI/twigUI"),
+/// Repository configuration for download sources
+///
+/// Each repository entry contains:
+/// - `name`: Display name shown in the UI button (e.g., "Stable", "Nightlies")
+/// - `url`: GitHub repository in "owner/repo" format (e.g., "spruceUI/spruceOS")
+/// - `info`: Description text shown below the Install button when this repo is selected
+///           Use \n for line breaks in longer informative messages
+///
+/// Example:
+/// ```
+/// RepoOption {
+///     name: "TwigUI",
+///     url: "spruceUI/twigUI",
+///     info: "This is spruceOS for the GKD Pixel 2.\nOptimized for Pixel 2 hardware.",
+/// }
+/// ```
+pub struct RepoOption {
+    pub name: &'static str,
+    pub url: &'static str,
+    pub info: &'static str,
+}
+
+pub const REPO_OPTIONS: &[RepoOption] = &[
+    RepoOption {
+        name: "Stable",
+        url: "spruceUI/spruceOS",
+        info: "Stable releases of spruceOS.\nSupported devices: Miyoo A30",
+    },
+    RepoOption {
+        name: "Nightlies",
+        url: "spruceUI/spruceOSNightlies",
+        info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick",
+    },
+    RepoOption {
+        name: "SprigUI",
+        url: "spruceUI/sprigUI",
+        info: "SpruceOS for the Miyoo Mini Flip.",
+    },
+    RepoOption {
+        name: "TwigUI",
+        url: "spruceUI/twigUI",
+        info: "SpruceOS for the GKD Pixel 2.",
+    },
 ];
 
 /// Index of the default repository selection (0 = first option)
