@@ -250,6 +250,9 @@ async fn burn_image_windows(
             use windows::Win32::System::Ioctl::*;
             use std::io::Read;
 
+            // FSCTL_ALLOW_EXTENDED_DASD_IO allows unfettered access to the disk
+            const FSCTL_ALLOW_EXTENDED_DASD_IO: u32 = 0x00090083;
+
             let device_path_wide: Vec<u16> = device_path
                 .encode_utf16()
                 .chain(Some(0))
@@ -277,6 +280,29 @@ async fn burn_image_windows(
             }
 
             let handle = handle.unwrap();
+
+            // Enable extended DASD I/O to allow writing beyond mounted volumes
+            // This prevents Windows from interfering when it detects new partitions
+            let mut bytes_returned: u32 = 0;
+            unsafe {
+                let dasd_result = DeviceIoControl(
+                    handle,
+                    FSCTL_ALLOW_EXTENDED_DASD_IO,
+                    None,
+                    0,
+                    None,
+                    0,
+                    Some(&mut bytes_returned),
+                    None,
+                );
+
+                if dasd_result.is_ok() {
+                    crate::debug::log("Extended DASD I/O enabled");
+                } else {
+                    crate::debug::log("Warning: Could not enable extended DASD I/O (may not be critical)");
+                }
+            }
+
             crate::debug::log("Physical drive opened successfully, beginning write...");
 
             // Check if file is gzipped and create appropriate reader
