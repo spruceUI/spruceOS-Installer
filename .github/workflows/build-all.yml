@@ -57,8 +57,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Triggered builds for:" >> $GITHUB_STEP_SUMMARY
           echo "- Windows" >> $GITHUB_STEP_SUMMARY
-          echo "- Linux (x64 + ARM64)" >> $GITHUB_STEP_SUMMARY
-          echo "- Linux 32-bit (i686 + ARMv7)" >> $GITHUB_STEP_SUMMARY
+          echo "- Linux" >> $GITHUB_STEP_SUMMARY
           echo "- macOS (Universal)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Check the [Actions tab](/${{ github.repository }}/actions) for build progress." >> $GITHUB_STEP_SUMMARY
