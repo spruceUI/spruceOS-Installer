@@ -39,7 +39,7 @@ jobs:
           ZIG_VER="0.15.2"
           curl -L -o zig.tar.xz "https://ziglang.org/download/${ZIG_VER}/zig-x86_64-linux-${ZIG_VER}.tar.xz"
           tar -xf zig.tar.xz
-          echo "${PWD}/zig-linux-x86_64-${ZIG_VER}" >> "$GITHUB_PATH"
+          echo "${PWD}/zig-x86_64-linux-${ZIG_VER}" >> "$GITHUB_PATH"
           zig version
 
       - name: Install cargo-zigbuild
