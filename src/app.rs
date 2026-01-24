@@ -2272,16 +2272,14 @@ impl eframe::App for InstallerApp {
                 // Repository info text (shown below Install button when not busy)
                 if !show_progress {
                     ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        ui.vertical_centered(|ui| {
-                            let repo_info = REPO_OPTIONS[self.selected_repo_idx].info;
-                            let text_color = egui::Color32::from_rgba_unmultiplied(251, 241, 199, 255);
+                    ui.vertical_centered(|ui| {
+                        let repo_info = REPO_OPTIONS[self.selected_repo_idx].info;
+                        let text_color = egui::Color32::from_rgba_unmultiplied(251, 241, 199, 255);
 
-                            // Split by \n and display each line
-                            for line in repo_info.split('\n') {
-                                ui.colored_label(text_color, line);
-                            }
-                        });
+                        // Split by \n and display each line
+                        for line in repo_info.split('\n') {
+                            ui.colored_label(text_color, line);
+                        }
                     });
                 }
 
