@@ -2075,8 +2075,8 @@ impl eframe::App for InstallerApp {
                                 // Animated indeterminate progress bar
                                 let time = ctx.input(|i| i.time);
 
-                                // Allocate space for the progress bar
-                                let desired_size = egui::vec2(ui.available_width() / 2.0, 6.0);
+                                // Allocate space for the progress bar - match normal progress bar dimensions
+                                let desired_size = egui::vec2(ui.available_width() / 2.0, 16.0);
                                 let (outer_rect, _response) =
                                     ui.allocate_exact_size(desired_size, egui::Sense::hover());
 
