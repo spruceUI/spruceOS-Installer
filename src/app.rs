@@ -31,7 +31,6 @@ enum AppState {
     Extracting,
     Copying,
     Burning,
-    Verifying,
     Complete,
     Ejecting,
     Ejected,
@@ -404,7 +403,7 @@ impl InstallerApp {
         self.log("Fetching available downloads...");
 
         let repo = &REPO_OPTIONS[self.selected_repo_idx];
-        let repo_url = repo.url.to_string();
+        let repo_url = repo.url;
         let progress = self.progress.clone();
         let ctx_clone = ctx.clone();
 
@@ -419,7 +418,7 @@ impl InstallerApp {
             }
             ctx_clone.request_repaint();
 
-            let result = get_latest_release(&repo_url).await;
+            let result = get_latest_release(repo_url).await;
             let _ = tx.send(result);
             ctx_clone.request_repaint();
         });
@@ -1265,7 +1264,6 @@ impl InstallerApp {
                         AppState::Extracting => "Extracting...".to_string(),
                         AppState::Copying => "Copying...".to_string(),
                         AppState::Burning => "Burning image...".to_string(),
-                        AppState::Verifying => "Verifying...".to_string(),
                         AppState::Complete => "COMPLETE".to_string(),
                         AppState::Error => "ERROR".to_string(),
                         AppState::Idle => "CANCELLED".to_string(),

@@ -10,7 +10,6 @@ const CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4MB chunks
 pub enum BurnProgress {
     Started { total_bytes: u64 },
     Writing { written: u64, total: u64 },
-    #[allow(dead_code)]
     Verifying { verified: u64, total: u64 },
     Completed,
     #[allow(dead_code)]
