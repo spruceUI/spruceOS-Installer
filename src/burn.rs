@@ -728,7 +728,21 @@ async fn burn_image_macos(
 
             // Use authopen to get privileged file descriptor
             // This will show a native macOS authorization dialog
-            let mut device = crate::mac::authopen::auth_open_device(std::path::Path::new(&device_path))?;
+            let mut device = match crate::mac::authopen::auth_open_device(std::path::Path::new(&device_path)) {
+                Ok(file) => file,
+                Err(crate::mac::authopen::AuthOpenError::Cancelled) => {
+                    crate::debug::log("User cancelled authorization");
+                    return Err("Authorization cancelled by user".to_string());
+                },
+                Err(crate::mac::authopen::AuthOpenError::Failed(msg)) => {
+                    crate::debug::log(&format!("Authorization failed: {}", msg));
+                    return Err(format!("Failed to open device: {}", msg));
+                },
+                Err(crate::mac::authopen::AuthOpenError::SystemError(msg)) => {
+                    crate::debug::log(&format!("System error during authorization: {}", msg));
+                    return Err(format!("System error: {}", msg));
+                },
+            };
 
             crate::debug::log("Device opened successfully via authopen");
 
