@@ -2,7 +2,7 @@
 /// Based on Raspberry Pi Imager's implementation
 use std::fs::File;
 use std::io::{self, Read};
-use std::os::unix::io::{AsRawFd, FromRawFd, RawFd};
+use std::os::unix::io::{FromRawFd, RawFd};
 use std::path::Path;
 use std::process::{Command, Stdio};
 

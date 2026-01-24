@@ -1557,7 +1557,7 @@ impl eframe::App for InstallerApp {
 
         if show_modal {
             // Background Dimmer - paint at Background layer, below everything
-            let screen_rect = ctx.screen_rect();
+            let screen_rect = ctx.viewport_rect();
             ctx.layer_painter(egui::LayerId::new(
                 egui::Order::Background,
                 egui::Id::from("modal_dimmer"),
@@ -1932,15 +1932,15 @@ impl eframe::App for InstallerApp {
                                         Ok(contents) => {
                                             match arboard::Clipboard::new().and_then(|mut clipboard| clipboard.set_text(contents)) {
                                                 Ok(_) => {
-                                                    self.log.push("Log copied to clipboard".to_string());
+                                                    self.log("Log copied to clipboard");
                                                 },
                                                 Err(e) => {
-                                                    self.log.push(format!("Failed to copy to clipboard: {}", e));
+                                                    self.log(&format!("Failed to copy to clipboard: {}", e));
                                                 }
                                             }
                                         },
                                         Err(e) => {
-                                            self.log.push(format!("Failed to read log file: {}", e));
+                                            self.log(&format!("Failed to read log file: {}", e));
                                         }
                                     }
                                 }
