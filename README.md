@@ -1,342 +1,649 @@
-## To-Do
-- Twig updater: multiple partitions could prove VERY difficult. idk how to address this.
-- The info could be centered vertically in the space below the button instead of straddling it?
-- Checkboxes for various additional packages:
-    - all themes
-    - all A30 ports
-    - all free games
-    - PortMaster (are we making this a separate archive?)
-- Backup and restore (update current installation instead of just fresh ones?)
-- Scrape boxart for roms
-
-## Recent Updates
-- ✅ **Asset Selection** - Installer now intelligently handles multiple downloads from a single release
-- ✅ **Repository Info** - Each repository can display custom information text in the UI
-- ✅ **Bug Fixes** - Fixed modal dialog freeze issue and cancellation state handling
-
 # SpruceOS Installer
 
-## Overview
+## To-Do
 
-**SpruceOS Installer** is an all-in-one **downloader, extractor, formatter, and installer** made for **SpruceOS**.
-
-It can be easily edited and adapted to work with **any custom firmware (CFW)** that requires files to be copied onto a **FAT32 SD card**, with little to no hassle.
-
-GitHub Actions are set up to automatically **build and create releases per branch**.  
-If you’d like to use this program for your own project, let us know—we can create a branch for you or add you directly to the repository.
-
-> **Please do not remove the Spruce or NextUI teams from the authors section.**  
-> Instead, add your name alongside the existing credits.
-
-
-## macOS Users
-
-The installer is distributed as a `.zip` containing a self-contained `.app` bundle. No system installation is required.
-
-**Steps to run:**
-
-1. Download the ZIP file from the GitHub release.  
-2. Extract the ZIP — you will get the following bundle and files:
-
-    ```
-    SpruceOS Installer.app/
-    ├── Contents/
-    │   ├── MacOS/
-    │   │   └── spruceos-installer
-    │   ├── Info.plist
-    │   └── Resources/
-    │       └── AppIcon.icns
-    ```
-
-# SpruceOS Installer — Developer Guide
-
-## Overview
-
-**SpruceOS Installer** is an all-in-one Rust installer for flashing SD cards with SpruceOS (or other custom firmware).  
-This guide is intended for **developers** who want to **rebrand or customize the installer** for their own OS project.
-
-> **Note:** All builds are handled automatically via **GitHub Actions**.  
-> Developers only need to create their **own branch** with the desired customizations — no local build setup is required.
+- Vertically center info text below Install button
+- ~~Refactor app.rs into modular structure~~ ✓ Done
+- Checkboxes for additional packages (themes, ports, games)
+- Backup and restore functionality
+- Scrape boxart for ROMs
 
 ---
 
-## Rebranding the Installer
+## Overview
 
-To adapt this installer for your project, update the following in your branch:
+**SpruceOS Installer** is an all-in-one **downloader, extractor, formatter, and installer** for **SpruceOS** and other custom firmware projects.
 
-### 1. `src/config.rs` — Core Customization
+- ✓ Download releases directly from GitHub
+- ✓ Format SD cards (FAT32, supports >32GB on Windows)
+- ✓ Extract archives (.7z, .zip) or burn raw images (.img, .img.gz, .img.xz)
+- ✓ Cross-platform: Windows, Linux, macOS
+- ✓ Update mode: preserve saves/ROMs while updating system files
+- ✓ Multi-repository support with asset filtering
 
-Edit these constants:
+GitHub Actions automatically build releases per branch. If you'd like to use this installer for your own CFW project, let us know—we can create a branch for you or add you directly to the repository.
 
-| Field | Purpose | Example |
-|-------|---------|---------|
-| `APP_NAME` | Display name of your OS (window title, UI) | `"SpruceOS"` |
-| `VOLUME_LABEL` | FAT32 SD card label (max 11 chars, uppercase) | `"SPRUCEOS"` |
-| `REPO_OPTIONS` | Array of repository configurations (see below) | See example below |
-| `DEFAULT_REPO_INDEX` | Index of the default repo selection (0 = first) | `0` |
-| `WINDOW_SIZE` | Default window size (width, height) | `(679.5, 420.0)` |
-| `WINDOW_MIN_SIZE` | Minimum window size (width, height) | `(679.5, 420.0)` |
+> **Please do not remove the Spruce or NextUI teams from the authors section.**
+> Instead, add your name alongside the existing credits.
 
-**Repository Configuration (`REPO_OPTIONS`):**
+---
 
-Each repository is defined using a `RepoOption` struct with three fields:
-- `name`: Display name shown in the UI button (e.g., "Stable", "Nightlies")
-- `url`: GitHub repository in "owner/repo" format (e.g., "spruceUI/spruceOS")
-- `info`: Description text shown below the Install button when selected. Use `\n` for line breaks.
+## For End Users
 
-**Example:**
+### macOS Users
+
+The installer is distributed as a `.zip` containing a self-contained `.app` bundle.
+
+#### **Initial Setup (First Time Only):**
+
+**IMPORTANT:** macOS requires Terminal to have "Full Disk Access" to write to SD cards. Follow these steps:
+
+1. **Grant Terminal Full Disk Access:**
+   - Open **System Settings** (or **System Preferences** on older macOS)
+   - Go to **Privacy & Security** → **Full Disk Access**
+   - Click the **lock icon** (bottom left) and enter your password
+   - Click the **+** button to add an application
+   - Navigate to **Applications** → **Utilities** → select **Terminal.app**
+   - Check the box next to Terminal in the list
+   - **Quit and reopen Terminal** (important!)
+
+   **Why?** macOS security prevents apps from accessing removable drives without this permission. Terminal needs access because it spawns the installer process.
+
+2. **Download and Run the Installer:**
+   - Download and extract the ZIP file
+   - **Easy method:** Double-click `launch-installer.command` to automatically remove quarantine and launch
+   - **Alternative:** Right-click "SpruceOSInstaller.app" and select "Open", then click "Open" in the dialog
+
+3. **Authorization During Install:**
+   - When writing to SD cards, you'll see a native macOS authorization dialog requesting your admin password (via `authopen`)
+   - This is normal and required for disk operations
+
+#### **Troubleshooting:**
+
+**If the installer can't access your SD card:**
+- Verify Terminal has Full Disk Access (see step 1 above)
+- **Quit Terminal completely** and reopen it (changes don't apply to running Terminal sessions)
+- Try running from Terminal manually:
+  ```bash
+  cd ~/Downloads/SpruceOSInstaller.app/Contents/MacOS
+  ./spruceos-installer
+  ```
+
+**Note:** This app is not code-signed.
+
+### Windows/Linux Users
+
+1. Download the installer for your platform
+2. Run the executable
+3. On Linux, the app will automatically request privileges via `pkexec` if needed
+
+---
+
+## For Developers: Complete Rebranding Guide
+
+This guide walks you through **every single file** that needs changing to rebrand this installer for your own CFW project.
+
+### 🎯 Quick Start Checklist
+
+**Minimum viable rebrand (~15 minutes):**
+
+- [ ] **1. Edit `src/config.rs`** - Change `APP_NAME`, `VOLUME_LABEL`, `WINDOW_TITLE`, and `REPO_OPTIONS`
+- [ ] **2. Edit `Cargo.toml`** - Update `name`, `description`, `authors`
+- [ ] **3. Replace `assets/Icons/icon.png` and `icon.ico`** - Your branding
+- [ ] **4. Edit `assets/Mac/Info.plist`** - macOS bundle identifiers
+- [ ] **5. Edit `app.manifest`** - Windows application name
+
+**Full rebrand with custom theme (~45 minutes):**
+
+- [ ] Complete the 5 steps above
+- [ ] **6. Edit `src/app/theme.rs`** - Customize all colors
+- [ ] **7. Update `src/app/ui.rs`** - Search for `Color32::from_rgb` and update button colors
+- [ ] **8. Test locally** - `cargo build --release --features icon`
+- [ ] **9. Push to GitHub** - Automated builds create releases
+
+---
+
+### 📁 Step-by-Step: File Changes
+
+---
+
+#### **STEP 1: `src/config.rs` - Core Configuration** ⚠️ CRITICAL
+
+This is the **most important file** - it controls all branding and functionality.
+
+<details>
+<summary><strong>Click to expand detailed instructions</strong></summary>
+
+**Location:** `src/config.rs`
+**Lines to change:** 28, 32, 40, 99-181, 184
+
+##### **A. App Branding (Lines 28-40)**
+
+```rust
+// Line 28 - Your OS name (shown throughout the UI)
+pub const APP_NAME: &str = "SpruceOS";  // ← Change to "YourOS"
+
+// Line 32 - SD card volume label (MAX 11 CHARS, UPPERCASE)
+pub const VOLUME_LABEL: &str = "SPRUCEOS";  // ← Change to "YOUROS" (11 char max!)
+
+// Line 40 - Window title bar text
+pub const WINDOW_TITLE: &str = "SpruceOS Installer";  // ← Change to "YourOS Installer"
+```
+
+**⚠️ Warning:** `VOLUME_LABEL` has a **hard 11-character limit** (FAT32 limitation). Use uppercase only.
+
+---
+
+##### **B. GitHub Repositories (Lines 99-181)** ⚠️ CRITICAL
+
+This is where you define which GitHub repos to download from:
+
+```rust
+pub const REPO_OPTIONS: &[RepoOption] = &[
+    RepoOption {
+        name: "Stable",                              // ← Button label in UI
+        url: "spruceUI/spruceOS",                   // ← YOUR GitHub repo (owner/repo format)
+        info: "Stable releases of SpruceOS.\nSupported devices: Miyoo A30",  // ← Info text (use \n for line breaks)
+        update_directories: &["Retroarch", "spruce"],  // ← Folders deleted during updates
+        allowed_extensions: Some(&[".7z"]),          // ← File types to show (None = all)
+        asset_display_mappings: None,                // ← User-friendly names (see advanced below)
+    },
+    // Add more repos as needed...
+];
+```
+
+**Example for your project:**
+
 ```rust
 pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
         name: "Stable",
-        url: "spruceUI/spruceOS",
-        info: "Stable releases of spruceOS.\nSupported devices: Device X, Device Y",
+        url: "yourorg/yourrepo",  // ← Your GitHub username/repo
+        info: "Official stable builds.\nSupported: Device X, Y, Z",
+        update_directories: &["System", "Apps"],  // What gets replaced during updates
+        allowed_extensions: None,  // Show all file types
+        asset_display_mappings: None,
     },
     RepoOption {
-        name: "Nightlies",
-        url: "spruceUI/spruceOSNightlies",
-        info: "Nightly development builds.\n⚠️ Warning: May be unstable!",
+        name: "Beta",
+        url: "yourorg/yourrepo-beta",
+        info: "Beta builds - may be unstable!\nTesting new features.",
+        update_directories: &["System"],
+        allowed_extensions: Some(&[".7z", ".zip"]),  // Only show archives
+        asset_display_mappings: None,
     },
 ];
 ```
 
-**Asset Detection:**
-
-The installer automatically detects and downloads compatible files from GitHub releases:
-- **Archive mode**: `.7z`, `.zip` (formats SD card, extracts, and copies files)
-- **Image mode**: `.img.gz`, `.img.xz`, `.img` (burns raw image directly to device)
-- **Source code archives** (`Source code.zip`, `Source code.tar.gz`) are automatically filtered out
-- If multiple assets exist, the installer will prompt the user to select one, or auto-select based on file type priority
-
-> **Notes:**
-> - `WINDOW_TITLE`, `USER_AGENT`, and `TEMP_PREFIX` are auto-generated from `APP_NAME`. You usually **do not need to change these**.
-> - The `setup_theme()` function in `config.rs` uses the Gruvbox Dark preset. This is a fallback; the actual theme is customized in `app.rs`.
-> - `ASSET_EXTENSION` constant still exists for backward compatibility but is **deprecated** and no longer used.
-
 ---
 
-### 2. `src/app.rs` — Theme Colors & UI Customization
+##### **C. Default Selection (Line 184)**
 
-The installer's visual theme is defined in the `get_theme_config()` method (around line 136 in `app.rs`). This method returns a `ThemeConfig` with color overrides in **RGBA format** `[R, G, B, A]` (values 0-255).
-
-**Key color fields to customize:**
-
-| Field | Purpose | SpruceOS Default (RGBA) |
-|-------|---------|------------------------|
-| `override_text_color` | Primary text color | `[251, 241, 199, 255]` (cream) |
-| `override_weak_text_color` | Secondary/dimmed text | `[124, 111, 100, 255]` (gray) |
-| `override_hyperlink_color` | Clickable links | `[131, 165, 152, 255]` (teal) |
-| `override_faint_bg_color` | Input fields, panels | `[48, 48, 48, 255]` (dark gray) |
-| `override_extreme_bg_color` | Window background | `[29, 32, 33, 255]` (near black) |
-| `override_warn_fg_color` | Warning messages | `[214, 93, 14, 255]` (orange) |
-| `override_error_fg_color` | Error messages | `[204, 36, 29, 255]` (red) |
-| `override_selection_bg` | Text selection, highlights | `[215, 180, 95, 255]` (gold) |
-| `override_widget_inactive_bg_fill` | Inactive buttons | `[215, 180, 95, 255]` (gold) |
-| `override_widget_inactive_fg_stroke_color` | Inactive button border | `[104, 157, 106, 255]` (green) |
-| `override_widget_hovered_bg_stroke_color` | Hovered button border | `[215, 180, 95, 255]` (gold) |
-| `override_widget_active_bg_stroke_color` | Active button border | `[215, 180, 95, 255]` (gold) |
-
-> **Note:** Set a field to `None` to use the default egui value. The theme config has many more fields for fine-grained control — see the full list in the `ThemeConfig` struct.
-
-**Hardcoded UI colors** (also in `app.rs`):
-- Line ~1036, 1097: Success message color `Color32::from_rgb(104, 157, 106)` (green)
-- Line ~1397: Install button fill `Color32::from_rgb(104, 157, 106)` (green)
-- Line ~1417: Cancel button fill `Color32::from_rgb(251, 73, 52)` (red)
-
-To change these, search for `Color32::from_rgb` in `app.rs` and update the RGB values.
-
----
-
-### 3. Icons
-
-Customize the application icon:
-
-| Icon | Path | Usage |
-|------|------|-------|
-| PNG | `assets/Icons/icon.png` | Window, title bar (all platforms) |
-| ICO | `assets/Icons/icon.ico` | Windows Explorer, taskbar |
-
-> Notes:
-> - PNG: Recommended 64x64 or 128x128 with transparency
-> - ICO: Multi-resolution preferred (16x16, 32x32, 48x48, 256x256)
-> - The icon is loaded via `APP_ICON_PNG` in `config.rs` (requires the `icon` feature enabled)
-
----
-
-### 4. Custom Font
-
-The installer uses a custom font for all UI text. To use your own font:
-
-**Replace the font file:**
-```bash
-# Replace the existing font with your own TTF/OTF file
-cp /path/to/your/font.ttf assets/Fonts/nunwen.ttf
+```rust
+// Line 184 - Which repo button is selected by default (0 = first, 1 = second, etc.)
+pub const DEFAULT_REPO_INDEX: usize = 0;  // ← Change if needed
 ```
 
-**Update the font configuration in `src/config.rs`:**
+---
 
-| Constant | Purpose | Default |
-|----------|---------|---------|
-| `CUSTOM_FONT` | Path to the embedded font file | `"../assets/Fonts/nunwen.ttf"` |
-| `CUSTOM_FONT_NAME` | Display name for the font (optional, cosmetic) | `"Nunwen"` |
+##### **D. Advanced: Asset Display Mappings**
+
+If your releases have technical filenames like `MyOS-RK3326.img.gz`, use display mappings to show user-friendly names:
+
+```rust
+asset_display_mappings: Some(&[
+    AssetDisplayMapping {
+        pattern: "RK3326",  // Matches filenames containing this string
+        display_name: "RK3326 Chipset",  // Friendly name shown to users
+        devices: "Anbernic RG351P/V/M, Odroid Go Advance",  // Compatible devices
+    },
+    AssetDisplayMapping {
+        pattern: "RK3588",
+        display_name: "RK3588 Chipset",
+        devices: "Gameforce Ace, Orange Pi 5",
+    },
+]),
+```
+
+**Result:** Users see "RK3326 Chipset - Compatible: Anbernic RG351P/V/M" instead of "MyOS-RK3326.img.gz"
+
+---
+
+##### **E. Advanced: Extension Filtering**
+
+Control which file types users see per repository:
+
+```rust
+allowed_extensions: Some(&[".7z", ".zip"]),  // Only archives
+allowed_extensions: Some(&[".img.gz"]),       // Only compressed images
+allowed_extensions: None,                     // Show everything
+```
+
+**Common use cases:**
+- Separate "full installer" repos (show only `.7z`) from "update package" repos (show only `.zip`)
+- Hide experimental formats from stable releases
+- Simplify UI when releases have many file types
+
+---
+
+##### **F. Advanced: Update Mode**
+
+Update mode preserves user files (saves, ROMs, themes) while replacing system files:
+
+```rust
+update_directories: &["Retroarch", "spruce", "System"],  // These get deleted
+// Everything else (Roms/, Saves/, etc.) is preserved!
+```
+
+**How it works:**
+1. User checks "Update Mode" in UI
+2. Installer mounts existing SD card (no format!)
+3. Only deletes the specified directories
+4. Extracts new files
+5. User's saves/ROMs stay intact
+
+</details>
+
+---
+
+#### **STEP 2: `Cargo.toml` - Project Metadata**
+
+**Location:** `Cargo.toml`
+**Lines:** 2, 5, 6
+
+```toml
+[package]
+name = "spruceos-installer"  # ← Change to "yourname-installer" (lowercase, hyphens only)
+version = "1.0.0"
+edition = "2021"
+description = "SpruceOS SD Card Installer"  # ← Change description
+authors = ["SpruceOS Team", "NextUI Team"]  # ← ADD your name (keep credits!)
+```
 
 **Example:**
-```rust
-// If you want to use a different filename:
-pub const CUSTOM_FONT: &[u8] = include_bytes!("../assets/Fonts/YourFont.ttf");
-pub const CUSTOM_FONT_NAME: &str = "YourFont";
+
+```toml
+name = "retrobox-installer"
+description = "RetroBox CFW Installer"
+authors = ["SpruceOS Team", "NextUI Team", "Your Name <you@example.com>"]
 ```
 
-> **Notes:**
-> - Supports TTF and OTF font formats
-> - The font is embedded in the binary, so no external font files are needed at runtime
-> - The custom font applies to all UI text (buttons, labels, dropdowns, etc.)
-> - To also use the font for monospace text (logs), uncomment the Monospace section in `load_custom_fonts()`
+**⚠️ Important:** Keep original author credits per project guidelines!
 
 ---
 
-### 5. External Files to Update
+#### **STEP 3: Icons - Visual Branding**
 
-To fully rebrand the installer, also update:
+**Replace these files with your own:**
 
-- `Cargo.toml` — `name`, `description`, `authors`  
-- `assets/Mac/Info.plist` — `CFBundleName`, `CFBundleDisplayName`, `CFBundleIdentifier`  
-- `.github/workflows/*.yml` — Artifact names (optional cosmetic change)
+| File | Format | Recommended Size | Usage |
+|------|--------|------------------|-------|
+| `assets/Icons/icon.png` | PNG with transparency | 128x128 or 256x256 | Window icon (all platforms), macOS icon source |
+| `assets/Icons/icon.ico` | Multi-resolution ICO | 16x16, 32x32, 48x48, 256x256 | Windows taskbar, file explorer |
 
----
+**How to create a multi-resolution ICO:**
+1. Create PNGs at multiple sizes (16x16, 32x32, 48x48, 256x256)
+2. Use online converter (e.g., https://convertio.co/png-ico/) or ImageMagick:
+   ```bash
+   convert icon-16.png icon-32.png icon-48.png icon-256.png icon.ico
+   ```
 
-## Advanced Notes
-
-- **Internal Identifiers** (`WINDOW_TITLE`, `USER_AGENT`, `TEMP_PREFIX`) are auto-generated from `APP_NAME`; modifying them is optional.
-- `setup_theme(ctx)` in `config.rs` is a fallback that applies the Gruvbox Dark preset. The actual theme used by the installer is defined in `app.rs` via `get_theme_config()`.
-- `REPO_OPTIONS` can include multiple repos (e.g., stable, nightlies, forks). The user can select between them via button tabs in the UI. Each repo's `info` text is displayed below the Install button.
-- The installer uses `egui` and `egui_thematic` for the UI. The theme can be edited live using the built-in theme editor (press Ctrl+T in the app).
-- All color values in `ThemeConfig` use RGBA format `[R, G, B, A]` where each value is 0-255.
-- **Asset Selection**: When a release contains multiple downloadable files, the installer intelligently handles them:
-  - Single asset → Auto-proceeds to installation
-  - Multiple files with same base name (different extensions) → Auto-selects by priority (.7z > .zip > .img.gz > .img.xz > .img)
-  - Multiple different files → Shows selection modal for user to choose
-  - Source code archives are automatically filtered out
+**⚠️ Common mistakes:**
+- PNG without transparency (use RGBA, not RGB)
+- Wrong ICO format (must be valid multi-res .ico, not renamed .png)
+- Too small (minimum 64x64, recommended 128x128+)
 
 ---
 
-## Recommended Workflow for Developers
+#### **STEP 4: `assets/Mac/Info.plist` - macOS Bundle Config**
 
-### Quick Start (Minimal Customization)
+**Location:** `assets/Mac/Info.plist`
+**Lines:** 6, 8, 10, 18
 
-1. Fork or clone the repository.
-2. Create a **new branch** for your customizations (or use an existing branch).
-3. **Update `src/config.rs`:**
-   - Set `APP_NAME` to your OS name (e.g., `"MyOS"`)
-   - Set `VOLUME_LABEL` to your SD card label (max 11 chars, e.g., `"MYOS"`)
-   - Update `REPO_OPTIONS` with your GitHub repositories:
-     ```rust
-     pub const REPO_OPTIONS: &[RepoOption] = &[
-         RepoOption {
-             name: "Stable",
-             url: "yourorg/yourrepo",
-             info: "Description shown in UI.\nSupported devices: X, Y, Z",
-         },
-     ];
-     ```
-4. Replace `assets/Icons/icon.png` and `icon.ico` with your branding
-5. **(Optional)** Replace `assets/Fonts/nunwen.ttf` with your custom font
-6. Update `Cargo.toml` and `assets/Mac/Info.plist` with your project info
-7. Push your branch to GitHub.
+```xml
+<!-- Line 6 - Bundle name (no spaces) -->
+<key>CFBundleName</key>
+<string>SpruceOSInstaller</string>  ← Change to YourOSInstaller
 
-> GitHub Actions will automatically build Windows, Linux (x64 + ARM64), and macOS (ARM64 + x64) binaries — **no local build setup required**.
+<!-- Line 8 - Display name (shown in Finder) -->
+<key>CFBundleDisplayName</key>
+<string>SpruceOS Installer</string>  ← Change to "YourOS Installer"
+
+<!-- Line 10 - Bundle identifier (reverse DNS, must be unique) -->
+<key>CFBundleIdentifier</key>
+<string>com.spruceos.installer</string>  ← Change to com.yourcompany.installer
+
+<!-- Line 18 - Executable name (MUST match binary from Cargo.toml!) -->
+<key>CFBundleExecutable</key>
+<string>spruceos-installer</string>  ← Change to match Cargo.toml name
+```
+
+**⚠️ Critical:** The `CFBundleExecutable` MUST exactly match the `name` field in `Cargo.toml` or macOS won't launch the app!
+
+**⚠️ Important for macOS Users:** Make sure to document in your installer's README that macOS users need to grant Terminal "Full Disk Access" before running the installer (see the macOS Users section above for detailed instructions). This is a macOS security requirement for writing to removable drives.
 
 ---
 
-### Full Theme Customization (Using the Live Theme Editor)
+#### **STEP 5: `app.manifest` - Windows UAC Config**
 
-The installer includes a **built-in theme editor** that lets you customize colors visually and export the theme config directly. This is much faster than manually editing RGBA values in code.
+**Location:** `app.manifest` (root directory)
+**Lines:** 6, 9
 
-#### Step 1: Build and Run the Installer
+```xml
+<!-- Line 6 - Application identifier -->
+<assemblyIdentity name="SpruceOS.Installer" ... />
+                        ↑ Change to "YourOS.Installer"
 
-First, build the installer locally so you can use the theme editor:
+<!-- Line 9 - Description (shown in UAC prompt) -->
+<description>SpruceOS SD Card Installer</description>
+             ↑ Change to your description
+```
+
+This controls how Windows displays your app in:
+- UAC (User Account Control) elevation prompts
+- Task Manager
+- Windows Registry entries
+
+---
+
+#### **STEP 6: `src/app/theme.rs` - Custom Colors** (Optional but Recommended)
+
+**Location:** `src/app/theme.rs`
+**All color values are in RGBA format: `[Red, Green, Blue, Alpha]` (0-255)**
+
+<details>
+<summary><strong>Click to expand theme customization guide</strong></summary>
+
+##### **Quick Method: Live Theme Editor** 🎨
+
+1. Build and run locally: `cargo run`
+2. Press **Ctrl+T** to open the live theme editor
+3. Adjust colors visually with color pickers
+4. Copy the generated `ThemeConfig` code
+5. Paste into `src/app/theme.rs` (replace entire `get_theme_config()` method)
+
+##### **Manual Method: Edit Colors Directly**
+
+**Most important colors to change:**
+
+```rust
+// Line 7 - Theme name (cosmetic)
+name: "SpruceOS".to_string(),  // ← Change to your project name
+
+// Line 9 - Primary text color
+override_text_color: Some([251, 241, 199, 255]),  // Cream - change to your brand
+
+// Line 13 - Window background
+override_extreme_bg_color: Some([29, 32, 33, 255]),  // Dark gray
+
+// Line 24 - Accent/highlight color (selections, checkboxes)
+override_selection_bg: Some([215, 180, 95, 255]),  // Gold - your brand color!
+
+// Line 15 - Warning messages
+override_warn_fg_color: Some([214, 93, 14, 255]),  // Orange
+
+// Line 16 - Error messages
+override_error_fg_color: Some([204, 36, 29, 255]),  // Red
+```
+
+**Full color reference:**
+
+| Field | Current Color | Purpose |
+|-------|---------------|---------|
+| `override_text_color` | [251, 241, 199, 255] | Main UI text |
+| `override_weak_text_color` | [124, 111, 100, 255] | Secondary/dimmed text |
+| `override_hyperlink_color` | [131, 165, 152, 255] | Clickable links |
+| `override_faint_bg_color` | [48, 48, 48, 255] | Input fields, panels |
+| `override_extreme_bg_color` | [29, 32, 33, 255] | Window background |
+| `override_warn_fg_color` | [214, 93, 14, 255] | Warning text |
+| `override_error_fg_color` | [204, 36, 29, 255] | Error text |
+| `override_selection_bg` | [215, 180, 95, 255] | Highlight/accent |
+
+**Button/widget colors:**
+- `override_widget_inactive_fg_stroke_color` - Checkbox/button borders (line 40)
+- `override_widget_active_bg_fill` - Checked checkbox background (line 51)
+- `override_widget_active_fg_stroke_color` - Checkmark color (line 56)
+- `override_widget_hovered_bg_stroke_color` - Hover border (line 45)
+
+</details>
+
+---
+
+#### **STEP 7: `src/app/ui.rs` - Hardcoded Button Colors**
+
+**Location:** `src/app/ui.rs`
+
+Some UI elements use hardcoded colors outside the theme system. Search for `Color32::from_rgb` and update:
+
+```rust
+// Success messages (search for "Color32::from_rgb(104, 157, 106)")
+Color32::from_rgb(104, 157, 106)  // Green
+
+// Install button (search for install button color)
+.fill(egui::Color32::from_rgb(104, 157, 106))  // Green
+
+// Cancel button (search for cancel button color)
+.fill(egui::Color32::from_rgb(251, 73, 52))  // Red
+```
+
+**How to find them:**
+1. Open `src/app/ui.rs`
+2. Search for `Color32::from_rgb`
+3. Update RGB values to match your brand
+
+---
+
+#### **STEP 8: Fonts** (Optional)
+
+**Location:** `assets/Fonts/nunwen.ttf`
+
+To use a custom font:
+1. Replace `assets/Fonts/nunwen.ttf` with your TTF/OTF file
+2. If renaming the file, update `src/config.rs` line 247:
+   ```rust
+   pub const CUSTOM_FONT_NAME: &str = "YourFont";  // Line 247
+   ```
+
+---
+
+#### **STEP 9: GitHub Actions Workflows** (Optional - Cosmetic)
+
+Update artifact names for consistency:
+
+**`.github/workflows/build-windows.yml`:**
+- Line 27: Change `spruceos-installer-windows.exe` to `yourname-installer-windows.exe`
+- Line 32: Update artifact name
+
+**`.github/workflows/build-macos.yml`:**
+- Lines 53, 75, 94: Change `SpruceOSInstaller.app` to `YourOSInstaller.app`
+- Line 100: Update artifact name
+
+**`.github/workflows/build-linux.yml`:**
+- Lines 18, 23, 28, 33: Update artifact names for all 4 architectures
+
+---
+
+### 🧪 Testing Your Rebrand
+
+#### **Local Build Test:**
 
 ```bash
-# Install Rust if you haven't already
-# https://rustup.rs/
+# Clone your fork/branch
+git clone https://github.com/yourorg/yourrepo-installer.git
+cd yourrepo-installer
 
-# Clone and build
-git clone https://github.com/spruceUI/spruceOS-Installer.git
-cd spruceOS-Installer
+# Build with icon support
+cargo build --release --features icon
+
+# Binary location:
+# Windows: target/release/yourname-installer.exe
+# Linux: target/release/yourname-installer
+# macOS: target/release/yourname-installer
+```
+
+#### **Verification Checklist:**
+
+- [ ] Window title shows your custom name
+- [ ] Icons display correctly (taskbar, window)
+- [ ] Repository dropdown shows your repos
+- [ ] Colors match your brand
+- [ ] "Update Mode" checkbox lists correct directories
+- [ ] Download works from your GitHub repo
+- [ ] SD card gets labeled with your `VOLUME_LABEL`
+- [ ] macOS: Terminal has Full Disk Access granted (if testing on macOS)
+- [ ] macOS: App bundle opens and can access SD card (if testing on macOS)
+
+#### **GitHub Actions Test:**
+
+1. Push changes to GitHub
+2. Go to Actions tab
+3. Manually trigger "Build All Platforms" workflow
+4. Check artifacts:
+   - Windows: `yourname-installer-windows.exe`
+   - macOS: `YourOS-Installer-macOS-Universal.zip`
+   - Linux: 4 binaries for different architectures
+
+---
+
+### ⚠️ Common Pitfalls
+
+| Problem | Cause | Solution |
+|---------|-------|----------|
+| macOS can't access SD card | Terminal doesn't have Full Disk Access permission | Grant Terminal Full Disk Access in System Settings → Privacy & Security, then quit/reopen Terminal |
+| macOS app won't launch | `CFBundleExecutable` doesn't match `Cargo.toml` name | Make them identical |
+| Volume label too long | `VOLUME_LABEL` > 11 characters | Shorten to 11 chars max |
+| Wrong files in dropdown | GitHub repo URL format wrong | Use "owner/repo" format (no https://) |
+| Colors don't apply | Updated `theme.rs` but not `ui.rs` hardcoded colors | Search `Color32::from_rgb` in ui.rs |
+| Build fails on GitHub | Binary name changed but workflows not updated | Update `.github/workflows/*.yml` artifact names |
+| Icon not showing | PNG doesn't have transparency or wrong format | Use RGBA PNG, valid multi-res ICO |
+
+---
+
+### 📊 Summary: Files Changed
+
+**Critical (must change):**
+1. ✅ `src/config.rs` - App name, repos, volume label
+2. ✅ `Cargo.toml` - Package metadata
+3. ✅ `assets/Icons/` - Both PNG and ICO files
+4. ✅ `assets/Mac/Info.plist` - macOS bundle config
+5. ✅ `app.manifest` - Windows app identifier
+
+**Recommended (for full rebrand):**
+6. ✅ `src/app/theme.rs` - All UI colors
+7. ✅ `src/app/ui.rs` - Hardcoded button colors
+
+**Optional (cosmetic/advanced):**
+8. ⬜ `assets/Fonts/nunwen.ttf` - Custom font
+9. ⬜ `.github/workflows/*.yml` - Artifact names
+10. ⬜ `.vscode/launch.json` - Debug config (if using VS Code)
+
+---
+
+### 🎯 Platform Build Targets
+
+GitHub Actions automatically builds for:
+
+- **Windows:** x64
+- **Linux:** x64, ARM64, i686 (32-bit), ARMv7
+- **macOS:** Universal binary (Apple Silicon + Intel)
+
+No local build environment needed - just push to GitHub!
+
+---
+
+## Building Locally (Optional)
+
+### Prerequisites
+- Rust (via [rustup.rs](https://rustup.rs/))
+- Platform-specific dependencies:
+  - **Windows:** MSVC build tools
+  - **Linux:** Standard build tools
+  - **macOS:** Xcode Command Line Tools
+
+### Build Commands
+
+```bash
+# Debug build (fast compilation)
+cargo build
+
+# Release build (optimized)
+cargo build --release --features icon
+
+# Run directly (debug mode)
 cargo run
 ```
 
-#### Step 2: Open the Theme Editor
-
-With the installer running, press **Ctrl+T** to open the theme editor panel. This will open on the right side of the window.
-
-#### Step 3: Customize Colors Visually
-
-The theme editor provides:
-- **Color pickers** for all theme elements (text, backgrounds, borders, buttons, etc.)
-- **Live preview** — changes apply immediately to the UI
-- **RGBA sliders** for precise color control
-- **Preset themes** you can use as starting points
-
-Adjust the colors until you're happy with how the installer looks with your branding.
-
-#### Step 4: Export the Theme Config
-
-At the bottom of the theme editor panel, there's a **"Copy Theme Config"** button (or similar export option). Click it to copy the complete `ThemeConfig` struct to your clipboard.
-
-The copied output will look like this:
-
-```rust
-ThemeConfig {
-    name: "YourTheme".to_string(),
-    dark_mode: true,
-    override_text_color: Some([251, 241, 199, 255]),
-    override_weak_text_color: Some([124, 111, 100, 255]),
-    // ... all other color overrides
-}
-```
-
-#### Step 5: Paste into Your Code
-
-1. Open `src/app.rs` and find the `get_theme_config()` method (around line 136)
-2. Replace the entire `ThemeConfig { ... }` block with your copied config
-3. Update the `name` field to match your project name
-4. Save the file
-
-#### Step 6: Customize Hardcoded UI Colors (Optional)
-
-Some UI elements use hardcoded colors outside the theme system. Search for `Color32::from_rgb` in `app.rs` to find and update:
-
-- **Line ~1036, 1097**: Success message green `(104, 157, 106)`
-- **Line ~1397**: Install button green `(104, 157, 106)`
-- **Line ~1417**: Cancel button red `(251, 73, 52)`
-
-Replace the RGB values to match your brand colors.
-
-#### Step 7: Test and Push
-
-```bash
-# Test your changes
-cargo run
-
-# Commit and push to your branch
-git add src/app.rs
-git commit -m "Update theme colors for [YourProject]"
-git push
-```
-
-GitHub Actions will automatically build your customized installer for all platforms.
+**Tips:**
+- Press **Ctrl+T** while running to open the theme editor
+- Debug builds are in `target/debug/`
+- Release builds are in `target/release/`
 
 ---
 
-### Tips for Theme Customization
+## Architecture Overview
 
-- **Start with a preset**: The theme editor includes several presets (Gruvbox, Solarized, etc.). Pick one close to your brand and adjust from there.
-- **Test readability**: Make sure text is readable against backgrounds, especially for secondary text colors.
-- **Match your brand**: Use your project's official brand colors for accents, buttons, and highlights.
-- **Check all states**: Interact with buttons, dropdowns, and inputs to see hover/active/inactive states.
-- **Dark mode only**: The installer currently only supports dark themes. Light theme support is not implemented.
+### Module Structure
+
+The installer uses a modular architecture (refactored from a single ~2300 line file):
+
+```
+src/
+├── main.rs              - Entry point, privilege escalation
+├── config.rs            - ⚠️ BRANDING: App name, repos, constants
+├── app/                 - Main application (modular)
+│   ├── mod.rs           - Module coordinator
+│   ├── state.rs         - AppState enum, InstallerApp struct (~224 lines)
+│   ├── theme.rs         - ⚠️ COLORS: Theme configuration (~77 lines)
+│   ├── logic.rs         - Installation orchestration (~1,500 lines)
+│   └── ui.rs            - ⚠️ COLORS: UI rendering (~900 lines)
+├── drives.rs            - Cross-platform drive detection
+├── format.rs            - FAT32 formatting (>32GB support on Windows)
+├── extract.rs           - 7z extraction with embedded binaries
+├── burn.rs              - Raw image burning with SHA256 verification
+├── copy.rs              - File copying with progress tracking
+├── delete.rs            - Selective directory deletion (update mode)
+├── eject.rs             - Safe drive ejection
+├── github.rs            - GitHub API integration
+├── fat32.rs             - Custom FAT32 formatter (Windows >32GB)
+├── debug.rs             - Debug logging to file
+└── mac/
+    └── authopen.rs      - macOS privileged disk access
+```
+
+### Key Features
+
+**Cross-platform drive detection:**
+- Windows: `GetLogicalDrives` + `IOCTL_STORAGE_GET_DEVICE_NUMBER`
+- Linux: `/sys/block` + `/proc/mounts` + label detection
+- macOS: `diskutil list -plist` with multi-heuristic filtering
+
+**FAT32 formatting:**
+- Windows: Custom formatter bypasses 32GB OS limit, diskpart partitioning
+- Linux: `parted` + `mkfs.vfat`
+- macOS: `diskutil eraseDisk` with automatic retry logic
+
+**Raw image burning:**
+- On-the-fly `.gz` decompression
+- Pre-scans to determine decompressed size
+- SHA256 verification (Linux/macOS; Windows incomplete)
+- Sector-aligned writes on Windows
+
+**GitHub integration:**
+- Fetches latest releases via GitHub API
+- Chunked streaming for large downloads
+- Rate limit detection and timeout handling
+- Automatic filtering of source code archives
+
+**macOS privileged access:**
+- Uses native `authopen` utility (no code signing required!)
+- Proper error differentiation (cancelled, denied, system error)
+- File descriptor duplication for safe ownership transfer
 
 ---
 
-> **PLEASE:** Keep the original spruceOS authors in `Cargo.toml` and `Info.plist` for credit. Add your name alongside ours.
+## Acknowledgments
+
+This project builds upon excellent open source work:
+
+- **[7-Zip](https://www.7-zip.org/)** - We bundle the 7z binary (LGPL) for seamless archive extraction
+- **[Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager)** - macOS `authopen` integration patterns

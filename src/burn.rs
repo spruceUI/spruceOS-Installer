@@ -711,21 +711,11 @@ async fn burn_image_macos(
     progress_tx: &UnboundedSender<BurnProgress>,
     cancel_token: &CancellationToken,
 ) -> Result<u64, String> {
-    use std::os::unix::fs::OpenOptionsExt;
     use std::io::{Read, Write};
 
     // Use rdisk for faster writes (raw disk)
     let raw_device_path = device_path.replace("/dev/disk", "/dev/rdisk");
     crate::debug::log(&format!("Using raw device: {}", raw_device_path));
-
-    // Check if we're running as root
-    let euid = unsafe { libc::geteuid() };
-    if euid != 0 {
-        return Err(format!(
-            "Insufficient permissions to write to {}. Please run with sudo or grant Full Disk Access to this application.",
-            raw_device_path
-        ));
-    }
 
     let bytes_written = tokio::task::spawn_blocking({
         let image_path = image_path.to_path_buf();
@@ -734,20 +724,27 @@ async fn burn_image_macos(
         let cancel_token = cancel_token.clone();
 
         move || -> Result<u64, String> {
-            crate::debug::log(&format!("Opening device for writing: {}", device_path));
-            
-            let mut device = std::fs::OpenOptions::new()
-                .write(true)
-                .custom_flags(libc::O_SYNC)
-                .open(&device_path)
-                .map_err(|e| {
-                    let err_msg = format!("Failed to open device {}: {} (error code: {:?})", 
-                        device_path, e, e.raw_os_error());
-                    crate::debug::log(&err_msg);
-                    err_msg
-                })?;
+            crate::debug::log("Opening device using authopen (will prompt for authorization)...");
 
-            crate::debug::log("Device opened successfully");
+            // Use authopen to get privileged file descriptor
+            // This will show a native macOS authorization dialog
+            let mut device = match crate::mac::authopen::auth_open_device(std::path::Path::new(&device_path)) {
+                Ok(file) => file,
+                Err(crate::mac::authopen::AuthOpenError::Cancelled) => {
+                    crate::debug::log("User cancelled authorization");
+                    return Err("Authorization cancelled by user".to_string());
+                },
+                Err(crate::mac::authopen::AuthOpenError::Failed(msg)) => {
+                    crate::debug::log(&format!("Authorization failed: {}", msg));
+                    return Err(format!("Failed to open device: {}", msg));
+                },
+                Err(crate::mac::authopen::AuthOpenError::SystemError(msg)) => {
+                    crate::debug::log(&format!("System error during authorization: {}", msg));
+                    return Err(format!("System error: {}", msg));
+                },
+            };
+
+            crate::debug::log("Device opened successfully via authopen");
 
             // Check if file is gzipped and create appropriate reader
             let is_gzipped = image_path.extension()
@@ -872,8 +869,8 @@ async fn verify_image(
     // Read back device and compute hash
     let device_hash = tokio::task::spawn_blocking({
         let device_path = device_path.to_string();
-        let progress_tx = progress_tx.clone();
-        let cancel_token = cancel_token.clone();
+        let _progress_tx = progress_tx.clone();
+        let _cancel_token = cancel_token.clone();
 
         move || -> Result<String, String> {
             #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -934,7 +931,7 @@ async fn verify_image(
                 let mut total_read = 0u64;
 
                 while total_read < image_size {
-                    if cancel_token.is_cancelled() {
+                    if _cancel_token.is_cancelled() {
                         return Err("Verification cancelled".to_string());
                     }
 
@@ -949,7 +946,7 @@ async fn verify_image(
                     hasher.update(&buffer[..bytes_read]);
                     total_read += bytes_read as u64;
 
-                    let _ = progress_tx.send(BurnProgress::Verifying {
+                    let _ = _progress_tx.send(BurnProgress::Verifying {
                         verified: total_read,
                         total: image_size,
                     });

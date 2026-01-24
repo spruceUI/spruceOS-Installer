@@ -37,7 +37,7 @@ pub const VOLUME_LABEL: &str = "SPRUCEOS";
 // ----------------------------------------------------------------------------
 
 /// Window title (displayed in title bar)
-pub const WINDOW_TITLE: &str = env!("CARGO_PKG_NAME");
+pub const WINDOW_TITLE: &str = "SpruceOS Installer";
 
 /// User-Agent string for HTTP requests to GitHub
 pub const USER_AGENT: &str = env!("CARGO_PKG_NAME");
@@ -49,6 +49,18 @@ pub const TEMP_PREFIX: &str = env!("CARGO_PKG_NAME");
 // REPOSITORY OPTIONS
 // ----------------------------------------------------------------------------
 
+/// Asset display mapping for user-friendly device names
+///
+/// Maps filename patterns to human-readable display names and device lists
+pub struct AssetDisplayMapping {
+    /// Pattern to match in the asset filename (e.g., "RK3326")
+    pub pattern: &'static str,
+    /// Display name shown as the main title in UI (e.g., "RK3326 Chipset")
+    pub display_name: &'static str,
+    /// Comma-separated list of compatible devices (e.g., "Device A, Device B")
+    pub devices: &'static str,
+}
+
 /// Repository configuration for download sources
 ///
 /// Each repository entry contains:
@@ -58,6 +70,11 @@ pub const TEMP_PREFIX: &str = env!("CARGO_PKG_NAME");
 ///           Use \n for line breaks in longer informative messages
 /// - `update_directories`: Directories to delete when updating (e.g., &["Retroarch", "spruce"])
 ///                         Paths are relative to SD card root
+/// - `allowed_extensions`: Optional filter to only show assets with these extensions
+///                         Use this to filter out update packages or show only specific formats
+///                         Set to None to show all assets
+/// - `asset_display_mappings`: Optional mappings to show user-friendly device names
+///                             instead of technical filenames in the selection UI
 ///
 /// Example:
 /// ```
@@ -66,6 +83,8 @@ pub const TEMP_PREFIX: &str = env!("CARGO_PKG_NAME");
 ///     url: "spruceUI/twigUI",
 ///     info: "This is spruceOS for the GKD Pixel 2.\nOptimized for Pixel 2 hardware.",
 ///     update_directories: &["Retroarch", "spruce"],
+///     allowed_extensions: Some(&[".7z", ".zip"]),  // Only show archives
+///     asset_display_mappings: None,
 /// }
 /// ```
 pub struct RepoOption {
@@ -73,6 +92,8 @@ pub struct RepoOption {
     pub url: &'static str,
     pub info: &'static str,
     pub update_directories: &'static [&'static str],
+    pub allowed_extensions: Option<&'static [&'static str]>,
+    pub asset_display_mappings: Option<&'static [AssetDisplayMapping]>,
 }
 
 pub const REPO_OPTIONS: &[RepoOption] = &[
@@ -81,37 +102,86 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         url: "spruceUI/spruceOS",
         info: "Stable releases of spruceOS.\nSupported devices: Miyoo A30",
         update_directories: &["Retroarch", "spruce"],
+        allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
+        asset_display_mappings: None,
     },
     RepoOption {
         name: "Nightlies",
         url: "spruceUI/spruceOSNightlies",
         info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick",
         update_directories: &["Retroarch", "spruce"],
+        allowed_extensions: None,  // Show all assets
+        asset_display_mappings: None,
     },
     RepoOption {
         name: "SprigUI",
         url: "spruceUI/sprigUI",
         info: "SpruceOS for the Miyoo Mini Flip.",
         update_directories: &["Retroarch", "spruce"],
+        allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
+        asset_display_mappings: None,
     },
     RepoOption {
         name: "TwigUI",
         url: "spruceUI/twigUI",
         info: "SpruceOS for the GKD Pixel 2.",
         update_directories: &["Retroarch", "spruce"],
+        allowed_extensions: None,  // Show all assets
+        asset_display_mappings: None,
+    },
+    RepoOption {
+        name: "UnofficialOS",
+        url: "RetroGFX/UnofficialOS",
+        info: "UnofficialOS for various retro handheld devices.\nSelect your device from the list.\n\nSupported: RK3326, RK3566, RK3588, AMD64, S922X, and more.",
+        update_directories: &["System", "usr"],  // Example directories
+        allowed_extensions: Some(&[".img.gz"]),  // Only show full OS images, not .tar updates
+        asset_display_mappings: Some(&[
+            AssetDisplayMapping {
+                pattern: "AMD64",
+                display_name: "AMD64 / x86_64",
+                devices: "Anbernic Win600, AOKZOE A1 PRO, AYANEO 2/2S/AIR/PRO/PLUS, Atari VCS, Ayn Loki Zero/Max, GPD Win4/Max2",
+            },
+            AssetDisplayMapping {
+                pattern: "RK3326-CLONE",
+                display_name: "RK3326-CLONE",
+                devices: "BattleXP G350, GameConsole R33S/R35S/R36S, MagicX XU Mini M, Kinhank K36, Clones",
+            },
+            AssetDisplayMapping {
+                pattern: "RK3326",
+                display_name: "RK3326",
+                devices: "Anbernic RG351P/V/M, Odroid Go Advance/Super, Powkiddy RGB10/RGB20S/V10, MagicX XU10",
+            },
+            AssetDisplayMapping {
+                pattern: "RK3566-BSP-X55",
+                display_name: "RK3566-BSP-X55",
+                devices: "Powkiddy X55",
+            },
+            AssetDisplayMapping {
+                pattern: "RK3566-BSP",
+                display_name: "RK3566-BSP",
+                devices: "Anbernic RG353P/PS/V/VS/M/RG503, Powkiddy RGB10 Max 3/RGB20 Pro/RGB30/RK2023",
+            },
+            AssetDisplayMapping {
+                pattern: "RK3399",
+                display_name: "RK3399",
+                devices: "Anbernic RG552",
+            },
+            AssetDisplayMapping {
+                pattern: "RK3588",
+                display_name: "RK3588",
+                devices: "Gameforce Ace, Orange Pi 5, Radxa Rock 5b, Indiedroid Nova",
+            },
+            AssetDisplayMapping {
+                pattern: "S922X",
+                display_name: "S922X",
+                devices: "Odroid Go Ultra, Odroid N2, Odroid N2L, Powkiddy RGB10 Max 3 Pro",
+            },
+        ]),
     },
 ];
 
 /// Index of the default repository selection (0 = first option)
 pub const DEFAULT_REPO_INDEX: usize = 0;
-
-/// DEPRECATED: File extension is now auto-detected from supported formats
-/// The installer automatically detects and downloads the first asset matching:
-/// - Archive mode: .7z, .zip (formats, extracts, and copies files)
-/// - Image mode: .img.gz, .img.xz, .img (burns raw image to device)
-/// This constant is kept for backward compatibility but is no longer used
-#[allow(dead_code)]
-pub const ASSET_EXTENSION: &str = ".7z";
 
 // ----------------------------------------------------------------------------
 // WINDOW SETTINGS

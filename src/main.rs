@@ -13,6 +13,9 @@ mod fat32;
 mod format;
 mod github;
 
+#[cfg(target_os = "macos")]
+mod mac;
+
 use app::InstallerApp;
 use config::{load_app_icon, load_custom_fonts, WINDOW_MIN_SIZE, WINDOW_SIZE, WINDOW_TITLE};
 use eframe::egui;

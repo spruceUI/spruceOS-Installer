@@ -101,6 +101,21 @@ jobs:
             Automated beta build from the `${{ github.ref_name }}` branch.
 
             **Warning:** This is a pre-release build and may contain bugs.
+
+            ## Downloads
+            - **Linux x64:** `spruceos-installer-linux-x64`
+            - **Linux ARM64:** `spruceos-installer-linux-arm64`
+            - **Linux i686 (32-bit):** `spruceos-installer-linux-i686`
+            - **Linux ARMv7:** `spruceos-installer-linux-armv7`
+
+            ## Linux Instructions
+
+            1. Download the appropriate binary for your architecture
+            2. Make it executable: `chmod +x spruceos-installer-linux-*`
+            3. Run: `./spruceos-installer-linux-*`
+            4. The installer will automatically request privileges via `pkexec` when needed
+
+            **Note:** Requires a desktop environment with `pkexec` support (most modern Linux distributions).
           prerelease: true
           files: artifacts/**/*
         env:

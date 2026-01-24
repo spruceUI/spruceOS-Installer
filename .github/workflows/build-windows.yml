@@ -54,6 +54,18 @@ jobs:
             Automated beta build from the `${{ github.ref_name }}` branch.
 
             **Warning:** This is a pre-release build and may contain bugs.
+
+            ## Downloads
+            - **Windows (x64):** `spruceos-installer-windows.exe`
+
+            ## Windows Instructions
+
+            1. Download `spruceos-installer-windows.exe`
+            2. Run the executable
+            3. If Windows SmartScreen appears, click "More info" → "Run anyway" (app is not code-signed)
+            4. The installer will automatically request administrator privileges when needed
+
+            The installer supports Windows 7 and later (x64).
           prerelease: true
           files: artifacts/*
         env:
