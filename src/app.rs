@@ -8,7 +8,7 @@ use crate::drives::{get_removable_drives, DriveInfo};
 use crate::eject::eject_drive;
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
-use crate::github::{download_asset, find_release_asset, get_latest_release, DownloadProgress, Release, Asset};
+use crate::github::{download_asset, get_latest_release, DownloadProgress, Release, Asset};
 use eframe::egui;
 use egui_thematic::{ThemeConfig, ThemeEditorState, render_theme_panel};
 use std::path::PathBuf;
@@ -1400,7 +1400,7 @@ impl eframe::App for InstallerApp {
                 match result {
                     Ok(release) => {
                         // Get allowed extensions from current repo option
-                        let repo_option = &config::REPO_OPTIONS[self.selected_repo_idx];
+                        let repo_option = &REPO_OPTIONS[self.selected_repo_idx];
                         let allowed_extensions = repo_option.allowed_extensions;
 
                         // Filter assets
