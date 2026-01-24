@@ -7,6 +7,11 @@
 - Backup and restore (update current installation instead of just fresh ones?)
 - Scrape boxart for roms
 
+## Recent Updates
+- ✅ **Asset Selection** - Installer now intelligently handles multiple downloads from a single release
+- ✅ **Repository Info** - Each repository can display custom information text in the UI
+- ✅ **Bug Fixes** - Fixed modal dialog freeze issue and cancellation state handling
+
 # SpruceOS Installer
 
 ## Overview
@@ -65,15 +70,46 @@ Edit these constants:
 |-------|---------|---------|
 | `APP_NAME` | Display name of your OS (window title, UI) | `"SpruceOS"` |
 | `VOLUME_LABEL` | FAT32 SD card label (max 11 chars, uppercase) | `"SPRUCEOS"` |
-| `REPO_OPTIONS` | Array of repositories to fetch releases from | `[("Stable", "spruceUI/spruceOS"), ("Nightlies", "spruceUI/spruceOSNightlies")]` |
+| `REPO_OPTIONS` | Array of repository configurations (see below) | See example below |
 | `DEFAULT_REPO_INDEX` | Index of the default repo selection (0 = first) | `0` |
-| `ASSET_EXTENSION` | File extension to download from releases | `".7z"` or `".zip"` |
 | `WINDOW_SIZE` | Default window size (width, height) | `(679.5, 420.0)` |
 | `WINDOW_MIN_SIZE` | Minimum window size (width, height) | `(679.5, 420.0)` |
+
+**Repository Configuration (`REPO_OPTIONS`):**
+
+Each repository is defined using a `RepoOption` struct with three fields:
+- `name`: Display name shown in the UI button (e.g., "Stable", "Nightlies")
+- `url`: GitHub repository in "owner/repo" format (e.g., "spruceUI/spruceOS")
+- `info`: Description text shown below the Install button when selected. Use `\n` for line breaks.
+
+**Example:**
+```rust
+pub const REPO_OPTIONS: &[RepoOption] = &[
+    RepoOption {
+        name: "Stable",
+        url: "spruceUI/spruceOS",
+        info: "Stable releases of spruceOS.\nSupported devices: Device X, Device Y",
+    },
+    RepoOption {
+        name: "Nightlies",
+        url: "spruceUI/spruceOSNightlies",
+        info: "Nightly development builds.\n⚠️ Warning: May be unstable!",
+    },
+];
+```
+
+**Asset Detection:**
+
+The installer automatically detects and downloads compatible files from GitHub releases:
+- **Archive mode**: `.7z`, `.zip` (formats SD card, extracts, and copies files)
+- **Image mode**: `.img.gz`, `.img.xz`, `.img` (burns raw image directly to device)
+- **Source code archives** (`Source code.zip`, `Source code.tar.gz`) are automatically filtered out
+- If multiple assets exist, the installer will prompt the user to select one, or auto-select based on file type priority
 
 > **Notes:**
 > - `WINDOW_TITLE`, `USER_AGENT`, and `TEMP_PREFIX` are auto-generated from `APP_NAME`. You usually **do not need to change these**.
 > - The `setup_theme()` function in `config.rs` uses the Gruvbox Dark preset. This is a fallback; the actual theme is customized in `app.rs`.
+> - `ASSET_EXTENSION` constant still exists for backward compatibility but is **deprecated** and no longer used.
 
 ---
 
@@ -171,9 +207,14 @@ To fully rebrand the installer, also update:
 
 - **Internal Identifiers** (`WINDOW_TITLE`, `USER_AGENT`, `TEMP_PREFIX`) are auto-generated from `APP_NAME`; modifying them is optional.
 - `setup_theme(ctx)` in `config.rs` is a fallback that applies the Gruvbox Dark preset. The actual theme used by the installer is defined in `app.rs` via `get_theme_config()`.
-- `REPO_OPTIONS` can include multiple repos (e.g., stable, nightlies, forks). The user can select between them via a dropdown in the UI.
+- `REPO_OPTIONS` can include multiple repos (e.g., stable, nightlies, forks). The user can select between them via button tabs in the UI. Each repo's `info` text is displayed below the Install button.
 - The installer uses `egui` and `egui_thematic` for the UI. The theme can be edited live using the built-in theme editor (press Ctrl+T in the app).
 - All color values in `ThemeConfig` use RGBA format `[R, G, B, A]` where each value is 0-255.
+- **Asset Selection**: When a release contains multiple downloadable files, the installer intelligently handles them:
+  - Single asset → Auto-proceeds to installation
+  - Multiple files with same base name (different extensions) → Auto-selects by priority (.7z > .zip > .img.gz > .img.xz > .img)
+  - Multiple different files → Shows selection modal for user to choose
+  - Source code archives are automatically filtered out
 
 ---
 
@@ -183,7 +224,19 @@ To fully rebrand the installer, also update:
 
 1. Fork or clone the repository.
 2. Create a **new branch** for your customizations (or use an existing branch).
-3. Update `APP_NAME`, `VOLUME_LABEL`, and `REPO_OPTIONS` in `src/config.rs`
+3. **Update `src/config.rs`:**
+   - Set `APP_NAME` to your OS name (e.g., `"MyOS"`)
+   - Set `VOLUME_LABEL` to your SD card label (max 11 chars, e.g., `"MYOS"`)
+   - Update `REPO_OPTIONS` with your GitHub repositories:
+     ```rust
+     pub const REPO_OPTIONS: &[RepoOption] = &[
+         RepoOption {
+             name: "Stable",
+             url: "yourorg/yourrepo",
+             info: "Description shown in UI.\nSupported devices: X, Y, Z",
+         },
+     ];
+     ```
 4. Replace `assets/Icons/icon.png` and `icon.ico` with your branding
 5. **(Optional)** Replace `assets/Fonts/nunwen.ttf` with your custom font
 6. Update `Cargo.toml` and `assets/Mac/Info.plist` with your project info
