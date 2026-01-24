@@ -1,547 +1,279 @@
-## To-Do
-- The info could be centered vertically in the space below the button instead of straddling it?
-- Checkboxes for various additional packages:
-    - all themes
-    - all A30 ports
-    - all free games
-    - PortMaster (are we making this a separate archive?)
-- Backup and restore (update current installation instead of just fresh ones?)
-- Scrape boxart for roms
-
 # SpruceOS Installer
 
 ## Overview
 
-**SpruceOS Installer** is an all-in-one **downloader, extractor, formatter, and installer** made for **SpruceOS**.
+**SpruceOS Installer** is an all-in-one **downloader, extractor, formatter, and installer** for **SpruceOS** and other custom firmware projects.
 
-It can be easily edited and adapted to work with **any custom firmware (CFW)** that requires files to be copied onto a **FAT32 SD card**, with little to no hassle.
+- ✓ Download releases directly from GitHub
+- ✓ Format SD cards (FAT32, supports >32GB on Windows)
+- ✓ Extract archives (.7z, .zip) or burn raw images (.img, .img.gz, .img.xz)
+- ✓ Cross-platform: Windows, Linux, macOS
+- ✓ Update mode: preserve saves/ROMs while updating system files
+- ✓ Multi-repository support with asset filtering
 
-GitHub Actions are set up to automatically **build and create releases per branch**.  
-If you’d like to use this program for your own project, let us know—we can create a branch for you or add you directly to the repository.
+GitHub Actions automatically build releases per branch. If you'd like to use this installer for your own CFW project, let us know—we can create a branch for you or add you directly to the repository.
 
-> **Please do not remove the Spruce or NextUI teams from the authors section.**  
+> **Please do not remove the Spruce or NextUI teams from the authors section.**
 > Instead, add your name alongside the existing credits.
-
-
-## macOS Users
-
-The installer is distributed as a `.zip` containing a self-contained `.app` bundle. No system installation is required.
-
-**Steps to run:**
-
-1. Download the ZIP file from the GitHub release.
-2. Extract the ZIP — you will get the following bundle and files:
-
-    ```
-    SpruceOS Installer.app/
-    ├── Contents/
-    │   ├── MacOS/
-    │   │   └── spruceos-installer
-    │   ├── Info.plist
-    │   └── Resources/
-    │       └── AppIcon.icns
-    └── launch-installer.command (optional launcher script)
-    ```
-
-3. **Easy Method:** Double-click `launch-installer.command` to automatically remove quarantine and launch the app
-4. **Alternative:** Right-click "SpruceOSInstaller.app" and select "Open", then click "Open" in the dialog
-
-**About Authorization:**
-
-When writing to SD cards, the installer uses macOS's built-in `authopen` utility to request privileged disk access. You'll see a native macOS authorization dialog asking for your admin password. This is normal and required for direct disk writing.
-
-The installer will show specific error messages if authorization fails:
-- "Authorization cancelled by user" - You clicked Cancel in the auth dialog
-- "Permission denied" - Your account doesn't have admin privileges
-- System errors will show detailed diagnostic information
-
-**Note:** This app is not code-signed. For production use, consider signing with an Apple Developer certificate.
-
-# SpruceOS Installer — Developer Guide
-
-## Overview
-
-**SpruceOS Installer** is an all-in-one Rust installer for flashing SD cards with SpruceOS (or other custom firmware).  
-This guide is intended for **developers** who want to **rebrand or customize the installer** for their own OS project.
-
-> **Note:** All builds are handled automatically via **GitHub Actions**.  
-> Developers only need to create their **own branch** with the desired customizations — no local build setup is required.
 
 ---
 
-## Rebranding the Installer
+## For End Users
 
-To adapt this installer for your project, update the following in your branch:
+### macOS Users
 
-### 1. `src/config.rs` — Core Customization
+The installer is distributed as a `.zip` containing a self-contained `.app` bundle.
 
-Edit these constants:
+**Steps to run:**
+1. Download and extract the ZIP
+2. **Easy method:** Double-click `launch-installer.command` to remove quarantine and launch
+3. **Alternative:** Right-click the `.app` and select "Open", then click "Open" in the dialog
 
-| Field | Purpose | Example |
-|-------|---------|---------|
-| `APP_NAME` | Display name of your OS (used throughout UI) | `"SpruceOS"` |
-| `WINDOW_TITLE` | Window title bar text (all platforms) | `"SpruceOS Installer"` |
-| `VOLUME_LABEL` | FAT32 SD card label (max 11 chars, uppercase) | `"SPRUCEOS"` |
-| `REPO_OPTIONS` | Array of repository configurations (see below) | See example below |
-| `DEFAULT_REPO_INDEX` | Index of the default repo selection (0 = first) | `0` |
-| `WINDOW_SIZE` | Default window size (width, height) | `(679.5, 420.0)` |
-| `WINDOW_MIN_SIZE` | Minimum window size (width, height) | `(679.5, 420.0)` |
+When writing to SD cards, you'll see a native macOS authorization dialog requesting your admin password (via `authopen`). This is normal and required.
 
-**Repository Configuration (`REPO_OPTIONS`):**
+**Note:** This app is not code-signed.
 
-Each repository is defined using a `RepoOption` struct with the following fields:
+### Windows/Linux Users
 
-| Field | Type | Purpose | Example |
-|-------|------|---------|---------|
-| `name` | `&str` | Display name shown in the UI button | `"Stable"`, `"Nightlies"` |
-| `url` | `&str` | GitHub repository in "owner/repo" format | `"spruceUI/spruceOS"` |
-| `info` | `&str` | Description text shown below Install button (use `\n` for line breaks) | `"Stable releases.\nSupported: Device X"` |
-| `update_directories` | `&[&str]` | Directories to delete when updating (preserves other files) | `&["Retroarch", "spruce"]` |
-| `allowed_extensions` | `Option<&[&str]>` | Filter to only show specific file types (None = show all) | `Some(&[".7z", ".zip"])` |
-| `asset_display_mappings` | `Option<&[AssetDisplayMapping]>` | Show user-friendly names instead of filenames | See below |
+1. Download the installer for your platform
+2. Run the executable
+3. On Linux, the app will automatically request privileges via `pkexec` if needed
 
-**Basic Example:**
+---
+
+## For Developers
+
+### Project Structure
+
+The installer is built in Rust using the `egui` framework. The codebase is modular:
+
+```
+src/
+├── main.rs              - Entry point, privilege escalation
+├── config.rs            - Branding, repositories, theme defaults
+├── app/                 - Main application logic (modular)
+│   ├── mod.rs           - Module coordinator
+│   ├── state.rs         - AppState, InstallerApp struct, initialization
+│   ├── theme.rs         - Theme configuration
+│   ├── logic.rs         - Installation orchestration, async tasks
+│   └── ui.rs            - UI rendering (eframe::App impl)
+├── drives.rs            - Cross-platform drive detection
+├── format.rs            - FAT32 formatting
+├── extract.rs           - 7z extraction
+├── burn.rs              - Raw image burning with verification
+├── copy.rs              - File copying with progress
+├── delete.rs            - Selective directory deletion
+├── eject.rs             - Safe drive ejection
+├── github.rs            - GitHub API integration
+├── fat32.rs             - Custom FAT32 formatter (>32GB Windows)
+├── debug.rs             - Debug logging
+└── mac/                 - macOS-specific helpers
+    └── authopen.rs      - Privileged disk access via authopen
+```
+
+### Quick Customization Guide
+
+To rebrand this installer for your own CFW project:
+
+#### 1. **Edit `src/config.rs`** - Branding & Repositories
+
+Update these constants:
+
+| Constant | Purpose | Example |
+|----------|---------|---------|
+| `APP_NAME` | Your OS name | `"MyOS"` |
+| `WINDOW_TITLE` | Window title | `"MyOS Installer"` |
+| `VOLUME_LABEL` | SD card label (max 11 chars) | `"MYOS"` |
+| `REPO_OPTIONS` | GitHub repositories | See below |
+
+**Repository Configuration:**
+
 ```rust
 pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
-        name: "Stable",
-        url: "spruceUI/spruceOS",
-        info: "Stable releases of spruceOS.\nSupported devices: Miyoo A30",
-        update_directories: &["Retroarch", "spruce"],
-        allowed_extensions: Some(&[".7z"]),  // Only show .7z archives
-        asset_display_mappings: None,
-    },
-    RepoOption {
-        name: "Nightlies",
-        url: "spruceUI/spruceOSNightlies",
-        info: "Nightly development builds.\n⚠️ Warning: May be unstable!",
-        update_directories: &["Retroarch", "spruce"],
-        allowed_extensions: None,  // Show all assets
-        asset_display_mappings: None,
+        name: "Stable",                    // Button label
+        url: "yourorg/yourrepo",           // GitHub repo (owner/repo)
+        info: "Stable releases.\nSupported: Device X, Y",  // Info text (\n for line breaks)
+        update_directories: &["System"],   // Folders deleted during updates
+        allowed_extensions: None,          // None = show all assets
+        asset_display_mappings: None,      // None = use filenames as-is
     },
 ];
 ```
 
----
+**Advanced: Asset Display Mappings**
 
-### Advanced Repository Features
+If your releases contain technical filenames, use `asset_display_mappings` to show user-friendly names:
 
-#### Update Mode (`update_directories`)
-
-Update mode allows users to update an existing installation without losing saves, ROMs, or other personal files. When a user checks "Update Mode" in the UI:
-
-1. The installer **does NOT format** the SD card
-2. It **only deletes** the directories specified in `update_directories`
-3. All other files (saves, ROMs, screenshots, etc.) are preserved
-4. New files are extracted and copied over
-
-**Example:**
 ```rust
-RepoOption {
-    name: "Stable",
-    url: "spruceUI/spruceOS",
-    info: "...",
-    update_directories: &["Retroarch", "spruce", "System"],  // These folders will be deleted
-    // ROMs, saves, themes in other folders are preserved!
-    allowed_extensions: Some(&[".7z"]),
-    asset_display_mappings: None,
-}
+asset_display_mappings: Some(&[
+    AssetDisplayMapping {
+        pattern: "RK3326",                 // Matches filenames containing this
+        display_name: "RK3326 Chipset",    // Friendly name
+        devices: "RG351P/V/M, Odroid Go",  // Compatible devices
+    },
+]),
 ```
 
-**Common Patterns:**
-- CFW core files: `&["System", "usr", "bin"]`
-- Frontend updates: `&["Retroarch", "spruce", "EmulationStation"]`
-- Full refresh: `&["."]` (deletes everything - use with caution!)
+Users will see "RK3326 Chipset" instead of "MyOS-RK3326-v1.2.img.gz".
 
-#### Extension Filtering (`allowed_extensions`)
+**Advanced: Extension Filtering**
 
-Some projects release multiple file types in the same GitHub release (e.g., full OS images + update packages). Use `allowed_extensions` to control which files users see.
+Control which file types users see:
 
-**Examples:**
-
-Show only full OS images (hide update packages):
 ```rust
-allowed_extensions: Some(&[".img.gz", ".img.xz"]),
+allowed_extensions: Some(&[".7z", ".zip"]),  // Only show archives
+allowed_extensions: Some(&[".img.gz"]),      // Only show images
+allowed_extensions: None,                    // Show all assets
 ```
 
-Show only archives (hide raw images):
+**Advanced: Update Mode**
+
+Update mode lets users preserve saves/ROMs while updating system files. Specify which directories to delete:
+
 ```rust
-allowed_extensions: Some(&[".7z", ".zip"]),
+update_directories: &["Retroarch", "spruce", "System"],  // These are deleted
+// ROMs, saves, themes in other folders are preserved!
 ```
 
-Show all assets (no filtering):
+#### 2. **Edit `src/app/theme.rs`** - Colors
+
+The `get_theme_config()` method defines all UI colors in RGBA format:
+
 ```rust
-allowed_extensions: None,
+override_text_color: Some([251, 241, 199, 255]),           // Primary text
+override_extreme_bg_color: Some([29, 32, 33, 255]),        // Window background
+override_selection_bg: Some([215, 180, 95, 255]),          // Highlights/accents
+override_error_fg_color: Some([204, 36, 29, 255]),         // Error messages
+// ... see src/app/theme.rs for all fields
 ```
 
-**Use Cases:**
-- Prevent users from accidentally selecting update packages when they need full images
-- Hide experimental formats (e.g., show only .7z if .zip is for legacy support)
-- Simplify UI when releases have many file types
+**Pro tip:** Run the installer locally and press **Ctrl+T** to open the live theme editor. Adjust colors visually, then copy the generated `ThemeConfig` into `theme.rs`.
 
-#### Asset Display Mappings (`asset_display_mappings`)
+**Hardcoded UI colors** (also in `src/app/ui.rs`):
+- Success messages: `Color32::from_rgb(104, 157, 106)` (green)
+- Install button: `Color32::from_rgb(104, 157, 106)` (green)
+- Cancel button: `Color32::from_rgb(251, 73, 52)` (red)
 
-When releases contain technical filenames like `UnofficialOS-RK3326.img.gz`, users may not know which file is for their device. Asset display mappings let you show friendly names instead.
+Search for `Color32::from_rgb` in `ui.rs` to update these.
 
-**Example Setup:**
-```rust
-RepoOption {
-    name: "UnofficialOS",
-    url: "RetroGFX/UnofficialOS",
-    info: "Select your device from the list below.",
-    update_directories: &["System", "usr"],
-    allowed_extensions: Some(&[".img.gz"]),  // Only show full images
-    asset_display_mappings: Some(&[
-        AssetDisplayMapping {
-            pattern: "RK3326",  // Matches "UnofficialOS-RK3326.img.gz"
-            display_name: "RK3326 Chipset",
-            devices: "Anbernic RG351P/V/M, Odroid Go Advance/Super",
-        },
-        AssetDisplayMapping {
-            pattern: "RK3588",  // Matches "UnofficialOS-RK3588.img.gz"
-            display_name: "RK3588 Chipset",
-            devices: "Gameforce Ace, Orange Pi 5, Radxa Rock 5b",
-        },
-    ]),
-}
-```
+#### 3. **Replace Icons & Fonts**
 
-**UI Display:**
+| Asset | Path | Usage |
+|-------|------|-------|
+| PNG icon | `assets/Icons/icon.png` | Window icon (64x64 or 128x128 recommended) |
+| ICO icon | `assets/Icons/icon.ico` | Windows taskbar/explorer (multi-res preferred) |
+| Font | `assets/Fonts/nunwen.ttf` | Custom UI font (update `config.rs` if renaming) |
 
-Instead of:
-```
-❯ UnofficialOS-RK3326.img.gz
-  UnofficialOS-RK3588.img.gz
-```
+#### 4. **Update Metadata**
 
-Users see:
-```
-❯ RK3326 Chipset
-  Compatible: Anbernic RG351P/V/M, Odroid Go Advance/Super
+- `Cargo.toml` - Change `name`, `description`, `authors` (keep original credits!)
+- `assets/Mac/Info.plist` - Update `CFBundleName`, `CFBundleDisplayName`, `CFBundleIdentifier`
 
-  RK3588 Chipset
-  Compatible: Gameforce Ace, Orange Pi 5, Radxa Rock 5b
-```
+#### 5. **Push to GitHub**
 
-**Pattern Matching:**
-- The `pattern` field is checked with `asset.name.contains(pattern)`
-- Use unique identifiers from your filenames (chipset names, device codes, etc.)
-- Patterns are case-sensitive
-
-**When to Use:**
-- Multi-device OS projects with device-specific builds
-- Technical filenames that aren't user-friendly
-- When you need to explain device compatibility in the UI
-
-**When to Skip:**
-- Single-device projects
-- Already clear filenames (e.g., "SpruceOS-MiyooA30.7z")
-- Releases with only one asset
+GitHub Actions will automatically build Windows, Linux (x64 + ARM64), and macOS (ARM64 + x64) binaries. No local build required!
 
 ---
 
-**Asset Detection:**
+## Architecture Overview
 
-The installer automatically detects and downloads compatible files from GitHub releases:
-- **Archive mode**: `.7z`, `.zip` (formats SD card, extracts, and copies files)
-- **Image mode**: `.img.gz`, `.img.xz`, `.img` (burns raw image directly to device)
-- **Source code archives** (`Source code.zip`, `Source code.tar.gz`) are automatically filtered out
-- Extension filtering (if configured) is applied before showing assets to users
-- If multiple assets remain after filtering, users see a selection modal with display names (if configured)
+### Module Breakdown
 
-> **Notes:**
-> - `WINDOW_TITLE` is explicitly set to provide a clean window title (e.g., "SpruceOS Installer" instead of "spruceos-installer"). Change this to match your project name.
-> - `USER_AGENT` and `TEMP_PREFIX` are auto-generated from `CARGO_PKG_NAME`. You usually **do not need to change these**.
-> - The `setup_theme()` function in `config.rs` uses the Gruvbox Dark preset. This is a fallback; the actual theme is customized in `app.rs`.
+**`app/state.rs`** (~224 lines) - Core application state:
+- `AppState` enum: Tracks installation progress (Idle, Downloading, Formatting, etc.)
+- `InstallerApp` struct: Holds all app state (drives, progress, channels, UI flags)
+- `new()`: Initializes app, starts background drive polling
+- `get_available_disk_space()`: Cross-platform disk space checking
 
----
+**`app/theme.rs`** (~77 lines) - Visual customization:
+- `get_theme_config()`: Returns `ThemeConfig` with all RGBA color overrides
 
-### 2. `src/app.rs` — Theme Colors & UI Customization
+**`app/logic.rs`** (~1,500 lines) - Installation logic:
+- `ensure_selection_valid()`: Drive selection validation
+- `fetch_and_check_assets()`: Fetch GitHub releases, filter assets
+- `start_installation()`: Main orchestration (download → format → extract → copy OR burn image)
+- Asset filtering, auto-selection, cancellation handling
+- Platform-specific mount helpers (`get_mount_path_after_format`)
 
-The installer's visual theme is defined in the `get_theme_config()` method (around line 136 in `app.rs`). This method returns a `ThemeConfig` with color overrides in **RGBA format** `[R, G, B, A]` (values 0-255).
+**`app/ui.rs`** (~900 lines) - UI rendering:
+- `impl eframe::App for InstallerApp`
+- `update()`: Main render loop
+- Drive selection dropdown, repository tabs, install button, progress bars
+- Modal dialogs: asset selection, update preview, confirmation, completion
+- Theme editor integration, debug log panel
 
-**Key color fields to customize:**
+### Key Features
 
-| Field | Purpose | SpruceOS Default (RGBA) |
-|-------|---------|------------------------|
-| `override_text_color` | Primary text color | `[251, 241, 199, 255]` (cream) |
-| `override_weak_text_color` | Secondary/dimmed text | `[124, 111, 100, 255]` (gray) |
-| `override_hyperlink_color` | Clickable links | `[131, 165, 152, 255]` (teal) |
-| `override_faint_bg_color` | Input fields, panels | `[48, 48, 48, 255]` (dark gray) |
-| `override_extreme_bg_color` | Window background | `[29, 32, 33, 255]` (near black) |
-| `override_warn_fg_color` | Warning messages | `[214, 93, 14, 255]` (orange) |
-| `override_error_fg_color` | Error messages | `[204, 36, 29, 255]` (red) |
-| `override_selection_bg` | Text selection, highlights | `[215, 180, 95, 255]` (gold) |
-| `override_widget_inactive_bg_fill` | Inactive buttons | `[215, 180, 95, 255]` (gold) |
-| `override_widget_inactive_fg_stroke_color` | Inactive button border | `[104, 157, 106, 255]` (green) |
-| `override_widget_hovered_bg_stroke_color` | Hovered button border | `[215, 180, 95, 255]` (gold) |
-| `override_widget_active_bg_stroke_color` | Active button border | `[215, 180, 95, 255]` (gold) |
+**Cross-platform drive detection** (`drives.rs`):
+- Windows: `GetLogicalDrives` + `IOCTL_STORAGE_GET_DEVICE_NUMBER`
+- Linux: `/sys/block` + `/proc/mounts`
+- macOS: `diskutil list -plist` + complex heuristics
 
-> **Note:** Set a field to `None` to use the default egui value. The theme config has many more fields for fine-grained control — see the full list in the `ThemeConfig` struct.
+**FAT32 formatting** (`format.rs`):
+- Windows: Custom formatter for >32GB (bypasses 32GB OS limit), `diskpart` for partitioning
+- Linux: `parted` + `mkfs.vfat`
+- macOS: `diskutil eraseDisk` with retry logic
 
-**Hardcoded UI colors** (also in `app.rs`):
-- Line ~1036, 1097: Success message color `Color32::from_rgb(104, 157, 106)` (green)
-- Line ~1397: Install button fill `Color32::from_rgb(104, 157, 106)` (green)
-- Line ~1417: Cancel button fill `Color32::from_rgb(251, 73, 52)` (red)
+**Raw image burning** (`burn.rs`):
+- Decompresses `.gz` on-the-fly
+- Pre-scans to determine decompressed size
+- SHA256 verification (Linux/macOS; Windows verification incomplete)
+- Sector-aligned writes on Windows
 
-To change these, search for `Color32::from_rgb` in `app.rs` and update the RGB values.
+**GitHub integration** (`github.rs`):
+- Fetches latest release from repos
+- Chunked streaming for large downloads
+- Rate limit detection, timeout handling
+- Automatic source code archive filtering
 
----
-
-### 3. Icons
-
-Customize the application icon:
-
-| Icon | Path | Usage |
-|------|------|-------|
-| PNG | `assets/Icons/icon.png` | Window, title bar (all platforms) |
-| ICO | `assets/Icons/icon.ico` | Windows Explorer, taskbar |
-
-> Notes:
-> - PNG: Recommended 64x64 or 128x128 with transparency
-> - ICO: Multi-resolution preferred (16x16, 32x32, 48x48, 256x256)
-> - The icon is loaded via `APP_ICON_PNG` in `config.rs` (requires the `icon` feature enabled)
+**macOS privileged access** (`mac/authopen.rs`):
+- Uses native `authopen` utility (no code signing required)
+- Proper error differentiation (cancelled, denied, system error)
+- File descriptor duplication for ownership
 
 ---
 
-### 4. Custom Font
+## Building Locally
 
-The installer uses a custom font for all UI text. To use your own font:
+### Prerequisites
+- Rust (via [rustup.rs](https://rustup.rs/))
+- Platform-specific dependencies:
+  - **Windows:** MSVC build tools
+  - **Linux:** Standard build tools
+  - **macOS:** Xcode Command Line Tools
 
-**Replace the font file:**
+### Build
 ```bash
-# Replace the existing font with your own TTF/OTF file
-cp /path/to/your/font.ttf assets/Fonts/nunwen.ttf
-```
-
-**Update the font configuration in `src/config.rs`:**
-
-| Constant | Purpose | Default |
-|----------|---------|---------|
-| `CUSTOM_FONT` | Path to the embedded font file | `"../assets/Fonts/nunwen.ttf"` |
-| `CUSTOM_FONT_NAME` | Display name for the font (optional, cosmetic) | `"Nunwen"` |
-
-**Example:**
-```rust
-// If you want to use a different filename:
-pub const CUSTOM_FONT: &[u8] = include_bytes!("../assets/Fonts/YourFont.ttf");
-pub const CUSTOM_FONT_NAME: &str = "YourFont";
-```
-
-> **Notes:**
-> - Supports TTF and OTF font formats
-> - The font is embedded in the binary, so no external font files are needed at runtime
-> - The custom font applies to all UI text (buttons, labels, dropdowns, etc.)
-> - To also use the font for monospace text (logs), uncomment the Monospace section in `load_custom_fonts()`
-
----
-
-### 5. External Files to Update
-
-To fully rebrand the installer, also update:
-
-- `Cargo.toml` — `name`, `description`, `authors`  
-- `assets/Mac/Info.plist` — `CFBundleName`, `CFBundleDisplayName`, `CFBundleIdentifier`  
-- `.github/workflows/*.yml` — Artifact names (optional cosmetic change)
-
----
-
-## Advanced Notes
-
-- **Window Title**: `WINDOW_TITLE` is explicitly set for a clean display (e.g., "SpruceOS Installer"). Change this to match your project.
-- **Internal Identifiers** (`USER_AGENT`, `TEMP_PREFIX`) are auto-generated from `CARGO_PKG_NAME`; modifying them is optional.
-- `setup_theme(ctx)` in `config.rs` is a fallback that applies the Gruvbox Dark preset. The actual theme used by the installer is defined in `app.rs` via `get_theme_config()`.
-- `REPO_OPTIONS` can include multiple repos (e.g., stable, nightlies, forks). The user can select between them via button tabs in the UI. Each repo's `info` text is displayed below the Install button.
-- The installer uses `egui` and `egui_thematic` for the UI. The theme can be edited live using the built-in theme editor (press Ctrl+T in the app).
-- All color values in `ThemeConfig` use RGBA format `[R, G, B, A]` where each value is 0-255.
-- **Asset Selection & Filtering**: When a release contains multiple downloadable files, the installer intelligently handles them:
-  - **Source code filtering**: GitHub's auto-generated source archives are always filtered out
-  - **Extension filtering**: If `allowed_extensions` is configured, only matching files are shown
-  - **Display mappings**: If `asset_display_mappings` is configured, technical filenames are replaced with user-friendly names and device compatibility info
-  - **Single asset** → Auto-proceeds to installation
-  - **Multiple files with same base name** → Auto-selects by priority (.7z > .zip > .img.gz > .img.xz > .img)
-  - **Multiple different files** → Shows selection modal with friendly names (if configured) for user to choose
-- **Update Mode**: Users can check "Update Mode" to preserve saves/ROMs while updating system files. Only directories specified in `update_directories` are deleted before installation.
-
----
-
-## Platform-Specific Implementation Details
-
-### macOS Privileged Disk Access
-
-The installer uses macOS's `authopen` utility for secure, user-approved disk access without requiring the entire application to run as root or be code-signed.
-
-**Key Features:**
-- **Error Differentiation**: The installer distinguishes between:
-  - User cancellation (user clicked "Cancel" in auth dialog)
-  - Permission denial (insufficient privileges)
-  - System errors (authopen not found, FD passing failures)
-- **File Descriptor Validation**: Validates FD before use to prevent edge cases
-- **Detailed Logging**: All authopen operations are logged to the debug log for troubleshooting
-
-**Implementation** (`src/mac/authopen.rs`):
-- Uses `AuthOpenError` enum for proper error handling
-- Reads FD via stdout parsing (text-based, works without code signing)
-- Duplicates FD for safe ownership transfer
-- Based on Raspberry Pi Imager's proven patterns
-
-**For Developers**: This approach works perfectly with unsigned apps. For signed apps, consider adding Authorization Services API for credential caching and smoother UX.
-
-### Windows Large FAT32 Formatting
-
-Windows artificially limits the built-in `format` command to 32GB for FAT32, but the filesystem supports up to 2TB. The installer includes a custom FAT32 formatter that writes directly to the physical disk to bypass this limitation.
-
-**Implementation** (`src/fat32.rs`):
-- Opens physical disk with `FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`
-- Writes boot sector, FAT tables, and root directory manually
-- Works with drives larger than 32GB without requiring third-party tools
-
-**Note**: A previous implementation using `FSCTL_ALLOW_EXTENDED_DASD_IO` caused "Access denied" errors and was reverted. The current approach is stable and tested.
-
-### Cross-Platform Clipboard
-
-The installer uses the `arboard` crate for reliable clipboard access across all platforms. This replaced the previous egui-based clipboard which was unreliable on macOS.
-
-**Features**:
-- Copy debug logs to clipboard with one click
-- Works on Windows, macOS, and Linux
-- Provides user feedback on success/failure
-
----
-
-## Recommended Workflow for Developers
-
-### Quick Start (Minimal Customization)
-
-1. Fork or clone the repository.
-2. Create a **new branch** for your customizations (or use an existing branch).
-3. **Update `src/config.rs`:**
-   - Set `APP_NAME` to your OS name (e.g., `"MyOS"`)
-   - Set `WINDOW_TITLE` to your window title (e.g., `"MyOS Installer"`)
-   - Set `VOLUME_LABEL` to your SD card label (max 11 chars, e.g., `"MYOS"`)
-   - Update `REPO_OPTIONS` with your GitHub repositories:
-     ```rust
-     pub const REPO_OPTIONS: &[RepoOption] = &[
-         RepoOption {
-             name: "Stable",
-             url: "yourorg/yourrepo",
-             info: "Description shown in UI.\nSupported devices: X, Y, Z",
-             update_directories: &["System"],  // Folders to delete during updates
-             allowed_extensions: None,          // Show all asset types
-             asset_display_mappings: None,      // Use filenames as-is
-         },
-     ];
-     ```
-4. Replace `assets/Icons/icon.png` and `icon.ico` with your branding
-5. **(Optional)** Replace `assets/Fonts/nunwen.ttf` with your custom font
-6. Update `Cargo.toml` and `assets/Mac/Info.plist` with your project info
-7. Push your branch to GitHub.
-
-> GitHub Actions will automatically build Windows, Linux (x64 + ARM64), and macOS (ARM64 + x64) binaries — **no local build setup required**.
-
----
-
-### Full Theme Customization (Using the Live Theme Editor)
-
-The installer includes a **built-in theme editor** that lets you customize colors visually and export the theme config directly. This is much faster than manually editing RGBA values in code.
-
-#### Step 1: Build and Run the Installer
-
-First, build the installer locally so you can use the theme editor:
-
-```bash
-# Install Rust if you haven't already
-# https://rustup.rs/
-
-# Clone and build
 git clone https://github.com/spruceUI/spruceOS-Installer.git
 cd spruceOS-Installer
-cargo run
+cargo build --release
 ```
 
-#### Step 2: Open the Theme Editor
+Executable will be in `target/release/`.
 
-With the installer running, press **Ctrl+T** to open the theme editor panel. This will open on the right side of the window.
-
-#### Step 3: Customize Colors Visually
-
-The theme editor provides:
-- **Color pickers** for all theme elements (text, backgrounds, borders, buttons, etc.)
-- **Live preview** — changes apply immediately to the UI
-- **RGBA sliders** for precise color control
-- **Preset themes** you can use as starting points
-
-Adjust the colors until you're happy with how the installer looks with your branding.
-
-#### Step 4: Export the Theme Config
-
-At the bottom of the theme editor panel, there's a **"Copy Theme Config"** button (or similar export option). Click it to copy the complete `ThemeConfig` struct to your clipboard.
-
-The copied output will look like this:
-
-```rust
-ThemeConfig {
-    name: "YourTheme".to_string(),
-    dark_mode: true,
-    override_text_color: Some([251, 241, 199, 255]),
-    override_weak_text_color: Some([124, 111, 100, 255]),
-    // ... all other color overrides
-}
-```
-
-#### Step 5: Paste into Your Code
-
-1. Open `src/app.rs` and find the `get_theme_config()` method (around line 136)
-2. Replace the entire `ThemeConfig { ... }` block with your copied config
-3. Update the `name` field to match your project name
-4. Save the file
-
-#### Step 6: Customize Hardcoded UI Colors (Optional)
-
-Some UI elements use hardcoded colors outside the theme system. Search for `Color32::from_rgb` in `app.rs` to find and update:
-
-- **Line ~1036, 1097**: Success message green `(104, 157, 106)`
-- **Line ~1397**: Install button green `(104, 157, 106)`
-- **Line ~1417**: Cancel button red `(251, 73, 52)`
-
-Replace the RGB values to match your brand colors.
-
-#### Step 7: Test and Push
-
+### Development
 ```bash
-# Test your changes
-cargo run
-
-# Commit and push to your branch
-git add src/app.rs
-git commit -m "Update theme colors for [YourProject]"
-git push
+cargo run  # Run in debug mode
 ```
 
-GitHub Actions will automatically build your customized installer for all platforms.
-
----
-
-### Tips for Theme Customization
-
-- **Start with a preset**: The theme editor includes several presets (Gruvbox, Solarized, etc.). Pick one close to your brand and adjust from there.
-- **Test readability**: Make sure text is readable against backgrounds, especially for secondary text colors.
-- **Match your brand**: Use your project's official brand colors for accents, buttons, and highlights.
-- **Check all states**: Interact with buttons, dropdowns, and inputs to see hover/active/inactive states.
-- **Dark mode only**: The installer currently only supports dark themes. Light theme support is not implemented.
-
----
-
-> **PLEASE:** Keep the original spruceOS authors in `Cargo.toml` and `Info.plist` for credit. Add your name alongside ours.
+Press **Ctrl+T** in the app to open the live theme editor.
 
 ---
 
 ## Acknowledgments
 
-This project builds upon the excellent work of others in the open source community:
+This project builds upon excellent open source work:
 
-- **[7-Zip](https://www.7-zip.org/)** - We use the 7z compression/decompression engine for extracting installation archives. 7-Zip is licensed under the GNU LGPL license. The 7z binary is bundled with the installer for seamless operation.
+- **[7-Zip](https://www.7-zip.org/)** - We bundle the 7z binary (LGPL) for seamless archive extraction
+- **[Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager)** - macOS `authopen` integration patterns
 
-- **[Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager)** - The macOS authorization and privileged disk access implementation is based on techniques from the Raspberry Pi Imager project. Their authopen integration patterns helped us provide secure, user-friendly SD card writing on macOS without requiring code signing.
+---
 
-We're grateful to these projects for making robust, cross-platform tools possible.
+## To-Do
+
+- ~~Center info text below Install button~~ ✓ Done
+- ~~Refactor app.rs into modular structure~~ ✓ Done
+- Checkboxes for additional packages (themes, ports, games)
+- Backup and restore functionality
+- Scrape boxart for ROMs
