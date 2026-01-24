@@ -671,27 +671,45 @@ async fn burn_image_linux(
 #[cfg(target_os = "macos")]
 async fn unmount_device_macos(device_path: &str) -> Result<(), String> {
     use tokio::process::Command;
+    use tokio::time::{timeout, Duration};
 
     // Convert /dev/disk# to disk# for diskutil
     let disk_name = device_path.trim_start_matches("/dev/");
 
-    crate::debug::log(&format!("Running: diskutil unmountDisk {}", disk_name));
+    crate::debug::log(&format!("Running: diskutil unmountDisk force {}", disk_name));
 
-    let output = Command::new("diskutil")
-        .arg("unmountDisk")
-        .arg(disk_name)
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run diskutil: {}", e))?;
+    // Add timeout and force flag
+    let result = timeout(
+        Duration::from_secs(30),
+        Command::new("diskutil")
+            .arg("unmountDisk")
+            .arg("force")  // Add force flag
+            .arg(disk_name)
+            .output()
+    ).await;
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        crate::debug::log(&format!("diskutil warning: {}", stderr));
-    } else {
-        crate::debug::log("Disk unmounted successfully");
+    match result {
+        Ok(Ok(output)) => {
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                crate::debug::log(&format!("diskutil warning: {}", stderr));
+                // Don't fail - proceed anyway as the disk might already be unmounted
+            } else {
+                let stdout = String::from_utf8_lossy(&output.stdout);
+                crate::debug::log(&format!("Disk unmounted: {}", stdout));
+            }
+        }
+        Ok(Err(e)) => {
+            crate::debug::log(&format!("diskutil command failed: {}", e));
+            // Don't fail - try to proceed anyway
+        }
+        Err(_) => {
+            crate::debug::log("diskutil command timed out after 30s - proceeding anyway");
+            // Don't fail - the disk might be in a weird state but we'll try to write anyway
+        }
     }
 
-    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    tokio::time::sleep(Duration::from_millis(1000)).await;  // Increased wait time
     Ok(())
 }
 
