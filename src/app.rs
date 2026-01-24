@@ -70,6 +70,7 @@ pub struct InstallerApp {
     // Channel for background drive updates
     drive_rx: mpsc::UnboundedReceiver<Vec<DriveInfo>>,
     drive_poll_tx: mpsc::UnboundedSender<bool>,
+    manual_refresh_tx: mpsc::UnboundedSender<()>,
 
     // Asset selection
     fetched_release: Option<Release>,
@@ -145,23 +146,35 @@ impl InstallerApp {
         // Start background drive polling
         let (tx, rx) = mpsc::unbounded_channel();
         let (poll_tx, mut poll_rx) = mpsc::unbounded_channel::<bool>();
+        let (manual_refresh_tx, mut manual_refresh_rx) = mpsc::unbounded_channel::<()>();
         let ctx_clone = cc.egui_ctx.clone();
-        
+
         runtime.spawn(async move {
             let mut enabled = true;
+            let mut next_poll = tokio::time::Instant::now();
+
             loop {
+                // Check for enable/disable messages
                 while let Ok(new_state) = poll_rx.try_recv() {
                     enabled = new_state;
                 }
 
-                if enabled {
+                // Check for manual refresh requests
+                let manual_refresh = manual_refresh_rx.try_recv().is_ok();
+
+                // Poll if enabled and (time to poll OR manual refresh requested)
+                if enabled && (tokio::time::Instant::now() >= next_poll || manual_refresh) {
                     let drives = tokio::task::spawn_blocking(get_removable_drives).await.unwrap_or_default();
                     if tx.send(drives).is_err() {
                         break;
                     }
                     ctx_clone.request_repaint();
+
+                    // Schedule next auto-poll in 3 minutes
+                    next_poll = tokio::time::Instant::now() + tokio::time::Duration::from_secs(180);
                 }
-                tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
         });
 
@@ -185,6 +198,7 @@ impl InstallerApp {
             cancel_token: None,
             drive_rx: rx,
             drive_poll_tx: poll_tx,
+            manual_refresh_tx: manual_refresh_tx,
             fetched_release: None,
             available_assets: Vec::new(),
             selected_asset_idx: None,
@@ -2052,6 +2066,12 @@ impl eframe::App for InstallerApp {
                                         }
                                     });
                             });
+
+                            // Refresh button
+                            ui.add_space(8.0);
+                            if ui.button("🔄").on_hover_text("Refresh drive list").clicked() {
+                                let _ = self.manual_refresh_tx.send(());
+                            }
                         }
                     );
 
