@@ -3,6 +3,7 @@ use crate::config::{
 };
 use crate::burn::{burn_image, BurnProgress};
 use crate::copy::{copy_directory_with_progress, CopyProgress};
+use crate::delete::{delete_directories, DeleteProgress};
 use crate::drives::{get_removable_drives, DriveInfo};
 use crate::eject::eject_drive;
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
@@ -21,10 +22,12 @@ enum AppState {
     Idle,
     FetchingAssets,
     SelectingAsset,
+    PreviewingUpdate,
     AwaitingConfirmation,
     FetchingRelease,
     Downloading,
     Formatting,
+    Deleting,
     Extracting,
     Copying,
     Burning,
@@ -51,6 +54,7 @@ pub struct InstallerApp {
     drives: Vec<DriveInfo>,
     selected_drive_idx: Option<usize>,
     selected_repo_idx: usize,
+    update_mode: bool,
 
     // Progress tracking
     state: AppState,
@@ -169,6 +173,7 @@ impl InstallerApp {
             drives: Vec::new(),
             selected_drive_idx: None,
             selected_repo_idx: DEFAULT_REPO_INDEX,
+            update_mode: false,
             state: AppState::Idle,
             progress: Arc::new(Mutex::new(ProgressInfo {
                 current: 0,
@@ -472,6 +477,8 @@ impl InstallerApp {
         let log_messages = self.log_messages.clone();
         let ctx_clone = ctx.clone();
         let volume_label = VOLUME_LABEL.to_string();
+        let update_mode = self.update_mode;
+        let update_directories: Vec<String> = repo.update_directories.iter().map(|s| s.to_string()).collect();
 
         // Create cancellation token
         let cancel_token = CancellationToken::new();
@@ -616,8 +623,8 @@ impl InstallerApp {
                 crate::debug::log("Detected ARCHIVE mode - will format, extract, and copy files");
             }
 
-            // Step 2: Format drive (only for archive mode - skip for raw images)
-            if !is_raw_image {
+            // Step 2: Format drive (only for archive mode - skip for raw images and update mode)
+            if !is_raw_image && !update_mode {
                 // Format drive (do this first so we fail fast if the card has issues)
             let _ = state_tx_clone.send(AppState::Formatting);
             log(&format!("Formatting {}...", drive.name));
@@ -697,22 +704,108 @@ impl InstallerApp {
                 crate::debug::log("Format complete");
             } // End of format block for archive mode
 
-            // Get the destination path for extraction (only for archive mode)
-            // For image mode, we don't need this until after burning
-            let dest_path = if !is_raw_image {
-                crate::debug::log("Getting mount path after format...");
-                match get_mount_path_after_format(&drive, &volume_label).await {
-                    Ok(path) => {
-                        log(&format!("Destination: {}", path.display()));
-                        crate::debug::log(&format!("Mount path: {:?}", path));
-                        Some(path)
-                    }
+            // Step 2.5: Get mount path and delete directories for update mode (only for archive mode)
+            let dest_path_from_update = if !is_raw_image && update_mode {
+                // First, get mount path for the existing installation
+                crate::debug::log("Update mode: Getting existing mount path...");
+                let mount_path = match get_mount_path_after_format(&drive, &volume_label).await {
+                    Ok(path) => path,
                     Err(e) => {
                         log(&format!("Error getting mount path: {}", e));
                         crate::debug::log(&format!("ERROR getting mount path: {}", e));
                         let _ = state_tx_clone.send(AppState::Error);
                         let _ = drive_poll_tx_clone.send(true);
                         return;
+                    }
+                };
+
+                // Delete old directories
+                let _ = state_tx_clone.send(AppState::Deleting);
+                log("Deleting old directories...");
+                crate::debug::log_section("Deleting Directories");
+                set_progress(0, 100, "Deleting old directories...");
+
+                let (del_tx, mut del_rx) = mpsc::unbounded_channel::<DeleteProgress>();
+                let progress_del = progress.clone();
+                let ctx_del = ctx_clone.clone();
+
+                // Spawn delete progress handler
+                let del_handle = tokio::spawn(async move {
+                    while let Some(prog) = del_rx.recv().await {
+                        if let Ok(mut p) = progress_del.lock() {
+                            match prog {
+                                DeleteProgress::Started { total_dirs } => {
+                                    p.current = 0;
+                                    p.total = total_dirs as u64;
+                                    p.message = format!("Deleting {} directories...", total_dirs);
+                                }
+                                DeleteProgress::DeletingDirectory { ref name } => {
+                                    p.message = format!("Deleting: {}", name);
+                                }
+                                DeleteProgress::Completed => {
+                                    p.current = p.total;
+                                    p.message = "Directory deletion complete".to_string();
+                                }
+                                DeleteProgress::Cancelled => {
+                                    p.message = "Deletion cancelled".to_string();
+                                }
+                                DeleteProgress::Error(ref e) => {
+                                    p.message = format!("Deletion error: {}", e);
+                                }
+                            }
+                        }
+                        ctx_del.request_repaint();
+                    }
+                });
+
+                let update_dirs_refs: Vec<&str> = update_directories.iter().map(|s| s.as_str()).collect();
+                if let Err(e) = delete_directories(&mount_path, &update_dirs_refs, del_tx, cancel_token_clone.clone()).await {
+                    if e.contains("cancelled") {
+                        log("Deletion cancelled");
+                        let _ = state_tx_clone.send(AppState::Idle);
+                        let _ = drive_poll_tx_clone.send(true);
+                        return;
+                    }
+                    log(&format!("Deletion error: {}", e));
+                    let _ = state_tx_clone.send(AppState::Error);
+                    let _ = drive_poll_tx_clone.send(true);
+                    return;
+                }
+
+                let _ = del_handle.await;
+                log("Directory deletion complete");
+                crate::debug::log("Directory deletion complete");
+
+                Some(mount_path) // Return the mount path for reuse
+            } else {
+                None
+            };
+
+            // Get the destination path for extraction (only for archive mode)
+            // For image mode, we don't need this until after burning
+            // For update mode, reuse the path from deletion step
+            let dest_path = if !is_raw_image {
+                if let Some(path) = dest_path_from_update {
+                    // Update mode - reuse the mount path from deletion
+                    crate::debug::log("Reusing mount path from update...");
+                    log(&format!("Destination: {}", path.display()));
+                    Some(path)
+                } else {
+                    // Fresh install - get mount path after format
+                    crate::debug::log("Getting mount path after format...");
+                    match get_mount_path_after_format(&drive, &volume_label).await {
+                        Ok(path) => {
+                            log(&format!("Destination: {}", path.display()));
+                            crate::debug::log(&format!("Mount path: {:?}", path));
+                            Some(path)
+                        }
+                        Err(e) => {
+                            log(&format!("Error getting mount path: {}", e));
+                            crate::debug::log(&format!("ERROR getting mount path: {}", e));
+                            let _ = state_tx_clone.send(AppState::Error);
+                            let _ = drive_poll_tx_clone.send(true);
+                            return;
+                        }
                     }
                 }
             } else {
@@ -1142,6 +1235,7 @@ impl InstallerApp {
                         AppState::FetchingRelease => "Fetching release...".to_string(),
                         AppState::Downloading => "Downloading...".to_string(),
                         AppState::Formatting => "Formatting...".to_string(),
+                        AppState::Deleting => "Deleting old directories...".to_string(),
                         AppState::Extracting => "Extracting...".to_string(),
                         AppState::Copying => "Copying...".to_string(),
                         AppState::Burning => "Burning image...".to_string(),
@@ -1257,6 +1351,7 @@ impl eframe::App for InstallerApp {
         let show_modal = matches!(
             self.state,
             AppState::SelectingAsset
+                | AppState::PreviewingUpdate
                 | AppState::AwaitingConfirmation
                 | AppState::Complete
                 | AppState::Ejecting
@@ -1310,11 +1405,28 @@ impl eframe::App for InstallerApp {
                             self.available_assets = assets;
 
                             if should_auto {
-                                // Auto-select and proceed to confirmation
+                                // Auto-select and proceed
                                 self.selected_asset_idx = auto_idx;
-                                self.state = AppState::AwaitingConfirmation;
                                 if let Some(idx) = auto_idx {
                                     self.log(&format!("Auto-selected: {}", self.available_assets[idx].name));
+                                }
+
+                                // Check if selected asset is a raw image
+                                let is_raw_image = if let Some(idx) = auto_idx {
+                                    let asset_name = &self.available_assets[idx].name;
+                                    asset_name.ends_with(".img.gz") ||
+                                    asset_name.ends_with(".img.xz") ||
+                                    asset_name.ends_with(".img")
+                                } else {
+                                    false
+                                };
+
+                                // If update mode and NOT a raw image, show preview modal; otherwise go to confirmation
+                                if self.update_mode && !is_raw_image {
+                                    self.state = AppState::PreviewingUpdate;
+                                } else {
+                                    // Skip preview for image mode (update mode doesn't apply to raw images)
+                                    self.state = AppState::AwaitingConfirmation;
                                 }
                             } else {
                                 // Show asset selection UI
@@ -1354,14 +1466,17 @@ impl eframe::App for InstallerApp {
             if progress.message == "COMPLETE" {
                 self.state = AppState::Complete;
                 self.cancel_token = None;
+                self.update_mode = false; // Reset update mode
                 progress.message.clear();
             } else if progress.message == "ERROR" {
                 self.state = AppState::Error;
                 self.cancel_token = None;
+                self.update_mode = false; // Reset update mode
                 progress.message.clear();
             } else if progress.message == "CANCELLED" {
                 self.state = AppState::Idle;
                 self.cancel_token = None;
+                self.update_mode = false; // Reset update mode
                 progress.message.clear();
             } else {
                 // Update state based on progress message
@@ -1374,6 +1489,9 @@ impl eframe::App for InstallerApp {
                     || progress.message.contains("partition")
                 {
                     self.state = AppState::Formatting;
+                } else if progress.message.contains("Deleting") || progress.message.contains("deletion")
+                {
+                    self.state = AppState::Deleting;
                 } else if progress.message.contains("Extracting") || progress.message.contains("Extract")
                 {
                     self.state = AppState::Extracting;
@@ -1392,6 +1510,7 @@ impl eframe::App for InstallerApp {
                 | AppState::FetchingRelease
                 | AppState::Downloading
                 | AppState::Formatting
+                | AppState::Deleting
                 | AppState::Extracting
                 | AppState::Copying
                 | AppState::Ejecting
@@ -1416,9 +1535,14 @@ impl eframe::App for InstallerApp {
 
             let window_title = match self.state {
                 AppState::SelectingAsset => "Select Download".to_string(),
+                AppState::PreviewingUpdate => "Update Confirmation".to_string(),
                 AppState::AwaitingConfirmation => {
                     let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].name;
-                    format!("Confirm {} Installation", selected_repo_name)
+                    if self.update_mode {
+                        format!("Confirm {} Update", selected_repo_name)
+                    } else {
+                        format!("Confirm {} Installation", selected_repo_name)
+                    }
                 }
                 AppState::Complete => "Installation Complete".to_string(),
                 AppState::Ejecting => "Ejecting...".to_string(),
@@ -1479,29 +1603,52 @@ impl eframe::App for InstallerApp {
                                             let can_continue = self.selected_asset_idx.is_some();
                                             ui.add_enabled_ui(can_continue, |ui| {
                                                 if ui.button("Continue").clicked() {
-                                                    self.state = AppState::AwaitingConfirmation;
+                                                    // Check if selected asset is a raw image
+                                                    let is_raw_image = if let Some(idx) = self.selected_asset_idx {
+                                                        let asset_name = &self.available_assets[idx].name;
+                                                        asset_name.ends_with(".img.gz") ||
+                                                        asset_name.ends_with(".img.xz") ||
+                                                        asset_name.ends_with(".img")
+                                                    } else {
+                                                        false
+                                                    };
+
+                                                    // If update mode and NOT a raw image, show preview; otherwise go to confirmation
+                                                    if self.update_mode && !is_raw_image {
+                                                        self.state = AppState::PreviewingUpdate;
+                                                    } else {
+                                                        // Skip preview for image mode (update mode doesn't apply to raw images)
+                                                        self.state = AppState::AwaitingConfirmation;
+                                                    }
                                                 }
                                             });
                                         },
                                     );
                                 });
                             }
-                            AppState::AwaitingConfirmation => {
+                            AppState::PreviewingUpdate => {
                                 ui.add_space(12.0);
-                                ui.colored_label(ui.visuals().warn_fg_color, "WARNING");
+                                ui.heading("Update Preview");
                                 ui.add_space(12.0);
 
-                                ui.label("This will DELETE ALL DATA on the selected drive:");
+                                ui.label("The following directories will be deleted:");
                                 ui.add_space(8.0);
 
-                                if let Some(idx) = self.selected_drive_idx {
-                                    if let Some(drive) = self.drives.get(idx) {
-                                        ui.label(drive.display_name());
-                                    }
-                                }
+                                // Show directories to be deleted
+                                let update_dirs = REPO_OPTIONS[self.selected_repo_idx].update_directories;
+                                egui::ScrollArea::vertical()
+                                    .max_height(200.0)
+                                    .show(ui, |ui| {
+                                        for dir in update_dirs {
+                                            ui.label(format!("• {}/", dir));
+                                        }
+                                    });
 
                                 ui.add_space(12.0);
-                                ui.label("Are you sure you want to continue?");
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(104, 157, 106),
+                                    "All other files will be preserved."
+                                );
                                 ui.add_space(12.0);
                                 ui.separator();
                                 ui.add_space(8.0);
@@ -1513,6 +1660,10 @@ impl eframe::App for InstallerApp {
                                         |ui| {
                                             if ui.button("Cancel").clicked() {
                                                 self.state = AppState::Idle;
+                                                self.update_mode = false;
+                                                self.fetched_release = None;
+                                                self.available_assets.clear();
+                                                self.selected_asset_idx = None;
                                             }
                                         },
                                     );
@@ -1521,7 +1672,62 @@ impl eframe::App for InstallerApp {
                                         egui::Vec2::ZERO,
                                         egui::Layout::left_to_right(egui::Align::Center),
                                         |ui| {
-                                            if ui.button("Yes, install").clicked() {
+                                            if ui.button("Continue").clicked() {
+                                                self.state = AppState::AwaitingConfirmation;
+                                            }
+                                        },
+                                    );
+                                });
+                            }
+                            AppState::AwaitingConfirmation => {
+                                ui.add_space(12.0);
+                                ui.colored_label(ui.visuals().warn_fg_color, "WARNING");
+                                ui.add_space(12.0);
+
+                                if self.update_mode {
+                                    ui.label("The selected directories will be deleted.");
+                                    ui.add_space(8.0);
+                                    ui.label("Continue with the update?");
+                                } else {
+                                    ui.label("This will DELETE ALL DATA on the selected drive:");
+                                    ui.add_space(8.0);
+
+                                    if let Some(idx) = self.selected_drive_idx {
+                                        if let Some(drive) = self.drives.get(idx) {
+                                            ui.label(drive.display_name());
+                                        }
+                                    }
+
+                                    ui.add_space(12.0);
+                                    ui.label("Are you sure you want to continue?");
+                                }
+
+                                ui.add_space(12.0);
+                                ui.separator();
+                                ui.add_space(8.0);
+
+                                ui.columns(2, |columns| {
+                                    columns[0].allocate_ui_with_layout(
+                                        egui::Vec2::ZERO,
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui.button("Cancel").clicked() {
+                                                self.state = AppState::Idle;
+                                                self.update_mode = false;
+                                            }
+                                        },
+                                    );
+
+                                    columns[1].allocate_ui_with_layout(
+                                        egui::Vec2::ZERO,
+                                        egui::Layout::left_to_right(egui::Align::Center),
+                                        |ui| {
+                                            let button_text = if self.update_mode {
+                                                "Yes, update"
+                                            } else {
+                                                "Yes, install"
+                                            };
+                                            if ui.button(button_text).clicked() {
                                                 self.start_installation(ctx.clone());
                                             }
                                         },
@@ -1818,6 +2024,24 @@ impl eframe::App for InstallerApp {
                     );
                 });
 
+                ui.add_space(8.0);
+
+                // Update mode checkbox (only show when not in progress)
+                if !show_progress {
+                    ui.horizontal(|ui| {
+                        ui.vertical_centered(|ui| {
+                            if ui.checkbox(&mut self.update_mode, "Update existing installation (skip format)").changed() {
+                                // Reset state when toggling update mode
+                                if !self.update_mode {
+                                    self.fetched_release = None;
+                                    self.available_assets.clear();
+                                    self.selected_asset_idx = None;
+                                }
+                            }
+                        });
+                    });
+                }
+
                 ui.add_space(12.0);
 
                 // Progress bar
@@ -1900,9 +2124,13 @@ impl eframe::App for InstallerApp {
                         // Install button
                         let is_busy = matches!(
                             self.state,
-                            AppState::FetchingRelease
+                            AppState::FetchingAssets
+                                | AppState::SelectingAsset
+                                | AppState::PreviewingUpdate
+                                | AppState::FetchingRelease
                                 | AppState::Downloading
                                 | AppState::Formatting
+                                | AppState::Deleting
                                 | AppState::Extracting
                                 | AppState::Copying
                                 | AppState::AwaitingConfirmation
@@ -1927,6 +2155,7 @@ impl eframe::App for InstallerApp {
                             AppState::FetchingRelease
                                 | AppState::Downloading
                                 | AppState::Formatting
+                                | AppState::Deleting
                                 | AppState::Extracting
                                 | AppState::Copying
                         ) && self.cancel_token.is_some();

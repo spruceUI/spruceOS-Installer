@@ -1,4 +1,5 @@
 ## To-Do
+- The info could be centered vertically in the space below the button instead of straddling it?
 - Checkboxes for various additional packages:
     - all themes
     - all A30 ports

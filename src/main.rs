@@ -5,6 +5,7 @@ mod burn;
 mod config;
 mod copy;
 mod debug;
+mod delete;
 mod drives;
 mod eject;
 mod extract;
