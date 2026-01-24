@@ -34,12 +34,40 @@ GitHub Actions automatically build releases per branch. If you'd like to use thi
 
 The installer is distributed as a `.zip` containing a self-contained `.app` bundle.
 
-**Steps to run:**
-1. Download and extract the ZIP
-2. **Easy method:** Double-click `launch-installer.command` to remove quarantine and launch
-3. **Alternative:** Right-click the `.app` and select "Open", then click "Open" in the dialog
+#### **Initial Setup (First Time Only):**
 
-When writing to SD cards, you'll see a native macOS authorization dialog requesting your admin password (via `authopen`). This is normal and required.
+**IMPORTANT:** macOS requires Terminal to have "Full Disk Access" to write to SD cards. Follow these steps:
+
+1. **Grant Terminal Full Disk Access:**
+   - Open **System Settings** (or **System Preferences** on older macOS)
+   - Go to **Privacy & Security** → **Full Disk Access**
+   - Click the **lock icon** (bottom left) and enter your password
+   - Click the **+** button to add an application
+   - Navigate to **Applications** → **Utilities** → select **Terminal.app**
+   - Check the box next to Terminal in the list
+   - **Quit and reopen Terminal** (important!)
+
+   **Why?** macOS security prevents apps from accessing removable drives without this permission. Terminal needs access because it spawns the installer process.
+
+2. **Download and Run the Installer:**
+   - Download and extract the ZIP file
+   - **Easy method:** Double-click `launch-installer.command` to automatically remove quarantine and launch
+   - **Alternative:** Right-click "SpruceOSInstaller.app" and select "Open", then click "Open" in the dialog
+
+3. **Authorization During Install:**
+   - When writing to SD cards, you'll see a native macOS authorization dialog requesting your admin password (via `authopen`)
+   - This is normal and required for disk operations
+
+#### **Troubleshooting:**
+
+**If the installer can't access your SD card:**
+- Verify Terminal has Full Disk Access (see step 1 above)
+- **Quit Terminal completely** and reopen it (changes don't apply to running Terminal sessions)
+- Try running from Terminal manually:
+  ```bash
+  cd ~/Downloads/SpruceOSInstaller.app/Contents/MacOS
+  ./spruceos-installer
+  ```
 
 **Note:** This app is not code-signed.
 
@@ -292,6 +320,8 @@ authors = ["SpruceOS Team", "NextUI Team", "Your Name <you@example.com>"]
 
 **⚠️ Critical:** The `CFBundleExecutable` MUST exactly match the `name` field in `Cargo.toml` or macOS won't launch the app!
 
+**⚠️ Important for macOS Users:** Make sure to document in your installer's README that macOS users need to grant Terminal "Full Disk Access" before running the installer (see the macOS Users section above for detailed instructions). This is a macOS security requirement for writing to removable drives.
+
 ---
 
 #### **STEP 5: `app.manifest` - Windows UAC Config**
@@ -460,7 +490,8 @@ cargo build --release --features icon
 - [ ] "Update Mode" checkbox lists correct directories
 - [ ] Download works from your GitHub repo
 - [ ] SD card gets labeled with your `VOLUME_LABEL`
-- [ ] macOS app bundle opens (if testing on macOS)
+- [ ] macOS: Terminal has Full Disk Access granted (if testing on macOS)
+- [ ] macOS: App bundle opens and can access SD card (if testing on macOS)
 
 #### **GitHub Actions Test:**
 
@@ -478,6 +509,7 @@ cargo build --release --features icon
 
 | Problem | Cause | Solution |
 |---------|-------|----------|
+| macOS can't access SD card | Terminal doesn't have Full Disk Access permission | Grant Terminal Full Disk Access in System Settings → Privacy & Security, then quit/reopen Terminal |
 | macOS app won't launch | `CFBundleExecutable` doesn't match `Cargo.toml` name | Make them identical |
 | Volume label too long | `VOLUME_LABEL` > 11 characters | Shorten to 11 chars max |
 | Wrong files in dropdown | GitHub repo URL format wrong | Use "owner/repo" format (no https://) |
