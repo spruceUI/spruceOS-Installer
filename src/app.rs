@@ -1,5 +1,5 @@
 use crate::config::{
-    setup_theme, REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL, DEFAULT_REPO_INDEX,
+    setup_theme, AssetDisplayMapping, REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL, DEFAULT_REPO_INDEX,
 };
 use crate::burn::{burn_image, BurnProgress};
 use crate::copy::{copy_directory_with_progress, CopyProgress};
@@ -1587,15 +1587,60 @@ impl eframe::App for InstallerApp {
                                 ui.heading("Select a file to install:");
                                 ui.add_space(12.0);
 
+                                // Get display mappings from current repo
+                                let repo_option = &REPO_OPTIONS[self.selected_repo_idx];
+                                let display_mappings = repo_option.asset_display_mappings;
+
                                 // Scrollable list of assets
                                 egui::ScrollArea::vertical()
                                     .max_height(300.0)
                                     .show(ui, |ui| {
                                         for (idx, asset) in self.available_assets.iter().enumerate() {
                                             let is_selected = self.selected_asset_idx == Some(idx);
-                                            if ui.selectable_label(is_selected, &asset.name).clicked() {
-                                                self.selected_asset_idx = Some(idx);
-                                            }
+
+                                            // Try to find a display mapping for this asset
+                                            let mapping = display_mappings.and_then(|mappings| {
+                                                mappings.iter().find(|m| asset.name.contains(m.pattern))
+                                            });
+
+                                            ui.group(|ui| {
+                                                ui.set_min_width(400.0);
+
+                                                let response = if let Some(mapping) = mapping {
+                                                    // Show friendly display name with device list
+                                                    ui.vertical(|ui| {
+                                                        let label = egui::SelectableLabel::new(is_selected, mapping.display_name)
+                                                            .ui(ui);
+
+                                                        ui.add_space(2.0);
+
+                                                        // Device list in smaller, dimmer text
+                                                        ui.label(
+                                                            egui::RichText::new(mapping.devices)
+                                                                .small()
+                                                                .color(ui.style().visuals.weak_text_color())
+                                                        );
+
+                                                        ui.add_space(2.0);
+
+                                                        // Filename in tiny, very dim text
+                                                        ui.label(
+                                                            egui::RichText::new(&asset.name)
+                                                                .size(9.0)
+                                                                .color(ui.style().visuals.weak_text_color().gamma_multiply(0.7))
+                                                        );
+
+                                                        label
+                                                    }).inner
+                                                } else {
+                                                    // Fallback: show asset name only
+                                                    ui.selectable_label(is_selected, &asset.name)
+                                                };
+
+                                                if response.clicked() {
+                                                    self.selected_asset_idx = Some(idx);
+                                                }
+                                            });
                                         }
                                     });
 
