@@ -1,5 +1,4 @@
 ## To-Do
-- File name sorting function? like be able to pick specific downloads from the same release. Example: 3326CLONE.uOS.img.gz vs 3655BSP.uOS.img.gz etc
 - Checkboxes for various additional packages:
     - all themes
     - all A30 ports
@@ -7,7 +6,6 @@
     - PortMaster (are we making this a separate archive?)
 - Backup and restore (update current installation instead of just fresh ones?)
 - Scrape boxart for roms
-- ~~Offline installer / updater mode - provide your own 7z or gz file instead of downloading~~ (Won't fix, not worth it)
 
 # SpruceOS Installer
 
