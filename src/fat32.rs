@@ -252,6 +252,24 @@ pub async fn format_fat32_large(
         )
     }.map_err(|e| format!("Failed to open disk {}: {}", disk_number, e))?;
 
+    // Allow extended DASD (Direct Access Storage Device) I/O
+    // This enables raw disk access even when partitions exist
+    const FSCTL_ALLOW_EXTENDED_DASD_IO: u32 = 0x00090083;
+    use windows::Win32::System::IO::DeviceIoControl;
+    let mut bytes_returned = 0u32;
+    let _ = unsafe {
+        DeviceIoControl(
+            handle,
+            FSCTL_ALLOW_EXTENDED_DASD_IO,
+            None,
+            0,
+            None,
+            0,
+            Some(&mut bytes_returned),
+            None,
+        )
+    };
+
     // Helper to write a sector at a specific position
     let write_sector = |h: HANDLE, offset: u64, data: &[u8; 512]| -> Result<(), String> {
         let mut new_pos = 0i64;
