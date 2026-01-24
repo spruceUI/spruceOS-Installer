@@ -10,6 +10,7 @@ const CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4MB chunks
 pub enum BurnProgress {
     Started { total_bytes: u64 },
     Writing { written: u64, total: u64 },
+    #[allow(dead_code)]
     Verifying { verified: u64, total: u64 },
     Completed,
     #[allow(dead_code)]
@@ -854,8 +855,8 @@ async fn verify_image(
     // Read back device and compute hash
     let device_hash = tokio::task::spawn_blocking({
         let device_path = device_path.to_string();
-        let progress_tx = progress_tx.clone();
-        let cancel_token = cancel_token.clone();
+        let _progress_tx = progress_tx.clone();
+        let _cancel_token = cancel_token.clone();
 
         move || -> Result<String, String> {
             #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -916,7 +917,7 @@ async fn verify_image(
                 let mut total_read = 0u64;
 
                 while total_read < image_size {
-                    if cancel_token.is_cancelled() {
+                    if _cancel_token.is_cancelled() {
                         return Err("Verification cancelled".to_string());
                     }
 
@@ -931,7 +932,7 @@ async fn verify_image(
                     hasher.update(&buffer[..bytes_read]);
                     total_read += bytes_read as u64;
 
-                    let _ = progress_tx.send(BurnProgress::Verifying {
+                    let _ = _progress_tx.send(BurnProgress::Verifying {
                         verified: total_read,
                         total: image_size,
                     });

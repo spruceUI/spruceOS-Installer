@@ -497,7 +497,6 @@ impl InstallerApp {
         self.available_assets.clear();
         self.selected_asset_idx = None;
 
-        let repo_url = repo_url.to_string();
         let progress = self.progress.clone();
         let log_messages = self.log_messages.clone();
         let ctx_clone = ctx.clone();
