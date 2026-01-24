@@ -79,7 +79,8 @@ Edit these constants:
 
 | Field | Purpose | Example |
 |-------|---------|---------|
-| `APP_NAME` | Display name of your OS (window title, UI) | `"SpruceOS"` |
+| `APP_NAME` | Display name of your OS (used throughout UI) | `"SpruceOS"` |
+| `WINDOW_TITLE` | Window title bar text (all platforms) | `"SpruceOS Installer"` |
 | `VOLUME_LABEL` | FAT32 SD card label (max 11 chars, uppercase) | `"SPRUCEOS"` |
 | `REPO_OPTIONS` | Array of repository configurations (see below) | See example below |
 | `DEFAULT_REPO_INDEX` | Index of the default repo selection (0 = first) | `0` |
@@ -249,7 +250,8 @@ The installer automatically detects and downloads compatible files from GitHub r
 - If multiple assets remain after filtering, users see a selection modal with display names (if configured)
 
 > **Notes:**
-> - `WINDOW_TITLE`, `USER_AGENT`, and `TEMP_PREFIX` are auto-generated from `APP_NAME`. You usually **do not need to change these**.
+> - `WINDOW_TITLE` is explicitly set to provide a clean window title (e.g., "SpruceOS Installer" instead of "spruceos-installer"). Change this to match your project name.
+> - `USER_AGENT` and `TEMP_PREFIX` are auto-generated from `CARGO_PKG_NAME`. You usually **do not need to change these**.
 > - The `setup_theme()` function in `config.rs` uses the Gruvbox Dark preset. This is a fallback; the actual theme is customized in `app.rs`.
 > - `ASSET_EXTENSION` constant still exists for backward compatibility but is **deprecated** and no longer used.
 
@@ -347,7 +349,8 @@ To fully rebrand the installer, also update:
 
 ## Advanced Notes
 
-- **Internal Identifiers** (`WINDOW_TITLE`, `USER_AGENT`, `TEMP_PREFIX`) are auto-generated from `APP_NAME`; modifying them is optional.
+- **Window Title**: `WINDOW_TITLE` is explicitly set for a clean display (e.g., "SpruceOS Installer"). Change this to match your project.
+- **Internal Identifiers** (`USER_AGENT`, `TEMP_PREFIX`) are auto-generated from `CARGO_PKG_NAME`; modifying them is optional.
 - `setup_theme(ctx)` in `config.rs` is a fallback that applies the Gruvbox Dark preset. The actual theme used by the installer is defined in `app.rs` via `get_theme_config()`.
 - `REPO_OPTIONS` can include multiple repos (e.g., stable, nightlies, forks). The user can select between them via button tabs in the UI. Each repo's `info` text is displayed below the Install button.
 - The installer uses `egui` and `egui_thematic` for the UI. The theme can be edited live using the built-in theme editor (press Ctrl+T in the app).
@@ -415,6 +418,7 @@ The installer uses the `arboard` crate for reliable clipboard access across all 
 2. Create a **new branch** for your customizations (or use an existing branch).
 3. **Update `src/config.rs`:**
    - Set `APP_NAME` to your OS name (e.g., `"MyOS"`)
+   - Set `WINDOW_TITLE` to your window title (e.g., `"MyOS Installer"`)
    - Set `VOLUME_LABEL` to your SD card label (max 11 chars, e.g., `"MYOS"`)
    - Update `REPO_OPTIONS` with your GitHub repositories:
      ```rust
