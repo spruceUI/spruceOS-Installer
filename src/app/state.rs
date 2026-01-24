@@ -1,16 +1,14 @@
 use crate::config::{setup_theme, DEFAULT_REPO_INDEX};
 use crate::drives::{get_removable_drives, DriveInfo};
 use crate::github::{Release, Asset};
-use eframe::egui;
 use egui_thematic::ThemeEditorState;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone, PartialEq)]
-pub(super) enum AppState {
+pub enum AppState {
     Idle,
     FetchingAssets,
     SelectingAsset,
@@ -31,7 +29,7 @@ pub(super) enum AppState {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct ProgressInfo {
+pub struct ProgressInfo {
     pub current: u64,
     pub total: u64,
     pub message: String,
@@ -77,7 +75,7 @@ pub struct InstallerApp {
 }
 
 /// Get available disk space for a given path (in bytes)
-pub(super) fn get_available_disk_space(path: &std::path::Path) -> u64 {
+pub fn get_available_disk_space(path: &std::path::Path) -> u64 {
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::ffi::OsStrExt;

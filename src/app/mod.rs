@@ -11,5 +11,5 @@ mod theme;
 mod logic;
 mod ui;
 
-// Re-export the main InstallerApp struct
-pub use state::InstallerApp;
+// Re-export public types so they can be used by other modules via super::
+pub use state::{InstallerApp, AppState, ProgressInfo, get_available_disk_space};

@@ -49,7 +49,7 @@ impl InstallerApp {
     }
 
     /// Filter out source code archives and apply extension filtering from asset list
-    fn filter_assets(assets: Vec<Asset>, allowed_extensions: Option<&[&str]>) -> Vec<Asset> {
+    pub(super) fn filter_assets(assets: Vec<Asset>, allowed_extensions: Option<&[&str]>) -> Vec<Asset> {
         assets.into_iter()
             .filter(|a| {
                 // Filter out source code archives
