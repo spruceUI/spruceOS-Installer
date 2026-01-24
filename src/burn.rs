@@ -667,6 +667,41 @@ async fn burn_image_linux(
 // =============================================================================
 // macOS Implementation
 // =============================================================================
+
+#[cfg(target_os = "macos")]
+async fn unmount_device_macos(device_path: &str) -> Result<(), String> {
+    use tokio::process::Command;
+    use tokio::time::{timeout, Duration};
+
+    // Convert /dev/disk# to disk# for diskutil
+    let disk_name = device_path.trim_start_matches("/dev/");
+
+    crate::debug::log(&format!("Attempting: diskutil unmountDisk force {}", disk_name));
+
+    // Try to unmount with a short timeout, but don't fail if it doesn't work
+    let result = timeout(
+        Duration::from_secs(5),  // Shorter timeout - 5 seconds only
+        Command::new("diskutil")
+            .arg("unmountDisk")
+            .arg("force")
+            .arg(disk_name)
+            .output()
+    ).await;
+
+    match result {
+        Ok(Ok(output)) if output.status.success() => {
+            crate::debug::log("Disk unmounted successfully");
+        }
+        _ => {
+            crate::debug::log("Unmount failed or timed out - proceeding with raw disk anyway");
+            crate::debug::log("Note: Writing to /dev/rdisk# often works even when disk is mounted");
+        }
+    }
+
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    Ok(())
+}
+
 #[cfg(target_os = "macos")]
 async fn burn_image_macos(
     image_path: &Path,
@@ -682,15 +717,6 @@ async fn burn_image_macos(
     let raw_device_path = device_path.replace("/dev/disk", "/dev/rdisk");
     crate::debug::log(&format!("Using raw device: {}", raw_device_path));
 
-    // Check if we're running as root
-    let euid = unsafe { libc::geteuid() };
-    if euid != 0 {
-        return Err(format!(
-            "Insufficient permissions to write to {}. Please run with sudo or grant Full Disk Access to this application.",
-            raw_device_path
-        ));
-    }
-
     let bytes_written = tokio::task::spawn_blocking({
         let image_path = image_path.to_path_buf();
         let device_path = raw_device_path.clone();
@@ -698,20 +724,11 @@ async fn burn_image_macos(
         let cancel_token = cancel_token.clone();
 
         move || -> Result<u64, String> {
-            crate::debug::log(&format!("Opening device for writing: {}", device_path));
-            
             let mut device = std::fs::OpenOptions::new()
                 .write(true)
                 .custom_flags(libc::O_SYNC)
                 .open(&device_path)
-                .map_err(|e| {
-                    let err_msg = format!("Failed to open device {}: {} (error code: {:?})", 
-                        device_path, e, e.raw_os_error());
-                    crate::debug::log(&err_msg);
-                    err_msg
-                })?;
-
-            crate::debug::log("Device opened successfully");
+                .map_err(|e| format!("Failed to open device {}: {}. Are you running with sudo?", device_path, e))?;
 
             // Check if file is gzipped and create appropriate reader
             let is_gzipped = image_path.extension()
