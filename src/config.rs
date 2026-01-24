@@ -86,7 +86,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         url: "spruceUI/spruceOS",
         info: "Stable releases of spruceOS.\nSupported devices: Miyoo A30",
         update_directories: &["Retroarch", "spruce"],
-        allowed_extensions: None,  // Show all assets
+        allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
     },
     RepoOption {
         name: "Nightlies",
@@ -100,7 +100,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         url: "spruceUI/sprigUI",
         info: "SpruceOS for the Miyoo Mini Flip.",
         update_directories: &["Retroarch", "spruce"],
-        allowed_extensions: None,  // Show all assets
+        allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
     },
     RepoOption {
         name: "TwigUI",
