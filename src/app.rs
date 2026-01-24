@@ -290,6 +290,8 @@ impl InstallerApp {
             self.log("Cancelling installation...");
             token.cancel();
             self.state = AppState::Cancelling;
+            // Clear the cancel token so we don't try to cancel again
+            self.cancel_token = None;
         }
     }
 
@@ -308,7 +310,9 @@ impl InstallerApp {
         self.installed_drive = Some(drive.clone());
 
         self.state = AppState::FetchingRelease;
-        let (repo_name, repo_url) = REPO_OPTIONS[self.selected_repo_idx];
+        let repo = &REPO_OPTIONS[self.selected_repo_idx];
+        let repo_name = repo.name;
+        let repo_url = repo.url;
         self.log(&format!(
             "Starting installation to {} using {}",
             drive.name, repo_name
@@ -1250,16 +1254,13 @@ impl eframe::App for InstallerApp {
         }
 
         if show_modal {
-            // Background Dimmer
-            egui::Area::new(egui::Id::from("modal_dimmer"))
-                .order(egui::Order::Foreground)
-                .fixed_pos(egui::pos2(0.0, 0.0))
-                .show(ctx, |ui| {
-                    let screen_rect = ui.ctx().content_rect();
-                    ui.allocate_rect(screen_rect, egui::Sense::click()); // Block clicks
-                    ui.painter()
-                        .rect_filled(screen_rect, 0.0, egui::Color32::from_black_alpha(140));
-                });
+            // Background Dimmer - paint at Background layer, below everything
+            let screen_rect = ctx.screen_rect();
+            ctx.layer_painter(egui::LayerId::new(
+                egui::Order::Background,
+                egui::Id::from("modal_dimmer"),
+            ))
+            .rect_filled(screen_rect, 0.0, egui::Color32::from_black_alpha(140));
 
             let window_frame = egui::Frame::window(&ctx.style())
                 .fill(ctx.style().visuals.window_fill)
@@ -1267,7 +1268,7 @@ impl eframe::App for InstallerApp {
 
             let window_title = match self.state {
                 AppState::AwaitingConfirmation => {
-                    let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
+                    let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].name;
                     format!("Confirm {} Installation", selected_repo_name)
                 }
                 AppState::Complete => "Installation Complete".to_string(),
@@ -1333,7 +1334,7 @@ impl eframe::App for InstallerApp {
                                 ui.add_space(12.0);
                                 ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "SUCCESS");
                                 ui.add_space(12.0);
-                                let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
+                                let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].name;
                                 ui.label(format!("{} has been successfully installed.", selected_repo_name));
                                 ui.add_space(15.0);
                                 ui.separator();
@@ -1402,7 +1403,7 @@ impl eframe::App for InstallerApp {
                                 ui.add_space(12.0);
                                 ui.colored_label(ui.visuals().error_fg_color, "FAILED");
                                 ui.add_space(12.0);
-                                let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].0;
+                                let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].name;
                                 ui.label(format!("{} installation failed.", selected_repo_name));
                                 ui.add_space(8.0);
                                 ui.label("Check the log for details.");
@@ -1590,7 +1591,7 @@ impl eframe::App for InstallerApp {
                                 ui.spacing_mut().item_spacing.x = 0.0;
                                 let count = REPO_OPTIONS.len();
 
-                                for (idx, (name, _url)) in REPO_OPTIONS.iter().enumerate() {
+                                for (idx, repo) in REPO_OPTIONS.iter().enumerate() {
                                     let corner_radius = if count == 1 {
                                         egui::CornerRadius::same(4)
                                     } else if idx == 0 {
@@ -1608,7 +1609,7 @@ impl eframe::App for InstallerApp {
 
                                         if ui.add(egui::Button::selectable(
                                             self.selected_repo_idx == idx,
-                                            *name,
+                                            repo.name,
                                         ).frame_when_inactive(true)).clicked() {
                                             self.selected_repo_idx = idx;
                                         }
@@ -1742,6 +1743,22 @@ impl eframe::App for InstallerApp {
                         }
                     });
                 });
+
+                // Repository info text (shown below Install button when not busy)
+                if !show_progress {
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.vertical_centered(|ui| {
+                            let repo_info = REPO_OPTIONS[self.selected_repo_idx].info;
+                            let text_color = egui::Color32::from_rgba_unmultiplied(251, 241, 199, 255);
+
+                            // Split by \n and display each line
+                            for line in repo_info.split('\n') {
+                                ui.colored_label(text_color, line);
+                            }
+                        });
+                    });
+                }
 
                 ui.add_space(10.0);
             });
