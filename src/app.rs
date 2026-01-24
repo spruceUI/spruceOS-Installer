@@ -1608,8 +1608,8 @@ impl eframe::App for InstallerApp {
 
                                                 if let Some(mapping) = mapping {
                                                     // Show friendly display name with device list
-                                                    let response = ui.vertical(|ui| {
-                                                        ui.selectable_label(is_selected, mapping.display_name);
+                                                    let label_response = ui.vertical(|ui| {
+                                                        let response = ui.selectable_label(is_selected, mapping.display_name);
 
                                                         ui.add_space(2.0);
 
@@ -1628,9 +1628,11 @@ impl eframe::App for InstallerApp {
                                                                 .size(9.0)
                                                                 .color(ui.style().visuals.weak_text_color().gamma_multiply(0.7))
                                                         );
-                                                    }).response;
 
-                                                    if response.clicked() {
+                                                        response
+                                                    }).inner;
+
+                                                    if label_response.clicked() {
                                                         self.selected_asset_idx = Some(idx);
                                                     }
                                                 } else {
