@@ -1,5 +1,4 @@
 ## To-Do
-- Twig updater: multiple partitions could prove VERY difficult. idk how to address this.
 - The info could be centered vertically in the space below the button instead of straddling it?
 - Checkboxes for various additional packages:
     - all themes
@@ -8,18 +7,6 @@
     - PortMaster (are we making this a separate archive?)
 - Backup and restore (update current installation instead of just fresh ones?)
 - Scrape boxart for roms
-
-## Recent Updates
-- ✅ **Asset Display Mappings** - Show user-friendly device names instead of technical filenames (e.g., "RK3326 Chipset - Anbernic RG351P/V/M" instead of "UnofficialOS-RK3326.img.gz")
-- ✅ **Extension Filtering** - Filter releases by file type (show only .7z archives, only .img.gz images, etc.) per repository
-- ✅ **Update Mode** - Smart update system that deletes specified directories before installing (preserves user data like saves and ROMs)
-- ✅ **macOS Authorization Improvements** - Enhanced error handling for authopen with better user feedback (distinguishes between user cancellation, permission errors, and system failures)
-- ✅ **Clipboard Support** - Added cross-platform clipboard functionality for copying debug logs (macOS, Windows, Linux)
-- ✅ **Windows FAT32 Formatting Fix** - Resolved "Access denied" error during large SD card formatting on Windows
-- ✅ **Build Warnings Eliminated** - All Rust compiler warnings removed for cleaner, more maintainable code
-- ✅ **Asset Selection** - Installer now intelligently handles multiple downloads from a single release
-- ✅ **Repository Info** - Each repository can display custom information text in the UI
-- ✅ **Bug Fixes** - Fixed modal dialog freeze issue and cancellation state handling
 
 # SpruceOS Installer
 
@@ -554,4 +541,4 @@ This project builds upon the excellent work of others in the open source communi
 
 - **[Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager)** - The macOS authorization and privileged disk access implementation is based on techniques from the Raspberry Pi Imager project. Their authopen integration patterns helped us provide secure, user-friendly SD card writing on macOS without requiring code signing.
 
-We're grateful to these projects for making robust, cross-platform disk imaging tools possible.
+We're grateful to these projects for making robust, cross-platform tools possible.
