@@ -676,40 +676,30 @@ async fn unmount_device_macos(device_path: &str) -> Result<(), String> {
     // Convert /dev/disk# to disk# for diskutil
     let disk_name = device_path.trim_start_matches("/dev/");
 
-    crate::debug::log(&format!("Running: diskutil unmountDisk force {}", disk_name));
+    crate::debug::log(&format!("Attempting: diskutil unmountDisk force {}", disk_name));
 
-    // Add timeout and force flag
+    // Try to unmount with a short timeout, but don't fail if it doesn't work
     let result = timeout(
-        Duration::from_secs(30),
+        Duration::from_secs(5),  // Shorter timeout - 5 seconds only
         Command::new("diskutil")
             .arg("unmountDisk")
-            .arg("force")  // Add force flag
+            .arg("force")
             .arg(disk_name)
             .output()
     ).await;
 
     match result {
-        Ok(Ok(output)) => {
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                crate::debug::log(&format!("diskutil warning: {}", stderr));
-                // Don't fail - proceed anyway as the disk might already be unmounted
-            } else {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                crate::debug::log(&format!("Disk unmounted: {}", stdout));
-            }
+        Ok(Ok(output)) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            crate::debug::log(&format!("Disk unmounted: {}", stdout));
         }
-        Ok(Err(e)) => {
-            crate::debug::log(&format!("diskutil command failed: {}", e));
-            // Don't fail - try to proceed anyway
-        }
-        Err(_) => {
-            crate::debug::log("diskutil command timed out after 30s - proceeding anyway");
-            // Don't fail - the disk might be in a weird state but we'll try to write anyway
+        _ => {
+            crate::debug::log("Unmount failed or timed out - proceeding with raw disk anyway");
+            crate::debug::log("Note: Writing to /dev/rdisk# often works even when disk is mounted");
         }
     }
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;  // Increased wait time
+    tokio::time::sleep(Duration::from_millis(500)).await;
     Ok(())
 }
 
@@ -728,6 +718,15 @@ async fn burn_image_macos(
     let raw_device_path = device_path.replace("/dev/disk", "/dev/rdisk");
     crate::debug::log(&format!("Using raw device: {}", raw_device_path));
 
+    // Check if we're running as root
+    let euid = unsafe { libc::geteuid() };
+    if euid != 0 {
+        return Err(format!(
+            "Insufficient permissions to write to {}. Please run with sudo or grant Full Disk Access to this application.",
+            raw_device_path
+        ));
+    }
+
     let bytes_written = tokio::task::spawn_blocking({
         let image_path = image_path.to_path_buf();
         let device_path = raw_device_path.clone();
@@ -735,11 +734,20 @@ async fn burn_image_macos(
         let cancel_token = cancel_token.clone();
 
         move || -> Result<u64, String> {
+            crate::debug::log(&format!("Opening device for writing: {}", device_path));
+            
             let mut device = std::fs::OpenOptions::new()
                 .write(true)
                 .custom_flags(libc::O_SYNC)
                 .open(&device_path)
-                .map_err(|e| format!("Failed to open device {}: {}. Are you running with sudo?", device_path, e))?;
+                .map_err(|e| {
+                    let err_msg = format!("Failed to open device {}: {} (error code: {:?})", 
+                        device_path, e, e.raw_os_error());
+                    crate::debug::log(&err_msg);
+                    err_msg
+                })?;
+
+            crate::debug::log("Device opened successfully");
 
             // Check if file is gzipped and create appropriate reader
             let is_gzipped = image_path.extension()
@@ -776,26 +784,7 @@ async fn burn_image_macos(
                 device.write_all(&buffer[..bytes_read])
                     .map_err(|e| format!("Failed to write to device at offset {}: {}", total_written, e))?;
 
-                total_written += bytes_read as u64;
-                let _ = progress_tx.send(BurnProgress::Writing {
-                    written: total_written,
-                    total: image_size,
-                });
-            }
-
-            // Sync to ensure all data is written
-            device.sync_all()
-                .map_err(|e| format!("Failed to sync device: {}", e))?;
-
-            crate::debug::log(&format!("Write complete: {} bytes written", total_written));
-            Ok(total_written)
-        }
-    })
-    .await
-    .map_err(|e| format!("Write task failed: {}", e))?;
-
-    bytes_written
-}
+                total_written +=
 
 // =============================================================================
 // Verification
