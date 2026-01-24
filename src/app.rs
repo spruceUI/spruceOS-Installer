@@ -7,7 +7,7 @@ use crate::drives::{get_removable_drives, DriveInfo};
 use crate::eject::eject_drive;
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
-use crate::github::{download_asset, find_release_asset, get_latest_release, DownloadProgress};
+use crate::github::{download_asset, find_release_asset, get_latest_release, DownloadProgress, Release, Asset};
 use eframe::egui;
 use egui_thematic::{ThemeConfig, ThemeEditorState, render_theme_panel};
 use std::path::PathBuf;
@@ -19,6 +19,8 @@ use tokio_util::sync::CancellationToken;
 #[derive(Debug, Clone, PartialEq)]
 enum AppState {
     Idle,
+    FetchingAssets,
+    SelectingAsset,
     AwaitingConfirmation,
     FetchingRelease,
     Downloading,
@@ -64,6 +66,12 @@ pub struct InstallerApp {
     // Channel for background drive updates
     drive_rx: mpsc::UnboundedReceiver<Vec<DriveInfo>>,
     drive_poll_tx: mpsc::UnboundedSender<bool>,
+
+    // Asset selection
+    fetched_release: Option<Release>,
+    available_assets: Vec<Asset>,
+    selected_asset_idx: Option<usize>,
+    release_rx: Option<mpsc::UnboundedReceiver<Result<Release, String>>>,
 
     // Theme editor
     theme_state: ThemeEditorState,
@@ -172,6 +180,10 @@ impl InstallerApp {
             cancel_token: None,
             drive_rx: rx,
             drive_poll_tx: poll_tx,
+            fetched_release: None,
+            available_assets: Vec::new(),
+            selected_asset_idx: None,
+            release_rx: None,
             theme_state: ThemeEditorState::default(),
             show_theme_editor: false,
             show_log: false,
@@ -295,6 +307,93 @@ impl InstallerApp {
         }
     }
 
+    /// Filter out source code archives from asset list
+    fn filter_assets(assets: Vec<Asset>) -> Vec<Asset> {
+        assets.into_iter()
+            .filter(|a| {
+                !a.name.starts_with("Source code") &&
+                a.name != "source.zip" &&
+                a.name != "source.tar.gz"
+            })
+            .collect()
+    }
+
+    /// Strip all known extensions from an asset name to get the base name
+    fn strip_extensions(name: &str) -> String {
+        let mut base = name.to_string();
+
+        // Remove known extensions in order of specificity
+        for ext in &[".img.gz", ".img.xz", ".tar.gz", ".7z", ".zip", ".img"] {
+            if base.ends_with(ext) {
+                base = base.strip_suffix(ext).unwrap_or(&base).to_string();
+                break; // Only strip one extension
+            }
+        }
+
+        base
+    }
+
+    /// Check if we should auto-select an asset or show selection UI
+    /// Returns (should_auto_select, selected_asset_index_if_auto)
+    fn should_auto_select(assets: &[Asset]) -> (bool, Option<usize>) {
+        // Only one asset? Auto-select it
+        if assets.len() == 1 {
+            return (true, Some(0));
+        }
+
+        // Check if all assets have the same base name (different extensions only)
+        let base_names: std::collections::HashSet<_> = assets.iter()
+            .map(|a| Self::strip_extensions(&a.name))
+            .collect();
+
+        if base_names.len() == 1 {
+            // Same base name, different extensions - pick by priority
+            // Priority: .7z > .zip > .img.gz > .img.xz > .img
+            const PRIORITY: &[&str] = &[".7z", ".zip", ".img.gz", ".img.xz", ".img"];
+
+            for ext in PRIORITY {
+                if let Some((idx, _)) = assets.iter()
+                    .enumerate()
+                    .find(|(_, a)| a.name.ends_with(ext))
+                {
+                    return (true, Some(idx));
+                }
+            }
+
+            // Fallback: pick first if no priority match
+            return (true, Some(0));
+        }
+
+        // Multiple different assets - need user selection
+        (false, None)
+    }
+
+    fn fetch_and_check_assets(&mut self, ctx: egui::Context) {
+        self.state = AppState::FetchingAssets;
+        self.log("Fetching available downloads...");
+
+        let repo = &REPO_OPTIONS[self.selected_repo_idx];
+        let repo_url = repo.url.to_string();
+        let progress = self.progress.clone();
+        let ctx_clone = ctx.clone();
+
+        // Create channel for release result
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.release_rx = Some(rx);
+
+        // Spawn async task to fetch release
+        self.runtime.spawn(async move {
+            if let Ok(mut p) = progress.lock() {
+                p.message = "Fetching release info...".to_string();
+            }
+            ctx_clone.request_repaint();
+
+            let result = get_latest_release(&repo_url).await;
+            let _ = tx.send(result);
+            ctx_clone.request_repaint();
+        });
+    }
+
     fn start_installation(&mut self, ctx: egui::Context) {
         let Some(drive_idx) = self.selected_drive_idx else {
             self.log("No drive selected");
@@ -343,6 +442,31 @@ impl InstallerApp {
             }
         }
 
+        // Get the pre-fetched release and selected asset
+        let Some(release) = self.fetched_release.take() else {
+            self.log("Error: No release data available");
+            self.state = AppState::Error;
+            return;
+        };
+
+        let Some(asset_idx) = self.selected_asset_idx else {
+            self.log("Error: No asset selected");
+            self.state = AppState::Error;
+            return;
+        };
+
+        let asset = if asset_idx < self.available_assets.len() {
+            self.available_assets[asset_idx].clone()
+        } else {
+            self.log("Error: Invalid asset selection");
+            self.state = AppState::Error;
+            return;
+        };
+
+        // Clear asset selection data
+        self.available_assets.clear();
+        self.selected_asset_idx = None;
+
         let repo_url = repo_url.to_string();
         let progress = self.progress.clone();
         let log_messages = self.log_messages.clone();
@@ -384,38 +508,12 @@ impl InstallerApp {
                 ctx_clone.request_repaint();
             };
 
-            // Step 1: Fetch release
-            log("Fetching latest release from GitHub...");
-            crate::debug::log_section("Fetching Release");
-            crate::debug::log(&format!("Repository URL: {}", repo_url));
-            set_progress(0, 100, "Fetching release info...");
-
-            let release = match get_latest_release(&repo_url).await {
-                Ok(r) => r,
-                Err(e) => {
-                    log(&format!("Error: {}", e));
-                    crate::debug::log(&format!("ERROR fetching release: {}", e));
-                    let _ = state_tx_clone.send(AppState::Error);
-                    let _ = drive_poll_tx_clone.send(true);
-                    return;
-                }
-            };
-
-            let asset = match find_release_asset(&release) {
-                Some(a) => a,
-                None => {
-                    log("Error: No compatible file found in release (.7z, .zip, .img.gz, .img)");
-                    crate::debug::log("ERROR: No supported asset found in release");
-                    let _ = state_tx_clone.send(AppState::Error);
-                    let _ = drive_poll_tx_clone.send(true);
-                    return;
-                }
-            };
-
+            // Use pre-fetched release and selected asset
             log(&format!(
-                "Found release: {} ({})",
+                "Installing release: {} ({})",
                 release.tag_name, asset.name
             ));
+            crate::debug::log_section("Starting Installation");
             crate::debug::log(&format!("Release: {}", release.tag_name));
             crate::debug::log(&format!("Asset: {} ({} bytes)", asset.name, asset.size));
 
@@ -1158,7 +1256,8 @@ impl eframe::App for InstallerApp {
         // Show modal dialogs for confirmation or status
         let show_modal = matches!(
             self.state,
-            AppState::AwaitingConfirmation
+            AppState::SelectingAsset
+                | AppState::AwaitingConfirmation
                 | AppState::Complete
                 | AppState::Ejecting
                 | AppState::Ejected
@@ -1186,6 +1285,54 @@ impl eframe::App for InstallerApp {
         while let Ok(drives) = self.drive_rx.try_recv() {
             self.drives = drives;
             self.ensure_selection_valid();
+        }
+
+        // Check for release fetch results
+        if let Some(rx) = &mut self.release_rx {
+            if let Ok(result) = rx.try_recv() {
+                match result {
+                    Ok(release) => {
+                        // Filter assets
+                        let mut assets = Self::filter_assets(release.assets.clone());
+
+                        if assets.is_empty() {
+                            self.log("No compatible files found in release");
+                            self.state = AppState::Error;
+                            self.release_rx = None;
+                        } else {
+                            // Sort assets alphabetically
+                            assets.sort_by(|a, b| a.name.cmp(&b.name));
+
+                            // Check if we should auto-select
+                            let (should_auto, auto_idx) = Self::should_auto_select(&assets);
+
+                            self.fetched_release = Some(release);
+                            self.available_assets = assets;
+
+                            if should_auto {
+                                // Auto-select and proceed to confirmation
+                                self.selected_asset_idx = auto_idx;
+                                self.state = AppState::AwaitingConfirmation;
+                                if let Some(idx) = auto_idx {
+                                    self.log(&format!("Auto-selected: {}", self.available_assets[idx].name));
+                                }
+                            } else {
+                                // Show asset selection UI
+                                self.selected_asset_idx = Some(0); // Pre-select first item
+                                self.state = AppState::SelectingAsset;
+                            }
+
+                            self.release_rx = None;
+                        }
+                    }
+                    Err(e) => {
+                        self.log(&format!("Error fetching release: {}", e));
+                        self.state = AppState::Error;
+                        self.release_rx = None;
+                    }
+                }
+                ctx.request_repaint();
+            }
         }
 
         // Check for state updates from async eject on Windows
@@ -1241,7 +1388,8 @@ impl eframe::App for InstallerApp {
         // Keep requesting repaints while busy so UI stays responsive
         let is_busy = matches!(
             self.state,
-            AppState::FetchingRelease
+            AppState::FetchingAssets
+                | AppState::FetchingRelease
                 | AppState::Downloading
                 | AppState::Formatting
                 | AppState::Extracting
@@ -1267,6 +1415,7 @@ impl eframe::App for InstallerApp {
                 .stroke(ctx.style().visuals.window_stroke);
 
             let window_title = match self.state {
+                AppState::SelectingAsset => "Select Download".to_string(),
                 AppState::AwaitingConfirmation => {
                     let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].name;
                     format!("Confirm {} Installation", selected_repo_name)
@@ -1288,6 +1437,55 @@ impl eframe::App for InstallerApp {
                 .show(ctx, |ui| {
                     ui.vertical_centered(|ui| {
                         match self.state {
+                            AppState::SelectingAsset => {
+                                ui.add_space(12.0);
+                                ui.heading("Select a file to install:");
+                                ui.add_space(12.0);
+
+                                // Scrollable list of assets
+                                egui::ScrollArea::vertical()
+                                    .max_height(300.0)
+                                    .show(ui, |ui| {
+                                        for (idx, asset) in self.available_assets.iter().enumerate() {
+                                            let is_selected = self.selected_asset_idx == Some(idx);
+                                            if ui.selectable_label(is_selected, &asset.name).clicked() {
+                                                self.selected_asset_idx = Some(idx);
+                                            }
+                                        }
+                                    });
+
+                                ui.add_space(12.0);
+                                ui.separator();
+                                ui.add_space(8.0);
+
+                                ui.columns(2, |columns| {
+                                    columns[0].allocate_ui_with_layout(
+                                        egui::Vec2::ZERO,
+                                        egui::Layout::right_to_left(egui::Align::Center),
+                                        |ui| {
+                                            if ui.button("Cancel").clicked() {
+                                                self.state = AppState::Idle;
+                                                self.fetched_release = None;
+                                                self.available_assets.clear();
+                                                self.selected_asset_idx = None;
+                                            }
+                                        },
+                                    );
+
+                                    columns[1].allocate_ui_with_layout(
+                                        egui::Vec2::ZERO,
+                                        egui::Layout::left_to_right(egui::Align::Center),
+                                        |ui| {
+                                            let can_continue = self.selected_asset_idx.is_some();
+                                            ui.add_enabled_ui(can_continue, |ui| {
+                                                if ui.button("Continue").clicked() {
+                                                    self.state = AppState::AwaitingConfirmation;
+                                                }
+                                            });
+                                        },
+                                    );
+                                });
+                            }
                             AppState::AwaitingConfirmation => {
                                 ui.add_space(12.0);
                                 ui.colored_label(ui.visuals().warn_fg_color, "WARNING");
@@ -1718,7 +1916,7 @@ impl eframe::App for InstallerApp {
                                     .min_size(egui::vec2(96.0, 48.0))
                                     .fill(egui::Color32::from_rgb(104, 157, 106)); // Green
                                 if ui.add(button).clicked() {
-                                    self.state = AppState::AwaitingConfirmation;
+                                    self.fetch_and_check_assets(ctx.clone());
                                 }
                             });
                         }
