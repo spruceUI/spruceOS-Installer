@@ -784,8 +784,26 @@ async fn burn_image_macos(
                 device.write_all(&buffer[..bytes_read])
                     .map_err(|e| format!("Failed to write to device at offset {}: {}", total_written, e))?;
 
-                total_written +=
+                total_written += bytes_read as u64;
+                let _ = progress_tx.send(BurnProgress::Writing {
+                    written: total_written,
+                    total: image_size,
+                });
+            }
 
+            // Sync to ensure all data is written
+            device.sync_all()
+                .map_err(|e| format!("Failed to sync device: {}", e))?;
+
+            crate::debug::log(&format!("Write complete: {} bytes written", total_written));
+            Ok(total_written)
+        } // <-- Close the closure
+    }) // <-- Close spawn_blocking
+    .await
+    .map_err(|e| format!("Write task failed: {}", e))??;
+
+    Ok(bytes_written)
+}
 // =============================================================================
 // Verification
 // =============================================================================
