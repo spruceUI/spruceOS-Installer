@@ -1,5 +1,5 @@
 use crate::config::{
-    setup_theme, AssetDisplayMapping, REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL, DEFAULT_REPO_INDEX,
+    setup_theme, REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL, DEFAULT_REPO_INDEX,
 };
 use crate::burn::{burn_image, BurnProgress};
 use crate::copy::{copy_directory_with_progress, CopyProgress};
@@ -1606,11 +1606,10 @@ impl eframe::App for InstallerApp {
                                             ui.group(|ui| {
                                                 ui.set_min_width(400.0);
 
-                                                let response = if let Some(mapping) = mapping {
+                                                if let Some(mapping) = mapping {
                                                     // Show friendly display name with device list
-                                                    ui.vertical(|ui| {
-                                                        let label = egui::SelectableLabel::new(is_selected, mapping.display_name)
-                                                            .ui(ui);
+                                                    let response = ui.vertical(|ui| {
+                                                        ui.selectable_label(is_selected, mapping.display_name);
 
                                                         ui.add_space(2.0);
 
@@ -1629,16 +1628,16 @@ impl eframe::App for InstallerApp {
                                                                 .size(9.0)
                                                                 .color(ui.style().visuals.weak_text_color().gamma_multiply(0.7))
                                                         );
+                                                    }).response;
 
-                                                        label
-                                                    }).inner
+                                                    if response.clicked() {
+                                                        self.selected_asset_idx = Some(idx);
+                                                    }
                                                 } else {
                                                     // Fallback: show asset name only
-                                                    ui.selectable_label(is_selected, &asset.name)
-                                                };
-
-                                                if response.clicked() {
-                                                    self.selected_asset_idx = Some(idx);
+                                                    if ui.selectable_label(is_selected, &asset.name).clicked() {
+                                                        self.selected_asset_idx = Some(idx);
+                                                    }
                                                 }
                                             });
                                         }
