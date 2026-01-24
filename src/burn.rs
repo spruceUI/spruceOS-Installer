@@ -711,21 +711,11 @@ async fn burn_image_macos(
     progress_tx: &UnboundedSender<BurnProgress>,
     cancel_token: &CancellationToken,
 ) -> Result<u64, String> {
-    use std::os::unix::fs::OpenOptionsExt;
     use std::io::{Read, Write};
 
     // Use rdisk for faster writes (raw disk)
     let raw_device_path = device_path.replace("/dev/disk", "/dev/rdisk");
     crate::debug::log(&format!("Using raw device: {}", raw_device_path));
-
-    // Check if we're running as root
-    let euid = unsafe { libc::geteuid() };
-    if euid != 0 {
-        return Err(format!(
-            "Insufficient permissions to write to {}. Please run with sudo or grant Full Disk Access to this application.",
-            raw_device_path
-        ));
-    }
 
     let bytes_written = tokio::task::spawn_blocking({
         let image_path = image_path.to_path_buf();
@@ -734,20 +724,13 @@ async fn burn_image_macos(
         let cancel_token = cancel_token.clone();
 
         move || -> Result<u64, String> {
-            crate::debug::log(&format!("Opening device for writing: {}", device_path));
-            
-            let mut device = std::fs::OpenOptions::new()
-                .write(true)
-                .custom_flags(libc::O_SYNC)
-                .open(&device_path)
-                .map_err(|e| {
-                    let err_msg = format!("Failed to open device {}: {} (error code: {:?})", 
-                        device_path, e, e.raw_os_error());
-                    crate::debug::log(&err_msg);
-                    err_msg
-                })?;
+            crate::debug::log("Opening device using authopen (will prompt for authorization)...");
 
-            crate::debug::log("Device opened successfully");
+            // Use authopen to get privileged file descriptor
+            // This will show a native macOS authorization dialog
+            let mut device = crate::mac::authopen::auth_open_device(std::path::Path::new(&device_path))?;
+
+            crate::debug::log("Device opened successfully via authopen");
 
             // Check if file is gzipped and create appropriate reader
             let is_gzipped = image_path.extension()
