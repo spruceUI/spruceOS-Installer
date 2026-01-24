@@ -37,7 +37,7 @@ pub fn auth_open_device(device_path: &Path) -> Result<File, String> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|e| format!("Failed to spawn authopen (user may have cancelled authorization): {}", e))?;
+        .map_err(|e| format!("AUTHOPEN_SPAWN_FAILED: {}", e))?;
 
     crate::debug::log("authopen process spawned, waiting for file descriptor...");
 
@@ -53,7 +53,11 @@ pub fn auth_open_device(device_path: &Path) -> Result<File, String> {
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(format!("authopen failed (user may have cancelled): {}", stderr.trim()));
+        let stdout_output = String::from_utf8_lossy(&output.stdout);
+        crate::debug::log(&format!("authopen failed - status: {:?}", output.status));
+        crate::debug::log(&format!("authopen stdout: {}", stdout_output.trim()));
+        crate::debug::log(&format!("authopen stderr: {}", stderr.trim()));
+        return Err(format!("AUTHOPEN_AUTHORIZATION_DENIED: {}", stderr.trim()));
     }
 
     // Parse FD number
