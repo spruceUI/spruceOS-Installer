@@ -183,14 +183,6 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
 /// Index of the default repository selection (0 = first option)
 pub const DEFAULT_REPO_INDEX: usize = 0;
 
-/// DEPRECATED: File extension is now auto-detected from supported formats
-/// The installer automatically detects and downloads the first asset matching:
-/// - Archive mode: .7z, .zip (formats, extracts, and copies files)
-/// - Image mode: .img.gz, .img.xz, .img (burns raw image to device)
-/// This constant is kept for backward compatibility but is no longer used
-#[allow(dead_code)]
-pub const ASSET_EXTENSION: &str = ".7z";
-
 // ----------------------------------------------------------------------------
 // WINDOW SETTINGS
 // ----------------------------------------------------------------------------

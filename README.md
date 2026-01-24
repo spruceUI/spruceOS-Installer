@@ -253,7 +253,6 @@ The installer automatically detects and downloads compatible files from GitHub r
 > - `WINDOW_TITLE` is explicitly set to provide a clean window title (e.g., "SpruceOS Installer" instead of "spruceos-installer"). Change this to match your project name.
 > - `USER_AGENT` and `TEMP_PREFIX` are auto-generated from `CARGO_PKG_NAME`. You usually **do not need to change these**.
 > - The `setup_theme()` function in `config.rs` uses the Gruvbox Dark preset. This is a fallback; the actual theme is customized in `app.rs`.
-> - `ASSET_EXTENSION` constant still exists for backward compatibility but is **deprecated** and no longer used.
 
 ---
 
