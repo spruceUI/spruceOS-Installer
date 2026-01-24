@@ -1254,10 +1254,10 @@ impl eframe::App for InstallerApp {
         }
 
         if show_modal {
-            // Background Dimmer - paint at Middle layer so modal window renders on top
+            // Background Dimmer - paint at Background layer, below everything
             let screen_rect = ctx.screen_rect();
             ctx.layer_painter(egui::LayerId::new(
-                egui::Order::Middle,
+                egui::Order::Background,
                 egui::Id::from("modal_dimmer"),
             ))
             .rect_filled(screen_rect, 0.0, egui::Color32::from_black_alpha(140));
