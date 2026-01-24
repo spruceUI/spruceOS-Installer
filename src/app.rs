@@ -234,10 +234,10 @@ impl InstallerApp {
             override_widget_noninteractive_fg_stroke_color: None,
             override_widget_noninteractive_fg_stroke_width: None,
             override_widget_noninteractive_expansion: None,
-            override_widget_inactive_bg_fill: Some([215, 180, 95, 255]),
+            override_widget_inactive_bg_fill: None, // No fill for unchecked checkboxes - just outline
             override_widget_inactive_weak_bg_fill: None,
-            override_widget_inactive_bg_stroke_color: Some([124, 111, 100, 100]),
-            override_widget_inactive_bg_stroke_width: None,
+            override_widget_inactive_bg_stroke_color: Some([124, 111, 100, 200]), // Border color for unchecked boxes
+            override_widget_inactive_bg_stroke_width: Some(1.5), // Border width for checkbox outline
             override_widget_inactive_corner_radius: None,
             override_widget_inactive_fg_stroke_color: Some([104, 157, 106, 255]),
             override_widget_inactive_fg_stroke_width: None,
@@ -250,13 +250,13 @@ impl InstallerApp {
             override_widget_hovered_fg_stroke_color: None,
             override_widget_hovered_fg_stroke_width: None,
             override_widget_hovered_expansion: None,
-            override_widget_active_bg_fill: Some([215, 180, 95, 100]),
+            override_widget_active_bg_fill: Some([215, 180, 95, 100]), // Checked checkbox background
             override_widget_active_weak_bg_fill: None,
-            override_widget_active_bg_stroke_color: Some([215, 180, 95, 255]),
-            override_widget_active_bg_stroke_width: None,
+            override_widget_active_bg_stroke_color: Some([215, 180, 95, 255]), // Border when checked
+            override_widget_active_bg_stroke_width: Some(1.5), // Border width when checked
             override_widget_active_corner_radius: None,
-            override_widget_active_fg_stroke_color: None,
-            override_widget_active_fg_stroke_width: None,
+            override_widget_active_fg_stroke_color: Some([104, 157, 106, 255]), // Checkmark color
+            override_widget_active_fg_stroke_width: Some(2.0), // Thicker checkmark
             override_widget_active_expansion: None,
             override_widget_open_bg_fill: None,
             override_widget_open_weak_bg_fill: None,
@@ -1891,9 +1891,11 @@ impl eframe::App for InstallerApp {
                 ui.add_enabled_ui(!show_modal, |ui| {
                     let show_progress = matches!(
                         self.state,
-                        AppState::FetchingRelease
+                        AppState::FetchingAssets
+                            | AppState::FetchingRelease
                             | AppState::Downloading
                             | AppState::Formatting
+                            | AppState::Deleting
                             | AppState::Extracting
                             | AppState::Copying
                             | AppState::Cancelling
@@ -2062,11 +2064,11 @@ impl eframe::App for InstallerApp {
                     ui.horizontal(|ui| {
                         ui.vertical_centered(|ui| {
                             
-                            // Only FetchingRelease has indeterminate progress
-                            // Downloading, Formatting, and Extracting now report percentages
+                            // FetchingAssets, FetchingRelease, and Deleting have indeterminate progress (spinner)
+                            // Downloading, Formatting, Extracting, and Copying report percentages
                             let is_indeterminate = matches!(
                                 self.state,
-                                AppState::FetchingRelease | AppState::Idle
+                                AppState::FetchingAssets | AppState::FetchingRelease | AppState::Deleting | AppState::Idle
                             );
 
                             if is_indeterminate {
