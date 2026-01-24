@@ -58,6 +58,9 @@ pub const TEMP_PREFIX: &str = env!("CARGO_PKG_NAME");
 ///           Use \n for line breaks in longer informative messages
 /// - `update_directories`: Directories to delete when updating (e.g., &["Retroarch", "spruce"])
 ///                         Paths are relative to SD card root
+/// - `allowed_extensions`: Optional filter to only show assets with these extensions
+///                         Use this to filter out update packages or show only specific formats
+///                         Set to None to show all assets
 ///
 /// Example:
 /// ```
@@ -66,6 +69,7 @@ pub const TEMP_PREFIX: &str = env!("CARGO_PKG_NAME");
 ///     url: "spruceUI/twigUI",
 ///     info: "This is spruceOS for the GKD Pixel 2.\nOptimized for Pixel 2 hardware.",
 ///     update_directories: &["Retroarch", "spruce"],
+///     allowed_extensions: Some(&[".7z", ".zip"]),  // Only show archives
 /// }
 /// ```
 pub struct RepoOption {
@@ -73,6 +77,7 @@ pub struct RepoOption {
     pub url: &'static str,
     pub info: &'static str,
     pub update_directories: &'static [&'static str],
+    pub allowed_extensions: Option<&'static [&'static str]>,
 }
 
 pub const REPO_OPTIONS: &[RepoOption] = &[
@@ -81,24 +86,35 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         url: "spruceUI/spruceOS",
         info: "Stable releases of spruceOS.\nSupported devices: Miyoo A30",
         update_directories: &["Retroarch", "spruce"],
+        allowed_extensions: None,  // Show all assets
     },
     RepoOption {
         name: "Nightlies",
         url: "spruceUI/spruceOSNightlies",
         info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick",
         update_directories: &["Retroarch", "spruce"],
+        allowed_extensions: None,  // Show all assets
     },
     RepoOption {
         name: "SprigUI",
         url: "spruceUI/sprigUI",
         info: "SpruceOS for the Miyoo Mini Flip.",
         update_directories: &["Retroarch", "spruce"],
+        allowed_extensions: None,  // Show all assets
     },
     RepoOption {
         name: "TwigUI",
         url: "spruceUI/twigUI",
         info: "SpruceOS for the GKD Pixel 2.",
         update_directories: &["Retroarch", "spruce"],
+        allowed_extensions: None,  // Show all assets
+    },
+    RepoOption {
+        name: "UnofficialOS",
+        url: "RetroGFX/UnofficialOS",
+        info: "UnofficialOS for various retro handheld devices.\nSelect your device from the list.\n\nSupported: RK3326, RK3566, RK3588, AMD64, S922X, and more.",
+        update_directories: &["System", "usr"],  // Example directories
+        allowed_extensions: Some(&[".img.gz"]),  // Only show full OS images, not .tar updates
     },
 ];
 

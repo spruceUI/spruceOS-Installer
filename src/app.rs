@@ -312,13 +312,25 @@ impl InstallerApp {
         }
     }
 
-    /// Filter out source code archives from asset list
-    fn filter_assets(assets: Vec<Asset>) -> Vec<Asset> {
+    /// Filter out source code archives and apply extension filtering from asset list
+    fn filter_assets(assets: Vec<Asset>, allowed_extensions: Option<&[&str]>) -> Vec<Asset> {
         assets.into_iter()
             .filter(|a| {
-                !a.name.starts_with("Source code") &&
-                a.name != "source.zip" &&
-                a.name != "source.tar.gz"
+                // Filter out source code archives
+                if a.name.starts_with("Source code") ||
+                   a.name == "source.zip" ||
+                   a.name == "source.tar.gz" {
+                    return false;
+                }
+
+                // Apply extension filter if provided
+                if let Some(extensions) = allowed_extensions {
+                    // Asset must end with at least one of the allowed extensions
+                    extensions.iter().any(|ext| a.name.ends_with(ext))
+                } else {
+                    // No extension filter, allow all
+                    true
+                }
             })
             .collect()
     }
@@ -1387,11 +1399,20 @@ impl eframe::App for InstallerApp {
             if let Ok(result) = rx.try_recv() {
                 match result {
                     Ok(release) => {
+                        // Get allowed extensions from current repo option
+                        let repo_option = &config::REPO_OPTIONS[self.selected_repo_idx];
+                        let allowed_extensions = repo_option.allowed_extensions;
+
                         // Filter assets
-                        let mut assets = Self::filter_assets(release.assets.clone());
+                        let mut assets = Self::filter_assets(release.assets.clone(), allowed_extensions);
 
                         if assets.is_empty() {
-                            self.log("No compatible files found in release");
+                            let msg = if allowed_extensions.is_some() {
+                                "No compatible files found matching the allowed extensions for this repository"
+                            } else {
+                                "No compatible files found in release"
+                            };
+                            self.log(msg);
                             self.state = AppState::Error;
                             self.release_rx = None;
                         } else {
