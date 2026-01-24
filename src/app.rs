@@ -1928,8 +1928,20 @@ impl eframe::App for InstallerApp {
                             ui.horizontal(|ui| {
                                 if ui.button("📋 Copy to Clipboard").clicked() {
                                     let log_path = crate::debug::get_log_path();
-                                    if let Ok(contents) = std::fs::read_to_string(&log_path) {
-                                        ui.ctx().copy_text(contents);
+                                    match std::fs::read_to_string(&log_path) {
+                                        Ok(contents) => {
+                                            match arboard::Clipboard::new().and_then(|mut clipboard| clipboard.set_text(contents)) {
+                                                Ok(_) => {
+                                                    self.log.push("Log copied to clipboard".to_string());
+                                                },
+                                                Err(e) => {
+                                                    self.log.push(format!("Failed to copy to clipboard: {}", e));
+                                                }
+                                            }
+                                        },
+                                        Err(e) => {
+                                            self.log.push(format!("Failed to read log file: {}", e));
+                                        }
                                     }
                                 }
                                 ui.label(format!("Log: {:?}", crate::debug::get_log_path().file_name().unwrap_or_default()));
