@@ -10,6 +10,13 @@
 - Scrape boxart for roms
 
 ## Recent Updates
+- ✅ **Asset Display Mappings** - Show user-friendly device names instead of technical filenames (e.g., "RK3326 Chipset - Anbernic RG351P/V/M" instead of "UnofficialOS-RK3326.img.gz")
+- ✅ **Extension Filtering** - Filter releases by file type (show only .7z archives, only .img.gz images, etc.) per repository
+- ✅ **Update Mode** - Smart update system that deletes specified directories before installing (preserves user data like saves and ROMs)
+- ✅ **macOS Authorization Improvements** - Enhanced error handling for authopen with better user feedback (distinguishes between user cancellation, permission errors, and system failures)
+- ✅ **Clipboard Support** - Added cross-platform clipboard functionality for copying debug logs (macOS, Windows, Linux)
+- ✅ **Windows FAT32 Formatting Fix** - Resolved "Access denied" error during large SD card formatting on Windows
+- ✅ **Build Warnings Eliminated** - All Rust compiler warnings removed for cleaner, more maintainable code
 - ✅ **Asset Selection** - Installer now intelligently handles multiple downloads from a single release
 - ✅ **Repository Info** - Each repository can display custom information text in the UI
 - ✅ **Bug Fixes** - Fixed modal dialog freeze issue and cancellation state handling
@@ -35,7 +42,7 @@ The installer is distributed as a `.zip` containing a self-contained `.app` bund
 
 **Steps to run:**
 
-1. Download the ZIP file from the GitHub release.  
+1. Download the ZIP file from the GitHub release.
 2. Extract the ZIP — you will get the following bundle and files:
 
     ```
@@ -46,7 +53,22 @@ The installer is distributed as a `.zip` containing a self-contained `.app` bund
     │   ├── Info.plist
     │   └── Resources/
     │       └── AppIcon.icns
+    └── launch-installer.command (optional launcher script)
     ```
+
+3. **Easy Method:** Double-click `launch-installer.command` to automatically remove quarantine and launch the app
+4. **Alternative:** Right-click "SpruceOSInstaller.app" and select "Open", then click "Open" in the dialog
+
+**About Authorization:**
+
+When writing to SD cards, the installer uses macOS's built-in `authopen` utility to request privileged disk access. You'll see a native macOS authorization dialog asking for your admin password. This is normal and required for direct disk writing.
+
+The installer will show specific error messages if authorization fails:
+- "Authorization cancelled by user" - You clicked Cancel in the auth dialog
+- "Permission denied" - Your account doesn't have admin privileges
+- System errors will show detailed diagnostic information
+
+**Note:** This app is not code-signed. For production use, consider signing with an Apple Developer certificate.
 
 # SpruceOS Installer — Developer Guide
 
@@ -79,26 +101,156 @@ Edit these constants:
 
 **Repository Configuration (`REPO_OPTIONS`):**
 
-Each repository is defined using a `RepoOption` struct with three fields:
-- `name`: Display name shown in the UI button (e.g., "Stable", "Nightlies")
-- `url`: GitHub repository in "owner/repo" format (e.g., "spruceUI/spruceOS")
-- `info`: Description text shown below the Install button when selected. Use `\n` for line breaks.
+Each repository is defined using a `RepoOption` struct with the following fields:
 
-**Example:**
+| Field | Type | Purpose | Example |
+|-------|------|---------|---------|
+| `name` | `&str` | Display name shown in the UI button | `"Stable"`, `"Nightlies"` |
+| `url` | `&str` | GitHub repository in "owner/repo" format | `"spruceUI/spruceOS"` |
+| `info` | `&str` | Description text shown below Install button (use `\n` for line breaks) | `"Stable releases.\nSupported: Device X"` |
+| `update_directories` | `&[&str]` | Directories to delete when updating (preserves other files) | `&["Retroarch", "spruce"]` |
+| `allowed_extensions` | `Option<&[&str]>` | Filter to only show specific file types (None = show all) | `Some(&[".7z", ".zip"])` |
+| `asset_display_mappings` | `Option<&[AssetDisplayMapping]>` | Show user-friendly names instead of filenames | See below |
+
+**Basic Example:**
 ```rust
 pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
         name: "Stable",
         url: "spruceUI/spruceOS",
-        info: "Stable releases of spruceOS.\nSupported devices: Device X, Device Y",
+        info: "Stable releases of spruceOS.\nSupported devices: Miyoo A30",
+        update_directories: &["Retroarch", "spruce"],
+        allowed_extensions: Some(&[".7z"]),  // Only show .7z archives
+        asset_display_mappings: None,
     },
     RepoOption {
         name: "Nightlies",
         url: "spruceUI/spruceOSNightlies",
         info: "Nightly development builds.\n⚠️ Warning: May be unstable!",
+        update_directories: &["Retroarch", "spruce"],
+        allowed_extensions: None,  // Show all assets
+        asset_display_mappings: None,
     },
 ];
 ```
+
+---
+
+### Advanced Repository Features
+
+#### Update Mode (`update_directories`)
+
+Update mode allows users to update an existing installation without losing saves, ROMs, or other personal files. When a user checks "Update Mode" in the UI:
+
+1. The installer **does NOT format** the SD card
+2. It **only deletes** the directories specified in `update_directories`
+3. All other files (saves, ROMs, screenshots, etc.) are preserved
+4. New files are extracted and copied over
+
+**Example:**
+```rust
+RepoOption {
+    name: "Stable",
+    url: "spruceUI/spruceOS",
+    info: "...",
+    update_directories: &["Retroarch", "spruce", "System"],  // These folders will be deleted
+    // ROMs, saves, themes in other folders are preserved!
+    allowed_extensions: Some(&[".7z"]),
+    asset_display_mappings: None,
+}
+```
+
+**Common Patterns:**
+- CFW core files: `&["System", "usr", "bin"]`
+- Frontend updates: `&["Retroarch", "spruce", "EmulationStation"]`
+- Full refresh: `&["."]` (deletes everything - use with caution!)
+
+#### Extension Filtering (`allowed_extensions`)
+
+Some projects release multiple file types in the same GitHub release (e.g., full OS images + update packages). Use `allowed_extensions` to control which files users see.
+
+**Examples:**
+
+Show only full OS images (hide update packages):
+```rust
+allowed_extensions: Some(&[".img.gz", ".img.xz"]),
+```
+
+Show only archives (hide raw images):
+```rust
+allowed_extensions: Some(&[".7z", ".zip"]),
+```
+
+Show all assets (no filtering):
+```rust
+allowed_extensions: None,
+```
+
+**Use Cases:**
+- Prevent users from accidentally selecting update packages when they need full images
+- Hide experimental formats (e.g., show only .7z if .zip is for legacy support)
+- Simplify UI when releases have many file types
+
+#### Asset Display Mappings (`asset_display_mappings`)
+
+When releases contain technical filenames like `UnofficialOS-RK3326.img.gz`, users may not know which file is for their device. Asset display mappings let you show friendly names instead.
+
+**Example Setup:**
+```rust
+RepoOption {
+    name: "UnofficialOS",
+    url: "RetroGFX/UnofficialOS",
+    info: "Select your device from the list below.",
+    update_directories: &["System", "usr"],
+    allowed_extensions: Some(&[".img.gz"]),  // Only show full images
+    asset_display_mappings: Some(&[
+        AssetDisplayMapping {
+            pattern: "RK3326",  // Matches "UnofficialOS-RK3326.img.gz"
+            display_name: "RK3326 Chipset",
+            devices: "Anbernic RG351P/V/M, Odroid Go Advance/Super",
+        },
+        AssetDisplayMapping {
+            pattern: "RK3588",  // Matches "UnofficialOS-RK3588.img.gz"
+            display_name: "RK3588 Chipset",
+            devices: "Gameforce Ace, Orange Pi 5, Radxa Rock 5b",
+        },
+    ]),
+}
+```
+
+**UI Display:**
+
+Instead of:
+```
+❯ UnofficialOS-RK3326.img.gz
+  UnofficialOS-RK3588.img.gz
+```
+
+Users see:
+```
+❯ RK3326 Chipset
+  Compatible: Anbernic RG351P/V/M, Odroid Go Advance/Super
+
+  RK3588 Chipset
+  Compatible: Gameforce Ace, Orange Pi 5, Radxa Rock 5b
+```
+
+**Pattern Matching:**
+- The `pattern` field is checked with `asset.name.contains(pattern)`
+- Use unique identifiers from your filenames (chipset names, device codes, etc.)
+- Patterns are case-sensitive
+
+**When to Use:**
+- Multi-device OS projects with device-specific builds
+- Technical filenames that aren't user-friendly
+- When you need to explain device compatibility in the UI
+
+**When to Skip:**
+- Single-device projects
+- Already clear filenames (e.g., "SpruceOS-MiyooA30.7z")
+- Releases with only one asset
+
+---
 
 **Asset Detection:**
 
@@ -106,7 +258,8 @@ The installer automatically detects and downloads compatible files from GitHub r
 - **Archive mode**: `.7z`, `.zip` (formats SD card, extracts, and copies files)
 - **Image mode**: `.img.gz`, `.img.xz`, `.img` (burns raw image directly to device)
 - **Source code archives** (`Source code.zip`, `Source code.tar.gz`) are automatically filtered out
-- If multiple assets exist, the installer will prompt the user to select one, or auto-select based on file type priority
+- Extension filtering (if configured) is applied before showing assets to users
+- If multiple assets remain after filtering, users see a selection modal with display names (if configured)
 
 > **Notes:**
 > - `WINDOW_TITLE`, `USER_AGENT`, and `TEMP_PREFIX` are auto-generated from `APP_NAME`. You usually **do not need to change these**.
@@ -212,11 +365,58 @@ To fully rebrand the installer, also update:
 - `REPO_OPTIONS` can include multiple repos (e.g., stable, nightlies, forks). The user can select between them via button tabs in the UI. Each repo's `info` text is displayed below the Install button.
 - The installer uses `egui` and `egui_thematic` for the UI. The theme can be edited live using the built-in theme editor (press Ctrl+T in the app).
 - All color values in `ThemeConfig` use RGBA format `[R, G, B, A]` where each value is 0-255.
-- **Asset Selection**: When a release contains multiple downloadable files, the installer intelligently handles them:
-  - Single asset → Auto-proceeds to installation
-  - Multiple files with same base name (different extensions) → Auto-selects by priority (.7z > .zip > .img.gz > .img.xz > .img)
-  - Multiple different files → Shows selection modal for user to choose
-  - Source code archives are automatically filtered out
+- **Asset Selection & Filtering**: When a release contains multiple downloadable files, the installer intelligently handles them:
+  - **Source code filtering**: GitHub's auto-generated source archives are always filtered out
+  - **Extension filtering**: If `allowed_extensions` is configured, only matching files are shown
+  - **Display mappings**: If `asset_display_mappings` is configured, technical filenames are replaced with user-friendly names and device compatibility info
+  - **Single asset** → Auto-proceeds to installation
+  - **Multiple files with same base name** → Auto-selects by priority (.7z > .zip > .img.gz > .img.xz > .img)
+  - **Multiple different files** → Shows selection modal with friendly names (if configured) for user to choose
+- **Update Mode**: Users can check "Update Mode" to preserve saves/ROMs while updating system files. Only directories specified in `update_directories` are deleted before installation.
+
+---
+
+## Platform-Specific Implementation Details
+
+### macOS Privileged Disk Access
+
+The installer uses macOS's `authopen` utility for secure, user-approved disk access without requiring the entire application to run as root or be code-signed.
+
+**Key Features:**
+- **Error Differentiation**: The installer distinguishes between:
+  - User cancellation (user clicked "Cancel" in auth dialog)
+  - Permission denial (insufficient privileges)
+  - System errors (authopen not found, FD passing failures)
+- **File Descriptor Validation**: Validates FD before use to prevent edge cases
+- **Detailed Logging**: All authopen operations are logged to the debug log for troubleshooting
+
+**Implementation** (`src/mac/authopen.rs`):
+- Uses `AuthOpenError` enum for proper error handling
+- Reads FD via stdout parsing (text-based, works without code signing)
+- Duplicates FD for safe ownership transfer
+- Based on Raspberry Pi Imager's proven patterns
+
+**For Developers**: This approach works perfectly with unsigned apps. For signed apps, consider adding Authorization Services API for credential caching and smoother UX.
+
+### Windows Large FAT32 Formatting
+
+Windows artificially limits the built-in `format` command to 32GB for FAT32, but the filesystem supports up to 2TB. The installer includes a custom FAT32 formatter that writes directly to the physical disk to bypass this limitation.
+
+**Implementation** (`src/fat32.rs`):
+- Opens physical disk with `FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH`
+- Writes boot sector, FAT tables, and root directory manually
+- Works with drives larger than 32GB without requiring third-party tools
+
+**Note**: A previous implementation using `FSCTL_ALLOW_EXTENDED_DASD_IO` caused "Access denied" errors and was reverted. The current approach is stable and tested.
+
+### Cross-Platform Clipboard
+
+The installer uses the `arboard` crate for reliable clipboard access across all platforms. This replaced the previous egui-based clipboard which was unreliable on macOS.
+
+**Features**:
+- Copy debug logs to clipboard with one click
+- Works on Windows, macOS, and Linux
+- Provides user feedback on success/failure
 
 ---
 
@@ -236,6 +436,9 @@ To fully rebrand the installer, also update:
              name: "Stable",
              url: "yourorg/yourrepo",
              info: "Description shown in UI.\nSupported devices: X, Y, Z",
+             update_directories: &["System"],  // Folders to delete during updates
+             allowed_extensions: None,          // Show all asset types
+             asset_display_mappings: None,      // Use filenames as-is
          },
      ];
      ```
@@ -340,3 +543,15 @@ GitHub Actions will automatically build your customized installer for all platfo
 ---
 
 > **PLEASE:** Keep the original spruceOS authors in `Cargo.toml` and `Info.plist` for credit. Add your name alongside ours.
+
+---
+
+## Acknowledgments
+
+This project builds upon the excellent work of others in the open source community:
+
+- **[7-Zip](https://www.7-zip.org/)** - We use the 7z compression/decompression engine for extracting installation archives. 7-Zip is licensed under the GNU LGPL license. The 7z binary is bundled with the installer for seamless operation.
+
+- **[Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager)** - The macOS authorization and privileged disk access implementation is based on techniques from the Raspberry Pi Imager project. Their authopen integration patterns helped us provide secure, user-friendly SD card writing on macOS without requiring code signing.
+
+We're grateful to these projects for making robust, cross-platform disk imaging tools possible.
