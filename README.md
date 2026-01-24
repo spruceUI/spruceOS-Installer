@@ -1,5 +1,15 @@
 # SpruceOS Installer
 
+## To-Do
+
+- ~~Center info text below Install button~~ ✓ Done
+- ~~Refactor app.rs into modular structure~~ ✓ Done
+- Checkboxes for additional packages (themes, ports, games)
+- Backup and restore functionality
+- Scrape boxart for ROMs
+
+---
+
 ## Overview
 
 **SpruceOS Installer** is an all-in-one **downloader, extractor, formatter, and installer** for **SpruceOS** and other custom firmware projects.
@@ -172,7 +182,10 @@ Search for `Color32::from_rgb` in `ui.rs` to update these.
 
 #### 5. **Push to GitHub**
 
-GitHub Actions will automatically build Windows, Linux (x64 + ARM64), and macOS (ARM64 + x64) binaries. No local build required!
+GitHub Actions will automatically build binaries for all supported platforms:
+- **Windows:** x64
+- **Linux:** x64, ARM64, i686 (32-bit), ARMv7
+- **macOS:** Universal binary (Apple Silicon + Intel)
 
 ---
 
@@ -267,13 +280,3 @@ This project builds upon excellent open source work:
 
 - **[7-Zip](https://www.7-zip.org/)** - We bundle the 7z binary (LGPL) for seamless archive extraction
 - **[Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager)** - macOS `authopen` integration patterns
-
----
-
-## To-Do
-
-- ~~Center info text below Install button~~ ✓ Done
-- ~~Refactor app.rs into modular structure~~ ✓ Done
-- Checkboxes for additional packages (themes, ports, games)
-- Backup and restore functionality
-- Scrape boxart for ROMs
