@@ -676,40 +676,29 @@ async fn unmount_device_macos(device_path: &str) -> Result<(), String> {
     // Convert /dev/disk# to disk# for diskutil
     let disk_name = device_path.trim_start_matches("/dev/");
 
-    crate::debug::log(&format!("Running: diskutil unmountDisk force {}", disk_name));
+    crate::debug::log(&format!("Attempting: diskutil unmountDisk force {}", disk_name));
 
-    // Add timeout and force flag
+    // Try to unmount with a short timeout, but don't fail if it doesn't work
     let result = timeout(
-        Duration::from_secs(30),
+        Duration::from_secs(5),  // Shorter timeout - 5 seconds only
         Command::new("diskutil")
             .arg("unmountDisk")
-            .arg("force")  // Add force flag
+            .arg("force")
             .arg(disk_name)
             .output()
     ).await;
 
     match result {
-        Ok(Ok(output)) => {
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                crate::debug::log(&format!("diskutil warning: {}", stderr));
-                // Don't fail - proceed anyway as the disk might already be unmounted
-            } else {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                crate::debug::log(&format!("Disk unmounted: {}", stdout));
-            }
+        Ok(Ok(output)) if output.status.success() => {
+            crate::debug::log("Disk unmounted successfully");
         }
-        Ok(Err(e)) => {
-            crate::debug::log(&format!("diskutil command failed: {}", e));
-            // Don't fail - try to proceed anyway
-        }
-        Err(_) => {
-            crate::debug::log("diskutil command timed out after 30s - proceeding anyway");
-            // Don't fail - the disk might be in a weird state but we'll try to write anyway
+        _ => {
+            crate::debug::log("Unmount failed or timed out - proceeding with raw disk anyway");
+            crate::debug::log("Note: Writing to /dev/rdisk# often works even when disk is mounted");
         }
     }
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;  // Increased wait time
+    tokio::time::sleep(Duration::from_millis(500)).await;
     Ok(())
 }
 
