@@ -1060,10 +1060,39 @@ pub(super) async fn get_mount_path_after_format(drive: &DriveInfo, volume_label:
         }
     }
 
-    // Fallback: use raw mount if udisksctl fails (e.g., no udisks2 daemon)
-    crate::debug::log("udisksctl mount failed, falling back to raw mount...");
+    // Check stderr for errors
     let stderr = String::from_utf8_lossy(&output.stderr);
     crate::debug::log(&format!("udisksctl error: {}", stderr.trim()));
+
+    // Check if already mounted - extract existing mount path from error message
+    // Error format: "...AlreadyMounted: Device /dev/xxx is already mounted at `/path/to/mount'."
+    if stderr.contains("AlreadyMounted") {
+        if let Some(start) = stderr.find("already mounted at `") {
+            let after_prefix = &stderr[start + "already mounted at `".len()..];
+            if let Some(end) = after_prefix.find("'") {
+                let existing_mount = &after_prefix[..end];
+                crate::debug::log(&format!("Device already mounted, using existing mount point: {}", existing_mount));
+                return Ok(PathBuf::from(existing_mount));
+            }
+        }
+        // Also try alternate format without backticks
+        if let Some(start) = stderr.find("already mounted at ") {
+            let after_prefix = &stderr[start + "already mounted at ".len()..];
+            // Take until end of line or period
+            let mount_path: String = after_prefix
+                .chars()
+                .take_while(|&c| c != '.' && c != '\n' && c != '\'' && c != '`')
+                .collect();
+            let mount_path = mount_path.trim();
+            if !mount_path.is_empty() {
+                crate::debug::log(&format!("Device already mounted, using existing mount point: {}", mount_path));
+                return Ok(PathBuf::from(mount_path));
+            }
+        }
+    }
+
+    // Fallback: use raw mount if udisksctl fails (e.g., no udisks2 daemon)
+    crate::debug::log("udisksctl mount failed, falling back to raw mount...");
 
     let cache_dir = dirs::cache_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
     let mount_point = cache_dir.join(format!("{}_{}", TEMP_PREFIX, volume_label));
