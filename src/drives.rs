@@ -196,6 +196,8 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
 
 #[cfg(target_os = "linux")]
 pub fn get_removable_drives() -> Vec<DriveInfo> {
+    use std::collections::HashSet;
+
     crate::debug::log_section("Linux Drive Detection");
 
     let mut drives = Vec::new();
@@ -205,6 +207,33 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
         crate::debug::log("Failed to read /sys/block");
         return drives;
     };
+
+    // First pass: collect all device names to identify internal eMMC
+    // Internal eMMC has boot partitions (mmcblkNboot0, mmcblkNboot1)
+    let all_devices: Vec<String> = std::fs::read_dir("/sys/block")
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Find mmcblk devices that have boot partitions (these are internal eMMC)
+    let internal_emmc: HashSet<String> = all_devices
+        .iter()
+        .filter(|name| name.contains("boot"))
+        .filter_map(|name| {
+            // Extract base device: mmcblk1boot0 -> mmcblk1
+            if let Some(pos) = name.find("boot") {
+                Some(name[..pos].to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    crate::debug::log(&format!("Internal eMMC devices (have boot partitions): {:?}", internal_emmc));
 
     for entry in entries.flatten() {
         let name = entry.file_name().to_string_lossy().to_string();
@@ -218,7 +247,21 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
             continue;
         }
 
+        // Skip boot partitions
+        if name.contains("boot") {
+            continue;
+        }
+
         crate::debug::log(&format!("Checking device: {}", name));
+
+        // Check if it's an mmcblk device
+        let is_mmcblk = name.starts_with("mmcblk");
+
+        // Skip internal eMMC (mmcblk devices that have boot partitions)
+        if is_mmcblk && internal_emmc.contains(&name) {
+            crate::debug::log("  SKIPPED: internal eMMC (has boot partitions)");
+            continue;
+        }
 
         // Check if it's removable
         let removable_path = format!("/sys/block/{}/removable", name);
@@ -226,10 +269,14 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
             .map(|s| s.trim() == "1")
             .unwrap_or(false);
 
-        crate::debug::log(&format!("  is_removable: {}", is_removable));
+        // mmcblk devices without boot partitions are SD cards (even if removable=0)
+        let is_sd_card = is_mmcblk && !internal_emmc.contains(&name);
 
-        if !is_removable {
-            crate::debug::log("  SKIPPED: not removable");
+        crate::debug::log(&format!("  is_removable: {}", is_removable));
+        crate::debug::log(&format!("  is_sd_card: {}", is_sd_card));
+
+        if !is_removable && !is_sd_card {
+            crate::debug::log("  SKIPPED: not removable and not SD card");
             continue;
         }
 
@@ -245,7 +292,7 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
 
         // Skip if size is 0 (no media inserted)
         if size_bytes == 0 {
-            crate::debug::log("  SKIPPED: size is 0");
+            crate::debug::log("  SKIPPED: size is 0 (no media inserted)");
             continue;
         }
 
