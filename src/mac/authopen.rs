@@ -91,11 +91,12 @@ pub fn auth_open_device(device_path: &Path) -> AuthOpenResult {
     // Prepare authopen command
     // authopen -stdoutpipe -o <flags> <path>
     // -stdoutpipe: Write the file descriptor number to stdout
-    // -o: Open with flags (O_RDWR = 0x0002, O_SYNC = 0x0080, O_EXLOCK = 0x0020)
+    // -o: Open with flags
     let device_str = device_path.to_string_lossy();
 
-    // O_RDWR | O_SYNC = 0x0002 | 0x0080 = 0x0082
-    let flags = 0x0082;
+    // O_RDWR | O_SYNC | O_EXLOCK = 0x0002 | 0x0080 | 0x0020 = 0x00A2
+    // O_EXLOCK provides exclusive lock to prevent macOS from interfering
+    let flags = 0x00A2;
 
     let mut fds = [0; 2];
     let rc = unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_STREAM, 0, fds.as_mut_ptr()) };

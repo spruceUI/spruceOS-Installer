@@ -894,6 +894,8 @@ async fn burn_image_macos(
                     Box::new(file)
                 };
 
+                // Use block-aligned writes (4096 bytes is safe for all devices)
+                const BLOCK_SIZE: usize = 4096;
                 let mut buffer = vec![0u8; CHUNK_SIZE];
                 let mut total_written = 0u64;
 
@@ -903,21 +905,47 @@ async fn burn_image_macos(
                         return Err("Burn cancelled".to_string());
                     }
 
-                    let bytes_read = image_reader.read(&mut buffer)
-                        .map_err(|e| format!("Failed to read from image: {}", e))?;
+                    // Read to fill the buffer completely (for block-aligned writes)
+                    let mut bytes_in_buffer = 0;
+                    while bytes_in_buffer < buffer.len() {
+                        let bytes_read = image_reader.read(&mut buffer[bytes_in_buffer..])
+                            .map_err(|e| format!("Failed to read from image: {}", e))?;
 
-                    if bytes_read == 0 {
+                        if bytes_read == 0 {
+                            break; // EOF
+                        }
+                        bytes_in_buffer += bytes_read;
+                    }
+
+                    if bytes_in_buffer == 0 {
                         break; // EOF
                     }
 
-                    dev.write_all(&buffer[..bytes_read])
+                    // Round up to block boundary for the write
+                    let write_size = if bytes_in_buffer < buffer.len() {
+                        // Last chunk - round up to block boundary
+                        ((bytes_in_buffer + BLOCK_SIZE - 1) / BLOCK_SIZE) * BLOCK_SIZE
+                    } else {
+                        bytes_in_buffer
+                    };
+
+                    // Zero-fill the remainder if needed
+                    if write_size > bytes_in_buffer {
+                        buffer[bytes_in_buffer..write_size].fill(0);
+                    }
+
+                    dev.write_all(&buffer[..write_size])
                         .map_err(|e| format!("Failed to write to device at offset {}: {}", total_written, e))?;
 
-                    total_written += bytes_read as u64;
+                    total_written += bytes_in_buffer as u64; // Track actual image bytes
                     let _ = progress_tx.send(BurnProgress::Writing {
                         written: total_written,
                         total: image_size,
                     });
+
+                    if bytes_in_buffer < buffer.len() {
+                        break; // Was last chunk
+                    }
                 }
 
                 // Final sync - may fail on raw devices, which is OK with O_SYNC
