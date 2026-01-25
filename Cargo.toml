@@ -29,7 +29,6 @@ lazy_static = "1.4"
 libc = "0.2"
 sha2 = "0.10"
 flate2 = "1.0"
-arboard = "3.4"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
