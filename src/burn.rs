@@ -746,6 +746,30 @@ async fn burn_image_macos(
 
             crate::debug::log("Device opened successfully via authopen");
 
+            // CRITICAL: Wipe the partition table FIRST to prevent macOS auto-remount
+            // Similar to Windows implementation - this stops disk arbitration from
+            // detecting and mounting partitions as we write them
+            crate::debug::log("Wiping partition table to prevent auto-remount...");
+
+            const WIPE_SIZE: usize = 1 * 1024 * 1024; // 1 MB
+            let wipe_buffer = vec![0u8; WIPE_SIZE];
+
+            device.write_all(&wipe_buffer)
+                .map_err(|e| format!("Failed to wipe partition table: {}", e))?;
+
+            // Sync the wipe
+            device.sync_all()
+                .map_err(|e| format!("Failed to sync partition table wipe: {}", e))?;
+
+            crate::debug::log("Partition table wiped, seeking back to start...");
+
+            // Seek back to the beginning of the disk
+            use std::io::Seek;
+            device.seek(std::io::SeekFrom::Start(0))
+                .map_err(|e| format!("Failed to seek to start after wipe: {}", e))?;
+
+            crate::debug::log("Ready to write image");
+
             // Check if file is gzipped and create appropriate reader
             let is_gzipped = image_path.extension()
                 .and_then(|s| s.to_str())
