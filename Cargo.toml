@@ -3,7 +3,7 @@ name = "spruceos-installer"
 version = "1.0.0"
 edition = "2021"
 description = "SpruceOS SD Card Installer"
-authors = ["SpruceOS Team", "NextUI Team"]
+authors = ["SpruceOS Team", "NextUI Team", "Helaas (https://github.com/Helaas)"]
 license = "GPL-3.0-or-later"
 
 [features]
@@ -29,7 +29,6 @@ lazy_static = "1.4"
 libc = "0.2"
 sha2 = "0.10"
 flate2 = "1.0"
-arboard = "3.4"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [

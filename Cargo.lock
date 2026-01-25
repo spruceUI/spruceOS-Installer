@@ -3655,6 +3655,7 @@ dependencies = [
  "egui-thematic",
  "egui_extras",
  "embed-resource",
+ "flate2",
  "futures-util",
  "image",
  "lazy_static",
