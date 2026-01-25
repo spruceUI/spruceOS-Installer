@@ -142,6 +142,19 @@ pub fn auth_open_device(device_path: &Path) -> AuthOpenResult {
     let file = unsafe { File::from_raw_fd(dup_fd) };
 
     crate::debug::log("Device opened successfully via authopen");
+
+    // Set F_NOCACHE to bypass kernel buffer cache and write directly to hardware
+    // This prevents the "99% stall" issue where data sits in RAM cache waiting to flush
+    use std::os::unix::io::AsRawFd;
+    let fd = file.as_raw_fd();
+    unsafe {
+        if libc::fcntl(fd, libc::F_NOCACHE, 1) == -1 {
+            crate::debug::log("Warning: Failed to set F_NOCACHE, writes may be buffered (slower)");
+        } else {
+            crate::debug::log("F_NOCACHE enabled - writing directly to hardware");
+        }
+    }
+
     Ok(file)
 }
 

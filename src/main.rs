@@ -22,7 +22,7 @@ use eframe::egui;
 use std::sync::Arc;
 
 // Function to check and request privileges on non-Windows platforms
-#[cfg(not(windows))] 
+#[cfg(all(not(windows), not(target_os = "macos")))]
 fn check_and_request_privileges() {
     if unsafe { libc::geteuid() } != 0 {
         // We are not running as root. Attempt to relaunch with elevated privileges.
@@ -55,18 +55,12 @@ fn check_and_request_privileges() {
 
                 cmd.arg(current_exe);
                 cmd
-            } else if cfg!(target_os = "macos") {
-                let script = format!(
-                    "do shell script \"{}\" with administrator privileges",
-                    current_exe.to_string_lossy().replace('"', "\\\"") // Escape quotes
-                );
-                let mut cmd = std::process::Command::new("osascript");
-                cmd.arg("-e").arg(script);
-                cmd
             } else {
                 // Fallback for other non-Windows, non-Linux, non-macos platforms
                 eprintln!("Elevated privileges needed but not supported on this platform.");
                 std::process::exit(1);
+                #[allow(unreachable_code)]
+                std::process::Command::new("true")
             };
 
             let status = relaunch_command.status();
@@ -81,6 +75,14 @@ fn check_and_request_privileges() {
         // Exit the current unprivileged process.
         std::process::exit(0);
     }
+}
+
+// macOS doesn't need privilege elevation at app start
+// It uses authopen to request privileges per-operation
+#[cfg(target_os = "macos")]
+fn check_and_request_privileges() {
+    // No-op on macOS - authopen handles privilege elevation when needed
+    // The app should be launched from Terminal with Full Disk Access
 }
 
 fn main() -> eframe::Result<()> {
