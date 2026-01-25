@@ -724,45 +724,28 @@ async fn burn_image_macos(
         let cancel_token = cancel_token.clone();
 
         move || -> Result<u64, String> {
-            use std::os::unix::fs::OpenOptionsExt;
-            use std::os::unix::io::AsRawFd;
+            crate::debug::log("Opening device using authopen (will prompt for authorization)...");
 
-            crate::debug::log("Opening device directly (inheriting FDA from Terminal)...");
-
-            // Open device with O_RDWR | O_SYNC flags
-            // This works because the app inherits Full Disk Access from Terminal
-            let flags = libc::O_RDWR | libc::O_SYNC;
-
-            let mut device = std::fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .custom_flags(flags)
-                .open(&device_path)
-                .map_err(|e| {
+            // Use authopen to get privileged file descriptor with socketpair FD passing
+            // This will show a native macOS authorization dialog
+            let mut device = match crate::mac::authopen::auth_open_device(std::path::Path::new(&device_path)) {
+                Ok(file) => file,
+                Err(crate::mac::authopen::AuthOpenError::Cancelled) => {
+                    crate::debug::log("User cancelled authorization");
+                    return Err("Authorization cancelled by user".to_string());
+                },
+                Err(crate::mac::authopen::AuthOpenError::Failed(msg)) => {
+                    crate::debug::log(&format!("Authorization failed: {}", msg));
+                    return Err(msg); // msg already includes log path from authopen.rs
+                },
+                Err(crate::mac::authopen::AuthOpenError::SystemError(msg)) => {
+                    crate::debug::log(&format!("System error during authorization: {}", msg));
                     let log_path = crate::debug::get_log_path();
-                    format!(
-                        "Failed to open device {:?}: {}\n\n\
-                        Make sure:\n\
-                        1. Terminal has Full Disk Access (System Settings → Privacy & Security → Full Disk Access)\n\
-                        2. You quit and reopened Terminal after granting FDA\n\
-                        3. You launched the app FROM Terminal\n\n\
-                        Debug log: {:?}\n\
-                        Click 'Copy Log to Clipboard' to share this error.",
-                        device_path, e, log_path
-                    )
-                })?;
+                    return Err(format!("System error: {}\n\nDebug log: {:?}\nClick 'Copy Log to Clipboard' to share this error.", msg, log_path));
+                },
+            };
 
-            crate::debug::log("Device opened successfully");
-
-            // Set F_NOCACHE to bypass kernel buffer cache
-            let fd = device.as_raw_fd();
-            unsafe {
-                if libc::fcntl(fd, libc::F_NOCACHE, 1) == -1 {
-                    crate::debug::log("Warning: Failed to set F_NOCACHE, writes may be buffered (slower)");
-                } else {
-                    crate::debug::log("F_NOCACHE enabled - writing directly to hardware");
-                }
-            }
+            crate::debug::log("Device opened successfully via authopen");
 
             // CRITICAL: Wipe the partition table FIRST to prevent macOS auto-remount
             // Similar to Windows implementation - this stops disk arbitration from
