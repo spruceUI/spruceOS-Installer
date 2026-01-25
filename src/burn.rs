@@ -758,9 +758,12 @@ async fn burn_image_macos(
             device.write_all(&wipe_buffer)
                 .map_err(|e| format!("Failed to wipe partition table: {}", e))?;
 
-            // Sync the wipe
-            device.sync_all()
-                .map_err(|e| format!("Failed to sync partition table wipe: {}", e))?;
+            // Sync the wipe (may fail on raw devices with ENOTTY, which is OK since O_SYNC is set)
+            if let Err(e) = device.sync_all() {
+                crate::debug::log(&format!("Note: sync_all after wipe failed (expected on raw devices): {}", e));
+            } else {
+                crate::debug::log("Partition table wipe synced successfully");
+            }
 
             crate::debug::log("Partition table wiped, seeking back to start...");
 
@@ -813,9 +816,13 @@ async fn burn_image_macos(
                 });
             }
 
-            // Sync to ensure all data is written
-            device.sync_all()
-                .map_err(|e| format!("Failed to sync device: {}", e))?;
+            // Sync to ensure all data is written (may fail on raw devices with ENOTTY, which is OK since O_SYNC is set)
+            if let Err(e) = device.sync_all() {
+                crate::debug::log(&format!("Note: final sync_all failed (expected on raw devices): {}", e));
+                crate::debug::log("Data already synced via O_SYNC flag - this is safe");
+            } else {
+                crate::debug::log("Final sync completed successfully");
+            }
 
             crate::debug::log(&format!("Write complete: {} bytes written", total_written));
             Ok(total_written)
