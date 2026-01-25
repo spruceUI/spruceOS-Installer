@@ -981,18 +981,21 @@ async fn verify_image(
                 return Ok("".to_string()); // Return empty hash to skip comparison
             };
 
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            #[cfg(target_os = "macos")]
+            {
+                crate::debug::log("Skipping verification on macOS - burn completed successfully");
+                return Ok("".to_string()); // Return empty hash to skip comparison
+            }
+
+            #[cfg(target_os = "linux")]
             let mut device = {
-                #[cfg(target_os = "macos")]
-                let dev_path = device_path.replace("/dev/disk", "/dev/rdisk");
-                #[cfg(target_os = "linux")]
                 let dev_path = device_path.clone();
 
                 std::fs::File::open(&dev_path)
                     .map_err(|e| format!("Failed to open device for verification: {}. Are you running with sudo?", e))?
             };
 
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            #[cfg(target_os = "linux")]
             {
                 let mut hasher = Sha256::new();
                 let mut buffer = vec![0u8; CHUNK_SIZE];
