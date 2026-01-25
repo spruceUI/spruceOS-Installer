@@ -724,27 +724,8 @@ async fn burn_image_macos(
         let cancel_token = cancel_token.clone();
 
         move || -> Result<u64, String> {
-            crate::debug::log("Opening device using authopen (will prompt for authorization)...");
-
-            // Use authopen to get privileged file descriptor
-            // This will show a native macOS authorization dialog
-            let mut device = match crate::mac::authopen::auth_open_device(std::path::Path::new(&device_path)) {
-                Ok(file) => file,
-                Err(crate::mac::authopen::AuthOpenError::Cancelled) => {
-                    crate::debug::log("User cancelled authorization");
-                    return Err("Authorization cancelled by user".to_string());
-                },
-                Err(crate::mac::authopen::AuthOpenError::Failed(msg)) => {
-                    crate::debug::log(&format!("Authorization failed: {}", msg));
-                    return Err(format!("Failed to open device: {}", msg));
-                },
-                Err(crate::mac::authopen::AuthOpenError::SystemError(msg)) => {
-                    crate::debug::log(&format!("System error during authorization: {}", msg));
-                    return Err(format!("System error: {}", msg));
-                },
-            };
-
-            crate::debug::log("Device opened successfully via authopen");
+            // Open device directly (app is already running as root via osascript relaunch)
+            let mut device = crate::mac::direct_open::direct_open_device(std::path::Path::new(&device_path))?;
 
             // CRITICAL: Wipe the partition table FIRST to prevent macOS auto-remount
             // Similar to Windows implementation - this stops disk arbitration from
