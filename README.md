@@ -26,12 +26,6 @@ GitHub Actions automatically build releases per branch. If you'd like to use thi
 > **Please do not remove the Spruce or NextUI teams from the authors section.**
 > Instead, add your name alongside the existing credits.
 
-## Authors
-
-- SpruceOS Team
-- NextUI Team
-- [Helaas](https://github.com/Helaas)
-
 ---
 
 ## For End Users

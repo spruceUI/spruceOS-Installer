@@ -561,32 +561,18 @@ impl eframe::App for InstallerApp {
                             ui.horizontal(|ui| {
                                 if ui.button("📋 Copy to Clipboard").clicked() {
                                     let log_path = crate::debug::get_log_path();
-                                    crate::debug::log(&format!("Copy button clicked, log path: {:?}", log_path));
                                     match std::fs::read_to_string(&log_path) {
                                         Ok(contents) => {
-                                            crate::debug::log(&format!("Read {} bytes from log file", contents.len()));
-                                            #[cfg(target_os = "macos")]
-                                            {
-                                                match crate::mac::clipboard::copy_text(&contents) {
-                                                    Ok(()) => {
-                                                        self.log("Log copied to clipboard");
-                                                    }
-                                                    Err(e) => {
-                                                        crate::debug::log(&format!("All clipboard methods failed: {}", e));
-                                                        // Last resort: try egui clipboard
-                                                        ui.ctx().copy_text(contents);
-                                                        self.log("Log copied (fallback)");
-                                                    }
+                                            match arboard::Clipboard::new().and_then(|mut clipboard| clipboard.set_text(contents)) {
+                                                Ok(_) => {
+                                                    self.log("Log copied to clipboard");
+                                                },
+                                                Err(e) => {
+                                                    self.log(&format!("Failed to copy to clipboard: {}", e));
                                                 }
-                                            }
-                                            #[cfg(not(target_os = "macos"))]
-                                            {
-                                                ui.ctx().copy_text(contents);
-                                                self.log("Log copied to clipboard");
                                             }
                                         },
                                         Err(e) => {
-                                            crate::debug::log(&format!("Failed to read log file: {}", e));
                                             self.log(&format!("Failed to read log file: {}", e));
                                         }
                                     }

@@ -1,4 +1,4 @@
-use super::{InstallerApp, AppState, get_available_disk_space};
+use super::{InstallerApp, AppState, ProgressInfo, get_available_disk_space};
 use crate::config::{REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL};
 use crate::burn::{burn_image, BurnProgress};
 use crate::copy::{copy_directory_with_progress, CopyProgress};

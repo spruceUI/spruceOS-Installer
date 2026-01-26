@@ -79,10 +79,6 @@ pub async fn burn_image(
 
     let _ = progress_tx.send(BurnProgress::Started { total_bytes: image_size });
 
-    // On macOS, check for Full Disk Access before proceeding
-    #[cfg(target_os = "macos")]
-    check_macos_disk_access(device_path).await?;
-
     // Unmount the device first
     unmount_device(device_path).await?;
 
@@ -672,86 +668,10 @@ async fn burn_image_linux(
 // macOS Implementation
 // =============================================================================
 
-/// Check if we have Full Disk Access on macOS by attempting to read from the device
-#[cfg(target_os = "macos")]
-async fn check_macos_disk_access(device_path: &str) -> Result<(), String> {
-    use std::fs::File;
-    use std::io::Read;
-
-    crate::debug::log("Checking macOS Full Disk Access...");
-
-    // Try to open and read one byte from the device
-    let result = tokio::task::spawn_blocking({
-        let device_path = device_path.to_string();
-        move || -> Result<(), String> {
-            let mut file = match File::open(&device_path) {
-                Ok(f) => f,
-                Err(e) => {
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        return Err(format!(
-                            "Full Disk Access required.\n\n\
-                             macOS is blocking access to disk devices. To fix this:\n\n\
-                             1. Open System Settings (or System Preferences)\n\
-                             2. Go to Privacy & Security → Full Disk Access\n\
-                             3. Click the lock icon and enter your password\n\
-                             4. Click + and add Terminal.app\n\
-                             5. IMPORTANT: Quit and restart Terminal\n\
-                             6. Run the installer again\n\n\
-                             If running as an app, add the SpruceOS Installer app instead of Terminal."
-                        ));
-                    }
-                    return Err(format!("Cannot access device: {}", e));
-                }
-            };
-
-            // Try to read one byte
-            let mut buf = [0u8; 1];
-            match file.read(&mut buf) {
-                Ok(_) => Ok(()),
-                Err(e) => {
-                    if e.kind() == std::io::ErrorKind::PermissionDenied {
-                        Err(format!(
-                            "Full Disk Access required.\n\n\
-                             macOS is blocking access to disk devices. To fix this:\n\n\
-                             1. Open System Settings (or System Preferences)\n\
-                             2. Go to Privacy & Security → Full Disk Access\n\
-                             3. Click the lock icon and enter your password\n\
-                             4. Click + and add Terminal.app\n\
-                             5. IMPORTANT: Quit and restart Terminal\n\
-                             6. Run the installer again\n\n\
-                             If running as an app, add the SpruceOS Installer app instead of Terminal."
-                        ))
-                    } else {
-                        // Other errors might be OK (e.g., device not ready)
-                        Ok(())
-                    }
-                }
-            }
-        }
-    })
-    .await
-    .map_err(|e| format!("Disk access check failed: {}", e))?;
-
-    result?;
-    crate::debug::log("Full Disk Access check passed");
-    Ok(())
-}
-
 #[cfg(target_os = "macos")]
 async fn unmount_device_macos(device_path: &str) -> Result<(), String> {
     use tokio::process::Command;
     use tokio::time::{timeout, Duration};
-
-    crate::debug::log("Attempting DiskArbitration unmount...");
-    match crate::mac::diskarb::unmount_disk(device_path, Duration::from_secs(5)) {
-        Ok(()) => {
-            crate::debug::log("DiskArbitration unmount succeeded");
-            return Ok(());
-        }
-        Err(e) => {
-            crate::debug::log(&format!("DiskArbitration unmount failed: {}", e));
-        }
-    }
 
     // Convert /dev/disk# to disk# for diskutil
     let disk_name = device_path.trim_start_matches("/dev/");
@@ -795,12 +715,11 @@ async fn burn_image_macos(
 
     // Use rdisk for faster writes (raw disk)
     let raw_device_path = device_path.replace("/dev/disk", "/dev/rdisk");
-    crate::debug::log(&format!("Preferred raw device: {}", raw_device_path));
+    crate::debug::log(&format!("Using raw device: {}", raw_device_path));
 
     let bytes_written = tokio::task::spawn_blocking({
         let image_path = image_path.to_path_buf();
-        let raw_device_path = raw_device_path.clone();
-        let buffered_device_path = device_path.to_string();
+        let device_path = raw_device_path.clone();
         let progress_tx = progress_tx.clone();
         let cancel_token = cancel_token.clone();
 
@@ -809,182 +728,98 @@ async fn burn_image_macos(
 
             // Use authopen to get privileged file descriptor
             // This will show a native macOS authorization dialog
-            let mut device_path_to_open = raw_device_path.clone();
-
-            let device_result = crate::mac::authopen::auth_open_device(std::path::Path::new(&device_path_to_open));
-
-            // Check if authopen failed - if so, fall back to osascript+dd method
-            let device = match device_result {
-                Ok(file) => Some(file),
+            let mut device = match crate::mac::authopen::auth_open_device(std::path::Path::new(&device_path)) {
+                Ok(file) => file,
                 Err(crate::mac::authopen::AuthOpenError::Cancelled) => {
                     crate::debug::log("User cancelled authorization");
                     return Err("Authorization cancelled by user".to_string());
                 },
-                Err(crate::mac::authopen::AuthOpenError::Failed(ref msg)) => {
-                    let msg_lower = msg.to_lowercase();
-                    if msg_lower.contains("permission denied") || msg_lower.contains("operation not permitted") {
-                        crate::debug::log(&format!("Raw device open failed: {}", msg));
-                        crate::debug::log(&format!("Retrying with buffered device: {}", buffered_device_path));
-                        device_path_to_open = buffered_device_path.clone();
-                        match crate::mac::authopen::auth_open_device(std::path::Path::new(&device_path_to_open)) {
-                            Ok(file) => Some(file),
-                            Err(crate::mac::authopen::AuthOpenError::Cancelled) => {
-                                crate::debug::log("User cancelled authorization");
-                                return Err("Authorization cancelled by user".to_string());
-                            }
-                            Err(_) => {
-                                // authopen failed completely, will use fallback
-                                crate::debug::log("authopen failed, will use osascript+dd fallback");
-                                None
-                            }
-                        }
-                    } else {
-                        // authopen failed, will use fallback
-                        crate::debug::log(&format!("authopen failed: {}", msg));
-                        crate::debug::log("Will use osascript+dd fallback method");
-                        None
-                    }
+                Err(crate::mac::authopen::AuthOpenError::Failed(msg)) => {
+                    crate::debug::log(&format!("Authorization failed: {}", msg));
+                    return Err(format!("Failed to open device: {}", msg));
                 },
-                Err(crate::mac::authopen::AuthOpenError::SystemError(ref msg)) => {
+                Err(crate::mac::authopen::AuthOpenError::SystemError(msg)) => {
                     crate::debug::log(&format!("System error during authorization: {}", msg));
-                    crate::debug::log("Will use osascript+dd fallback method");
-                    None
+                    return Err(format!("System error: {}", msg));
                 },
             };
 
-            // If authopen worked, use the direct write method
-            if let Some(mut dev) = device {
-                crate::debug::log(&format!("Device opened successfully via authopen: {}", device_path_to_open));
+            crate::debug::log("Device opened successfully via authopen");
 
-                // CRITICAL: Wipe the partition table FIRST to prevent macOS auto-remount
-                crate::debug::log("Wiping partition table to prevent auto-remount...");
+            // CRITICAL: Wipe the partition table FIRST to prevent macOS auto-remount
+            // Similar to Windows implementation - this stops disk arbitration from
+            // detecting and mounting partitions as we write them
+            crate::debug::log("Wiping partition table to prevent auto-remount...");
 
-                const WIPE_SIZE: usize = 1 * 1024 * 1024; // 1 MB
-                let wipe_buffer = vec![0u8; WIPE_SIZE];
+            const WIPE_SIZE: usize = 1 * 1024 * 1024; // 1 MB
+            let wipe_buffer = vec![0u8; WIPE_SIZE];
 
-                dev.write_all(&wipe_buffer)
-                    .map_err(|e| format!("Failed to wipe partition table: {}", e))?;
+            device.write_all(&wipe_buffer)
+                .map_err(|e| format!("Failed to wipe partition table: {}", e))?;
 
-                // Sync the device - note: sync_all may fail on raw devices with ENOTTY,
-                // which is OK since we opened with O_SYNC flag
-                if let Err(e) = dev.sync_all() {
-                    crate::debug::log(&format!("Note: sync_all returned error (OK for raw devices): {}", e));
+            // Sync the wipe
+            device.sync_all()
+                .map_err(|e| format!("Failed to sync partition table wipe: {}", e))?;
+
+            crate::debug::log("Partition table wiped, seeking back to start...");
+
+            // Seek back to the beginning of the disk
+            use std::io::Seek;
+            device.seek(std::io::SeekFrom::Start(0))
+                .map_err(|e| format!("Failed to seek to start after wipe: {}", e))?;
+
+            crate::debug::log("Ready to write image");
+
+            // Check if file is gzipped and create appropriate reader
+            let is_gzipped = image_path.extension()
+                .and_then(|s| s.to_str())
+                .map(|s| s.eq_ignore_ascii_case("gz"))
+                .unwrap_or(false);
+
+            let file = std::fs::File::open(&image_path)
+                .map_err(|e| format!("Failed to open image file: {}", e))?;
+
+            let mut image_reader: Box<dyn Read> = if is_gzipped {
+                crate::debug::log("Detected .gz file, decompressing on-the-fly during burn");
+                Box::new(GzDecoder::new(file))
+            } else {
+                Box::new(file)
+            };
+
+            let mut buffer = vec![0u8; CHUNK_SIZE];
+            let mut total_written = 0u64;
+
+            loop {
+                if cancel_token.is_cancelled() {
+                    crate::debug::log("Burn cancelled by user");
+                    return Err("Burn cancelled".to_string());
                 }
 
-                crate::debug::log("Partition table wiped, seeking back to start...");
+                let bytes_read = image_reader.read(&mut buffer)
+                    .map_err(|e| format!("Failed to read from image: {}", e))?;
 
-                use std::io::Seek;
-                dev.seek(std::io::SeekFrom::Start(0))
-                    .map_err(|e| format!("Failed to seek to start after wipe: {}", e))?;
-
-                crate::debug::log("Ready to write image");
-
-                let is_gzipped = image_path.extension()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.eq_ignore_ascii_case("gz"))
-                    .unwrap_or(false);
-
-                let file = std::fs::File::open(&image_path)
-                    .map_err(|e| format!("Failed to open image file: {}", e))?;
-
-                let mut image_reader: Box<dyn Read> = if is_gzipped {
-                    crate::debug::log("Detected .gz file, decompressing on-the-fly during burn");
-                    Box::new(GzDecoder::new(file))
-                } else {
-                    Box::new(file)
-                };
-
-                // Use block-aligned writes (4096 bytes is safe for all devices)
-                const BLOCK_SIZE: usize = 4096;
-                let mut buffer = vec![0u8; CHUNK_SIZE];
-                let mut total_written = 0u64;
-
-                loop {
-                    if cancel_token.is_cancelled() {
-                        crate::debug::log("Burn cancelled by user");
-                        return Err("Burn cancelled".to_string());
-                    }
-
-                    // Read to fill the buffer completely (for block-aligned writes)
-                    let mut bytes_in_buffer = 0;
-                    while bytes_in_buffer < buffer.len() {
-                        let bytes_read = image_reader.read(&mut buffer[bytes_in_buffer..])
-                            .map_err(|e| format!("Failed to read from image: {}", e))?;
-
-                        if bytes_read == 0 {
-                            break; // EOF
-                        }
-                        bytes_in_buffer += bytes_read;
-                    }
-
-                    if bytes_in_buffer == 0 {
-                        break; // EOF
-                    }
-
-                    // Round up to block boundary for the write
-                    let write_size = if bytes_in_buffer < buffer.len() {
-                        // Last chunk - round up to block boundary
-                        ((bytes_in_buffer + BLOCK_SIZE - 1) / BLOCK_SIZE) * BLOCK_SIZE
-                    } else {
-                        bytes_in_buffer
-                    };
-
-                    // Zero-fill the remainder if needed
-                    if write_size > bytes_in_buffer {
-                        buffer[bytes_in_buffer..write_size].fill(0);
-                    }
-
-                    dev.write_all(&buffer[..write_size])
-                        .map_err(|e| format!("Failed to write to device at offset {}: {}", total_written, e))?;
-
-                    total_written += bytes_in_buffer as u64; // Track actual image bytes
-                    let _ = progress_tx.send(BurnProgress::Writing {
-                        written: total_written,
-                        total: image_size,
-                    });
-
-                    if bytes_in_buffer < buffer.len() {
-                        break; // Was last chunk
-                    }
+                if bytes_read == 0 {
+                    break; // EOF
                 }
 
-                // Final sync - may fail on raw devices, which is OK with O_SYNC
-                if let Err(e) = dev.sync_all() {
-                    crate::debug::log(&format!("Note: final sync_all returned error (OK for raw devices): {}", e));
-                }
+                device.write_all(&buffer[..bytes_read])
+                    .map_err(|e| format!("Failed to write to device at offset {}: {}", total_written, e))?;
 
-                crate::debug::log(&format!("Write complete: {} bytes written", total_written));
-                return Ok(total_written);
+                total_written += bytes_read as u64;
+                let _ = progress_tx.send(BurnProgress::Writing {
+                    written: total_written,
+                    total: image_size,
+                });
             }
 
-            // Fallback: Use osascript + dd for privileged write
-            // This is more reliable on modern macOS as it uses native authentication
-            crate::debug::log("Using osascript+dd fallback method for privileged disk write...");
+            // Sync to ensure all data is written
+            device.sync_all()
+                .map_err(|e| format!("Failed to sync device: {}", e))?;
 
-            let progress_tx_clone = progress_tx.clone();
-            let result = crate::mac::authopen::burn_with_privileges(
-                &image_path,
-                &raw_device_path,
-                move |written, total| {
-                    let _ = progress_tx_clone.send(BurnProgress::Writing { written, total });
-                },
-            );
-
-            match result {
-                Ok(bytes) => {
-                    crate::debug::log(&format!("Fallback write complete: {} bytes written", bytes));
-                    Ok(bytes)
-                }
-                Err(e) => {
-                    if e.contains("cancelled") || e.contains("canceled") {
-                        Err("Authorization cancelled by user".to_string())
-                    } else {
-                        Err(format!("Failed to write image: {}", e))
-                    }
-                }
-            }
-        }
-    })
+            crate::debug::log(&format!("Write complete: {} bytes written", total_written));
+            Ok(total_written)
+        } // <-- Close the closure
+    }) // <-- Close spawn_blocking
     .await
     .map_err(|e| format!("Write task failed: {}", e))??;
 
