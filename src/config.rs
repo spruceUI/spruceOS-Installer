@@ -129,55 +129,6 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         allowed_extensions: None,  // Show all assets
         asset_display_mappings: None,
     },
-    RepoOption {
-        name: "UnofficialOS",
-        url: "RetroGFX/UnofficialOS",
-        info: "UnofficialOS for various retro handheld devices.\nSelect your device from the list.\n\nSupported: RK3326, RK3566, RK3588, AMD64, S922X, and more.",
-        update_directories: &["System", "usr"],  // Example directories
-        allowed_extensions: Some(&[".img.gz"]),  // Only show full OS images, not .tar updates
-        asset_display_mappings: Some(&[
-            AssetDisplayMapping {
-                pattern: "AMD64",
-                display_name: "AMD64 / x86_64",
-                devices: "Anbernic Win600, AOKZOE A1 PRO, AYANEO 2/2S/AIR/PRO/PLUS, Atari VCS, Ayn Loki Zero/Max, GPD Win4/Max2",
-            },
-            AssetDisplayMapping {
-                pattern: "RK3326-CLONE",
-                display_name: "RK3326-CLONE",
-                devices: "BattleXP G350, GameConsole R33S/R35S/R36S, MagicX XU Mini M, Kinhank K36, Clones",
-            },
-            AssetDisplayMapping {
-                pattern: "RK3326",
-                display_name: "RK3326",
-                devices: "Anbernic RG351P/V/M, Odroid Go Advance/Super, Powkiddy RGB10/RGB20S/V10, MagicX XU10",
-            },
-            AssetDisplayMapping {
-                pattern: "RK3566-BSP-X55",
-                display_name: "RK3566-BSP-X55",
-                devices: "Powkiddy X55",
-            },
-            AssetDisplayMapping {
-                pattern: "RK3566-BSP",
-                display_name: "RK3566-BSP",
-                devices: "Anbernic RG353P/PS/V/VS/M/RG503, Powkiddy RGB10 Max 3/RGB20 Pro/RGB30/RK2023",
-            },
-            AssetDisplayMapping {
-                pattern: "RK3399",
-                display_name: "RK3399",
-                devices: "Anbernic RG552",
-            },
-            AssetDisplayMapping {
-                pattern: "RK3588",
-                display_name: "RK3588",
-                devices: "Gameforce Ace, Orange Pi 5, Radxa Rock 5b, Indiedroid Nova",
-            },
-            AssetDisplayMapping {
-                pattern: "S922X",
-                display_name: "S922X",
-                devices: "Odroid Go Ultra, Odroid N2, Odroid N2L, Powkiddy RGB10 Max 3 Pro",
-            },
-        ]),
-    },
 ];
 
 /// Index of the default repository selection (0 = first option)
