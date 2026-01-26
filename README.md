@@ -44,6 +44,10 @@ The installer is distributed as a `.zip` containing a self-contained `.app` bund
 
 **IMPORTANT:** macOS requires Terminal to have "Full Disk Access" to write to SD cards. Follow these steps:
 
+![Mac Full Disc Access](https://github.com/user-attachments/assets/a54aff52-cbad-40ca-a4ec-d826cbc40ede)
+
+**NOT ALL MAC ARE THE SAME, VARIOUS VERSIONS ETC MAY MAKE THE BELOW INSTRUCTIONS DIFFERENT FOR YOU!**
+
 1. **Grant Terminal Full Disk Access:**
    - Open **System Settings** (or **System Preferences** on older macOS)
    - Go to **Privacy & Security** → **Full Disk Access**
@@ -661,8 +665,8 @@ src/
 
 ## Acknowledgments
 
-- **SpruceOS Team** - Core development
-- **NextUI Team** - Design and GUI enhancements
+- **[SpruceOS Team](https://github.com/spruceUI)** - Core development
+- **[NextUI Team](https://github.com/LoveRetro)** - Design and GUI enhancements
 - **[Helaas](https://github.com/Helaas)** - macOS testing, debugging, and research
 - **[7-Zip](https://www.7-zip.org/)** - We bundle the 7z binary (LGPL) for seamless archive extraction
 - **[Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager)** - macOS authopen implementation patterns
