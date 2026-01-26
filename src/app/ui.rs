@@ -1,5 +1,5 @@
 // ============================================================================
-// HIDE UPDATE MODE: UI references to update_mode
+// UPDATE MODE: UI references to update_mode
 // ============================================================================
 // This file contains UI logic that references update_mode:
 // - Asset selection: Show preview modal if update_mode is enabled
@@ -8,10 +8,12 @@
 // - Confirmation text: Different messages for update vs fresh install
 // - THE CHECKBOX: Allows users to toggle update mode (search for "Update existing installation")
 //
-// TO HIDE UPDATE MODE:
-//   1. Search for "Update existing installation (skip format)"
-//   2. Comment out the entire if !show_progress block containing that checkbox
-//   3. All other update_mode references will remain but never activate (always false)
+// CONTROLLING UPDATE MODE:
+//   1. Per-repository: Set supports_update_mode field in config.rs REPO_OPTIONS
+//      - true for archives (.7z, .zip) that support updates
+//      - false for raw images (.img.gz) that always do full burns
+//   2. Hide completely: Search for "Update existing installation (skip format)"
+//      and comment out the entire checkbox block
 // ============================================================================
 
 use super::{InstallerApp, AppState};
@@ -780,11 +782,14 @@ impl eframe::App for InstallerApp {
                 // HIDE UPDATE MODE: Comment out this entire block to disable the feature
                 // ========================================================================
                 // This checkbox allows users to enable update mode (preserve ROMs/saves).
-                // To hide this feature from users, comment out this entire if statement
+                // The checkbox only appears when the selected repository supports update mode
+                // (configured via the supports_update_mode field in REPO_OPTIONS).
+                // To completely hide this feature, comment out this entire if statement
                 // block through the matching closing brace below.
                 // ========================================================================
-                // Update mode checkbox (only show when not in progress)
-                if !show_progress {
+                // Update mode checkbox (only show when not in progress AND repo supports it)
+                let current_repo_supports_update = REPO_OPTIONS[self.selected_repo_idx].supports_update_mode;
+                if !show_progress && current_repo_supports_update {
                     ui.horizontal(|ui| {
                         ui.vertical_centered(|ui| {
                             if ui.checkbox(&mut self.update_mode, "Update existing installation (skip format)").changed() {
@@ -797,6 +802,12 @@ impl eframe::App for InstallerApp {
                             }
                         });
                     });
+                } else if !current_repo_supports_update && self.update_mode {
+                    // If we switch to a repo that doesn't support update mode, disable it
+                    self.update_mode = false;
+                    self.fetched_release = None;
+                    self.available_assets.clear();
+                    self.selected_asset_idx = None;
                 }
                 // ========================================================================
                 // END HIDE UPDATE MODE - Comment through here to disable the checkbox

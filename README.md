@@ -152,6 +152,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "Stable",                              // ← Button label in UI
         url: "spruceUI/spruceOS",                   // ← YOUR GitHub repo (owner/repo format)
         info: "Stable releases of SpruceOS.\nSupported devices: Miyoo A30",  // ← Info text (use \n for line breaks)
+        supports_update_mode: true,                  // ← Show update mode checkbox (true for archives, false for raw images)
         update_directories: &["Retroarch", "spruce"],  // ← Folders deleted during updates
         allowed_extensions: Some(&[".7z"]),          // ← File types to show (None = all)
         asset_display_mappings: None,                // ← User-friendly names (see advanced below)
@@ -168,6 +169,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "Stable",
         url: "yourorg/yourrepo",  // ← Your GitHub username/repo
         info: "Official stable builds.\nSupported: Device X, Y, Z",
+        supports_update_mode: true,  // Archives support updates
         update_directories: &["System", "Apps"],  // What gets replaced during updates
         allowed_extensions: None,  // Show all file types
         asset_display_mappings: None,
@@ -176,8 +178,18 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "Beta",
         url: "yourorg/yourrepo-beta",
         info: "Beta builds - may be unstable!\nTesting new features.",
+        supports_update_mode: true,  // Archives support updates
         update_directories: &["System"],
         allowed_extensions: Some(&[".7z", ".zip"]),  // Only show archives
+        asset_display_mappings: None,
+    },
+    RepoOption {
+        name: "Raw Images",
+        url: "yourorg/yourrepo-images",
+        info: "Full disk images for fresh installs only.",
+        supports_update_mode: false,  // Raw images (.img.gz) don't support updates
+        update_directories: &[],  // Not used for raw images
+        allowed_extensions: Some(&[".img.gz", ".img"]),  // Only raw images
         asset_display_mappings: None,
     },
 ];
@@ -236,9 +248,26 @@ allowed_extensions: None,                     // Show everything
 
 ---
 
-##### **F. Advanced: Update Mode**
+##### **F. Advanced: Update Mode Control**
 
-Update mode preserves user files (saves, ROMs, themes) while replacing system files:
+The `supports_update_mode` field controls whether the "Update Mode" checkbox appears for a repository:
+
+```rust
+supports_update_mode: true,   // Show checkbox - for archive-based installs (.7z, .zip)
+supports_update_mode: false,  // Hide checkbox - for raw disk images (.img.gz, .img)
+```
+
+**When to use each:**
+- **`true`**: Archive files (.7z, .zip) that can be extracted over existing files
+- **`false`**: Raw disk images (.img.gz, .img) that always do full disk burns
+
+**⚠️ Important:** Raw disk images ALWAYS wipe the entire drive, so update mode doesn't apply.
+
+---
+
+##### **G. Advanced: Update Mode Directories**
+
+When update mode is enabled (archives only), these directories get deleted before extraction:
 
 ```rust
 update_directories: &["Retroarch", "spruce", "System"],  // These get deleted
@@ -246,7 +275,7 @@ update_directories: &["Retroarch", "spruce", "System"],  // These get deleted
 ```
 
 **How it works:**
-1. User checks "Update Mode" in UI
+1. User checks "Update Mode" checkbox (only visible when `supports_update_mode: true`)
 2. Installer mounts existing SD card (no format!)
 3. Only deletes the specified directories
 4. Extracts new files
@@ -486,25 +515,45 @@ Update artifact names for consistency (search for the old names and replace):
 
 ---
 
-#### **STEP 10: Disabling Update Mode** (Optional)
+#### **STEP 10: Controlling Update Mode** (Optional)
 
-**For projects that don't need or want update functionality**
+Update mode allows users to preserve ROMs/saves while updating system files. You have several options for controlling this feature:
 
-Update mode allows users to preserve ROMs/saves while updating system files. If your project doesn't support this workflow (e.g., always requires fresh installs), you can hide the feature.
+##### **Option 1: Per-Repository Control (Recommended)**
 
-##### **Option 1: Simple - Hide the UI Checkbox**
+The `supports_update_mode` field in each `RepoOption` controls whether the update mode checkbox appears:
 
-The easiest approach is to hide the checkbox from users while keeping all the code intact:
+```rust
+RepoOption {
+    name: "Stable",
+    supports_update_mode: true,   // Show checkbox for archives
+    // ...
+},
+RepoOption {
+    name: "Raw Images",
+    supports_update_mode: false,  // Hide checkbox for disk images
+    // ...
+},
+```
+
+**When to use:**
+- Set `true` for archive-based repositories (.7z, .zip) that support updates
+- Set `false` for raw disk images (.img.gz) that always do full burns
+- This is automatically configured correctly in the default SpruceOS repos
+
+##### **Option 2: Completely Hide the UI Checkbox**
+
+To disable update mode for ALL repositories, hide the checkbox from users:
 
 1. Open `src/app/ui.rs`
 2. Search for `"Update existing installation (skip format)"`
-3. Comment out the entire `if !show_progress { ... }` block containing the checkbox
-   - Look for the comment `// Update mode checkbox (only show when not in progress)`
-   - Comment from that line through the closing brace of the outer `if` statement
+3. Comment out the entire block containing the checkbox
+   - Look for the comment `// Update mode checkbox (only show when not in progress AND repo supports it)`
+   - Comment from that line through the matching `// END HIDE UPDATE MODE` comment
 
-**Result:** Users won't see the update mode option. All backend code remains but is never activated.
+**Result:** Users won't see the update mode option on any repository.
 
-##### **Option 2: Remove Completely**
+##### **Option 3: Complete Removal**
 
 For a thorough removal, delete update mode code from these files (search for `update_mode` in each):
 

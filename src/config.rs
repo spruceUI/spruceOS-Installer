@@ -15,25 +15,29 @@
 //   - .github/workflows/*.yml: Artifact names (optional, cosmetic only)
 //
 // ============================================================================
-// DISABLING UPDATE MODE FUNCTIONALITY (Optional)
+// CONTROLLING UPDATE MODE FUNCTIONALITY
 // ============================================================================
 // Update mode allows users to preserve ROMs/saves while updating system files.
-// If your project doesn't need this, you can hide it from users.
+// You can control this feature on a per-repository basis or globally.
 //
-// EASY METHOD - Hide the checkbox:
+// PER-REPOSITORY CONTROL (Recommended):
+//   Set the supports_update_mode field in each RepoOption below:
+//   - true: Show update mode checkbox (for archives: .7z, .zip)
+//   - false: Hide update mode checkbox (for raw images: .img.gz)
+//
+// GLOBAL DISABLE - Hide checkbox for all repositories:
 //   1. Open src/app/ui.rs
 //   2. Search for "Update existing installation (skip format)"
-//   3. Comment out the entire if !show_progress block containing the checkbox
-//   4. Done! Users can't access update mode (code remains but is unused)
+//   3. Comment out the entire checkbox block
 //
-// COMPLETE REMOVAL - Delete update mode code:
+// COMPLETE REMOVAL - Delete all update mode code:
 //   Search for "update_mode" in these files and remove related code:
 //   - src/app/state.rs: Field declaration and initialization
 //   - src/app/ui.rs: Checkbox UI, window titles, button text
 //   - src/app/logic.rs: Installation logic that checks update_mode
-//   - src/config.rs: update_directories field in RepoOption struct
+//   - src/config.rs: supports_update_mode and update_directories fields
 //
-// See README.md "STEP 10: Disabling Update Mode" for detailed instructions.
+// See README.md "STEP 10: Controlling Update Mode" for detailed instructions.
 // ============================================================================
 
 use eframe::egui;
@@ -88,23 +92,40 @@ pub struct AssetDisplayMapping {
 /// - `url`: GitHub repository in "owner/repo" format (e.g., "spruceUI/spruceOS")
 /// - `info`: Description text shown below the Install button when this repo is selected
 ///           Use \n for line breaks in longer informative messages
+/// - `supports_update_mode`: Whether to show the update mode checkbox for this repo
+///                           Set to true for archive-based installs (.7z, .zip)
+///                           Set to false for raw disk images (.img.gz) that always do full burns
 /// - `update_directories`: Directories to delete when updating (e.g., &["Retroarch", "spruce"])
 ///                         Paths are relative to SD card root
-///                         NOTE: Only used when update mode is enabled (can ignore if hiding update mode)
+///                         NOTE: Only used when update mode is enabled
 /// - `allowed_extensions`: Optional filter to only show assets with these extensions
 ///                         Use this to filter out update packages or show only specific formats
 ///                         Set to None to show all assets
 /// - `asset_display_mappings`: Optional mappings to show user-friendly device names
 ///                             instead of technical filenames in the selection UI
 ///
-/// Example:
+/// Example (archive-based repository):
+/// ```
+/// RepoOption {
+///     name: "Stable",
+///     url: "spruceUI/spruceOS",
+///     info: "Stable releases with update support.\nSupported devices: Device X, Y, Z",
+///     supports_update_mode: true,  // Archives can be updated
+///     update_directories: &["Retroarch", "spruce"],
+///     allowed_extensions: Some(&[".7z", ".zip"]),  // Only show archives
+///     asset_display_mappings: None,
+/// }
+/// ```
+///
+/// Example (raw disk image repository):
 /// ```
 /// RepoOption {
 ///     name: "TwigUI",
 ///     url: "spruceUI/twigUI",
-///     info: "This is spruceOS for the GKD Pixel 2.\nOptimized for Pixel 2 hardware.",
-///     update_directories: &["Retroarch", "spruce"],
-///     allowed_extensions: Some(&[".7z", ".zip"]),  // Only show archives
+///     info: "Raw disk images for GKD Pixel 2.\nFresh install only - wipes all data.",
+///     supports_update_mode: false,  // Raw images always do full burns
+///     update_directories: &[],  // Not used for raw images
+///     allowed_extensions: Some(&[".img.gz", ".img"]),  // Only raw images
 ///     asset_display_mappings: None,
 /// }
 /// ```
@@ -112,6 +133,7 @@ pub struct RepoOption {
     pub name: &'static str,
     pub url: &'static str,
     pub info: &'static str,
+    pub supports_update_mode: bool,
     pub update_directories: &'static [&'static str],
     pub allowed_extensions: Option<&'static [&'static str]>,
     pub asset_display_mappings: Option<&'static [AssetDisplayMapping]>,
@@ -122,6 +144,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "Stable",
         url: "spruceUI/spruceOS",
         info: "Stable releases of spruceOS.\nSupported devices: Miyoo A30",
+        supports_update_mode: true,  // Archive-based (.7z)
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
         asset_display_mappings: None,
@@ -130,6 +153,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "Nightlies",
         url: "spruceUI/spruceOSNightlies",
         info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick",
+        supports_update_mode: true,  // Supports archives
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: None,  // Show all assets
         asset_display_mappings: None,
@@ -138,6 +162,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "SprigUI",
         url: "spruceUI/sprigUI",
         info: "SpruceOS for the Miyoo Mini Flip.",
+        supports_update_mode: true,  // Archive-based (.7z)
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
         asset_display_mappings: None,
@@ -146,6 +171,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "TwigUI",
         url: "spruceUI/twigUI",
         info: "SpruceOS for the GKD Pixel 2.",
+        supports_update_mode: false,  // Raw disk images only (.img.gz)
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: None,  // Show all assets
         asset_display_mappings: None,
