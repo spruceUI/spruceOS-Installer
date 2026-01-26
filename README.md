@@ -763,6 +763,7 @@ src/
 
 - **[SpruceOS Team](https://github.com/spruceUI)** - Core development
 - **[NextUI Team](https://github.com/LoveRetro)** - Design and GUI enhancements
+- **[Tag](https://github.com/CMTag)** - Mac app bundles and so much more!
 - **[Helaas](https://github.com/Helaas)** - macOS testing, debugging, and research
 - **[7-Zip](https://www.7-zip.org/)** - We bundle the 7z binary (LGPL) for seamless archive extraction
 - **[Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager)** - macOS authopen implementation patterns
