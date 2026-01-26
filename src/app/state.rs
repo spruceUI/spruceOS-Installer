@@ -43,6 +43,8 @@ pub struct InstallerApp {
     pub(super) drives: Vec<DriveInfo>,
     pub(super) selected_drive_idx: Option<usize>,
     pub(super) selected_repo_idx: usize,
+    // HIDE UPDATE MODE: To completely remove, delete this field and all references
+    // (Easier approach: just hide the checkbox in ui.rs - this field stays but is unused)
     pub(super) update_mode: bool,
 
     // Progress tracking
@@ -175,6 +177,7 @@ impl InstallerApp {
             drives: Vec::new(),
             selected_drive_idx: None,
             selected_repo_idx: DEFAULT_REPO_INDEX,
+            // HIDE UPDATE MODE: Remove this if you delete the update_mode field above
             update_mode: false,
             state: AppState::Idle,
             progress: Arc::new(Mutex::new(ProgressInfo {

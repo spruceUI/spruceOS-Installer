@@ -478,6 +478,48 @@ Update artifact names for consistency:
 
 ---
 
+#### **STEP 10: Disabling Update Mode** (Optional)
+
+**For projects that don't need or want update functionality**
+
+Update mode allows users to preserve ROMs/saves while updating system files. If your project doesn't support this workflow (e.g., always requires fresh installs), you can hide the feature.
+
+##### **Option 1: Simple - Hide the UI Checkbox**
+
+The easiest approach is to hide the checkbox from users while keeping all the code intact:
+
+1. Open `src/app/ui.rs`
+2. Search for `"Update existing installation (skip format)"`
+3. Comment out the entire `if !show_progress { ... }` block containing the checkbox
+   - Look for the comment `// Update mode checkbox (only show when not in progress)`
+   - Comment from that line through the closing brace of the outer `if` statement
+
+**Result:** Users won't see the update mode option. All backend code remains but is never activated.
+
+##### **Option 2: Remove Completely**
+
+For a thorough removal, delete update mode code from these files (search for `update_mode` in each):
+
+**Files to modify:**
+- `src/app/state.rs` - Remove the `update_mode: bool` field
+- `src/app/ui.rs` - Remove checkbox UI and conditional display logic
+- `src/app/logic.rs` - Remove update mode conditional checks
+- `src/config.rs` - Optionally remove `update_directories` field from `RepoOption`
+
+**⚠️ Warning:** Option 2 requires more testing. Option 1 is safer and easier to reverse.
+
+##### **Finding Update Mode Code**
+
+All update mode code can be found by searching for:
+- `update_mode` (the boolean flag)
+- `update_directories` (in config.rs)
+- `"Update existing installation"` (the UI text)
+- `PreviewingUpdate` (the preview modal state)
+
+Files are marked with `// OPTION 3 - HIDE UPDATE MODE` comments for easy identification.
+
+---
+
 ### 🧪 Testing Your Rebrand
 
 #### **Local Build Test:**
@@ -502,7 +544,7 @@ cargo build --release --features icon
 - [ ] Icons display correctly (taskbar, window)
 - [ ] Repository dropdown shows your repos
 - [ ] Colors match your brand
-- [ ] "Update Mode" checkbox lists correct directories
+- [ ] Update Mode: If enabled, checkbox lists correct directories; if disabled, checkbox is hidden
 - [ ] Download works from your GitHub repo
 - [ ] SD card gets labeled with your `VOLUME_LABEL`
 - [ ] macOS: Terminal has Full Disk Access granted (if testing on macOS)

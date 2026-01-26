@@ -1,3 +1,19 @@
+// ============================================================================
+// HIDE UPDATE MODE: UI references to update_mode
+// ============================================================================
+// This file contains UI logic that references update_mode:
+// - Asset selection: Show preview modal if update_mode is enabled
+// - State resets: Reset update_mode flag on completion/cancel/error
+// - Window titles: "Confirm Update" vs "Confirm Installation"
+// - Confirmation text: Different messages for update vs fresh install
+// - THE CHECKBOX: Allows users to toggle update mode (search for "Update existing installation")
+//
+// TO HIDE UPDATE MODE:
+//   1. Search for "Update existing installation (skip format)"
+//   2. Comment out the entire if !show_progress block containing that checkbox
+//   3. All other update_mode references will remain but never activate (always false)
+// ============================================================================
+
 use super::{InstallerApp, AppState};
 use crate::config::REPO_OPTIONS;
 use crate::eject::eject_drive;
@@ -760,6 +776,13 @@ impl eframe::App for InstallerApp {
 
                 ui.add_space(8.0);
 
+                // ========================================================================
+                // HIDE UPDATE MODE: Comment out this entire block to disable the feature
+                // ========================================================================
+                // This checkbox allows users to enable update mode (preserve ROMs/saves).
+                // To hide this feature from users, comment out this entire if statement
+                // block through the matching closing brace below.
+                // ========================================================================
                 // Update mode checkbox (only show when not in progress)
                 if !show_progress {
                     ui.horizontal(|ui| {
@@ -775,6 +798,9 @@ impl eframe::App for InstallerApp {
                         });
                     });
                 }
+                // ========================================================================
+                // END HIDE UPDATE MODE - Comment through here to disable the checkbox
+                // ========================================================================
 
                 ui.add_space(12.0);
 

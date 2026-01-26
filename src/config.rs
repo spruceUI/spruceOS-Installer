@@ -15,6 +15,26 @@
 //   - .github/workflows/*.yml: Artifact names (optional, cosmetic only)
 //
 // ============================================================================
+// DISABLING UPDATE MODE FUNCTIONALITY (Optional)
+// ============================================================================
+// Update mode allows users to preserve ROMs/saves while updating system files.
+// If your project doesn't need this, you can hide it from users.
+//
+// EASY METHOD - Hide the checkbox:
+//   1. Open src/app/ui.rs
+//   2. Search for "Update existing installation (skip format)"
+//   3. Comment out the entire if !show_progress block containing the checkbox
+//   4. Done! Users can't access update mode (code remains but is unused)
+//
+// COMPLETE REMOVAL - Delete update mode code:
+//   Search for "update_mode" in these files and remove related code:
+//   - src/app/state.rs: Field declaration and initialization
+//   - src/app/ui.rs: Checkbox UI, window titles, button text
+//   - src/app/logic.rs: Installation logic that checks update_mode
+//   - src/config.rs: update_directories field in RepoOption struct
+//
+// See README.md "STEP 10: Disabling Update Mode" for detailed instructions.
+// ============================================================================
 
 use eframe::egui;
 use std::sync::Arc;
@@ -70,6 +90,7 @@ pub struct AssetDisplayMapping {
 ///           Use \n for line breaks in longer informative messages
 /// - `update_directories`: Directories to delete when updating (e.g., &["Retroarch", "spruce"])
 ///                         Paths are relative to SD card root
+///                         NOTE: Only used when update mode is enabled (can ignore if hiding update mode)
 /// - `allowed_extensions`: Optional filter to only show assets with these extensions
 ///                         Use this to filter out update packages or show only specific formats
 ///                         Set to None to show all assets

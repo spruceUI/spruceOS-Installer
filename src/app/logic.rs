@@ -1,3 +1,17 @@
+// ============================================================================
+// HIDE UPDATE MODE: Installation logic references
+// ============================================================================
+// This file contains the core installation logic that checks update_mode:
+// - start_installation(): Captures update_mode value for async task
+// - Archive mode: Skips formatting if update_mode is true
+// - Update mode: Deletes specific directories instead of formatting
+//
+// If you hide the UI checkbox (see ui.rs), users won't be able to enable
+// update mode, so this logic will never execute. Code remains but is unused.
+//
+// Search for "update_mode" in this file to find all references.
+// ============================================================================
+
 use super::{InstallerApp, AppState, ProgressInfo, get_available_disk_space};
 use crate::config::{REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL};
 use crate::burn::{burn_image, BurnProgress};
