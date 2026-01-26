@@ -121,29 +121,27 @@ jobs:
 
             **Warning:** This is a pre-release build and may contain bugs.
 
-            ## Downloads
-            - **macOS (Universal - Apple Silicon & Intel):** `SpruceOS-Installer-macOS-Universal.zip`
-
             ## macOS Setup Instructions
 
-            ### ⚠️ IMPORTANT - First Time Setup:
+            ### First Time Setup:
 
-            **Grant Terminal Full Disk Access** (required to write to SD cards):
+            **Grant Terminal Full Disk Access:**
             1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
-            2. Click the **lock icon** (bottom left) and enter your password
+            2. Click the **lock icon** and enter your password
             3. Click **+** and add **Applications/Utilities/Terminal.app**
-            4. **Quit and reopen Terminal** (changes don't apply to running sessions!)
+            4. Check the box next to Terminal
+            5. **Quit and reopen Terminal**
 
             ### Running the Installer:
-            1. Download and extract the zip file
-            2. **Easy Method:** Double-click `launch-installer.command` to automatically remove quarantine and launch
-            3. **Alternative:** Right-click "SpruceOSInstaller.app" → select "Open" → click "Open" in dialog
+            1. Extract the zip file
+            2. Double-click `launch-installer.command`
+
+            **Alternative:** Right-click "SpruceOSInstaller.app" → "Open" → "Open"
 
             **Troubleshooting:** If the installer can't access your SD card, verify Terminal has Full Disk Access and restart Terminal.
 
-            This is a Universal binary that works on both Apple Silicon (M1/M2/M3/M4) and Intel Macs.
-
-            **Note:** This app is not code-signed.
+            ---
+            Universal binary for Apple Silicon (M1/M2/M3/M4) and Intel Macs. Not code-signed.
           prerelease: true
           files: artifacts/**/*
         env:
