@@ -304,7 +304,7 @@ authors = ["SpruceOS Team", "NextUI Team", "Your Name <you@example.com>"]
 #### **STEP 4: `assets/Mac/Info.plist` - macOS Bundle Config**
 
 **Location:** `assets/Mac/Info.plist`
-**Lines:** 6, 8, 10, 18
+**Lines:** 6, 8, 10, 18, 30, 32
 
 ```xml
 <!-- Line 6 - Bundle name (no spaces) -->
@@ -322,6 +322,14 @@ authors = ["SpruceOS Team", "NextUI Team", "Your Name <you@example.com>"]
 <!-- Line 18 - Executable name (MUST match binary from Cargo.toml!) -->
 <key>CFBundleExecutable</key>
 <string>spruceos-installer</string>  ← Change to match Cargo.toml name
+
+<!-- Line 30 - Permission description shown to users -->
+<key>NSSystemAdministrationUsageDescription</key>
+<string>This app needs administrator privileges to write firmware images to SD cards.</string>  ← Update to reference your firmware
+
+<!-- Line 32 - Removable volumes permission description -->
+<key>NSRemovableVolumesUsageDescription</key>
+<string>This app needs access to removable drives to install firmware.</string>  ← Update as needed
 ```
 
 **⚠️ Critical:** The `CFBundleExecutable` MUST exactly match the `name` field in `Cargo.toml` or macOS won't launch the app!
@@ -605,7 +613,7 @@ src/
 ├── drives.rs            - Cross-platform drive detection
 ├── format.rs            - FAT32 formatting (>32GB support on Windows)
 ├── extract.rs           - 7z extraction with embedded binaries
-├── burn.rs              - Raw image burning with SHA256 verification
+├── burn.rs              - Raw image burning (.img/.gz) with sector alignment
 ├── copy.rs              - File copying with progress tracking
 ├── delete.rs            - Selective directory deletion (update mode)
 ├── eject.rs             - Safe drive ejection
@@ -631,8 +639,9 @@ src/
 **Raw image burning:**
 - On-the-fly `.gz` decompression
 - Pre-scans to determine decompressed size
-- SHA256 verification (Linux/macOS; Windows incomplete)
-- Sector-aligned writes on Windows
+- SHA256 verification (Linux only; disabled on Windows/macOS for reliability)
+- Sector-aligned writes (Windows: 512-byte, macOS: 512-byte with F_NOCACHE)
+- Direct hardware I/O on macOS (F_NOCACHE + O_SYNC flags prevent buffer cache stalls)
 
 **GitHub integration:**
 - Fetches latest releases via GitHub API
@@ -642,14 +651,19 @@ src/
 
 **macOS privileged access:**
 - Uses native `authopen` utility (no code signing required!)
+- Unix domain socketpair for file descriptor passing (based on Raspberry Pi Imager)
+- F_NOCACHE flag bypasses kernel buffer cache for direct hardware writes (prevents 99% freeze)
+- O_SYNC flag ensures synchronous writes (data written before returning)
+- 512-byte sector-aligned buffering for .gz decompression compatibility
 - Proper error differentiation (cancelled, denied, system error)
-- File descriptor duplication for safe ownership transfer
 
 ---
 
 ## Acknowledgments
 
-This project builds upon excellent open source work:
-
+- **SpruceOS Team** - Core development
+- **NextUI Team** - Design and GUI enhancements
+- **[Helaas](https://github.com/Helaas)** - macOS testing, debugging, and research
 - **[7-Zip](https://www.7-zip.org/)** - We bundle the 7z binary (LGPL) for seamless archive extraction
-- **[Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager)** - macOS `authopen` integration patterns
+- **[Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager)** - macOS authopen implementation patterns
+- **[balenaEtcher](https://github.com/balena-io/etcher)** - Inspiration and methodology
