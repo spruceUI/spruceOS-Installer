@@ -122,18 +122,19 @@ This is the **most important file** - it controls all branding and functionality
 <summary><strong>Click to expand detailed instructions</strong></summary>
 
 **Location:** `src/config.rs`
-**Lines to change:** 28, 32, 40, 99-181, 184
 
-##### **A. App Branding (Lines 28-40)**
+##### **A. App Branding**
+
+Search for these constants in the "BRANDING" section:
 
 ```rust
-// Line 28 - Your OS name (shown throughout the UI)
+// Your OS name (shown throughout the UI)
 pub const APP_NAME: &str = "SpruceOS";  // ← Change to "YourOS"
 
-// Line 32 - SD card volume label (MAX 11 CHARS, UPPERCASE)
+// SD card volume label (MAX 11 CHARS, UPPERCASE)
 pub const VOLUME_LABEL: &str = "SPRUCEOS";  // ← Change to "YOUROS" (11 char max!)
 
-// Line 40 - Window title bar text
+// Window title bar text
 pub const WINDOW_TITLE: &str = "SpruceOS Installer";  // ← Change to "YourOS Installer"
 ```
 
@@ -141,9 +142,9 @@ pub const WINDOW_TITLE: &str = "SpruceOS Installer";  // ← Change to "YourOS I
 
 ---
 
-##### **B. GitHub Repositories (Lines 99-181)** ⚠️ CRITICAL
+##### **B. GitHub Repositories** ⚠️ CRITICAL
 
-This is where you define which GitHub repos to download from:
+Search for `pub const REPO_OPTIONS` - this is where you define which GitHub repos to download from:
 
 ```rust
 pub const REPO_OPTIONS: &[RepoOption] = &[
@@ -184,10 +185,12 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
 
 ---
 
-##### **C. Default Selection (Line 184)**
+##### **C. Default Selection**
+
+Search for `DEFAULT_REPO_INDEX` - which repo button is selected by default:
 
 ```rust
-// Line 184 - Which repo button is selected by default (0 = first, 1 = second, etc.)
+// Which repo button is selected by default (0 = first, 1 = second, etc.)
 pub const DEFAULT_REPO_INDEX: usize = 0;  // ← Change if needed
 ```
 
@@ -256,7 +259,8 @@ update_directories: &["Retroarch", "spruce", "System"],  // These get deleted
 #### **STEP 2: `Cargo.toml` - Project Metadata**
 
 **Location:** `Cargo.toml`
-**Lines:** 2, 5, 6
+
+Find the `[package]` section and update these fields:
 
 ```toml
 [package]
@@ -305,30 +309,31 @@ authors = ["SpruceOS Team", "NextUI Team", "Your Name <you@example.com>"]
 #### **STEP 4: `assets/Mac/Info.plist` - macOS Bundle Config**
 
 **Location:** `assets/Mac/Info.plist`
-**Lines:** 6, 8, 10, 18, 30, 32
+
+Search for each key and update its corresponding string value:
 
 ```xml
-<!-- Line 6 - Bundle name (no spaces) -->
+<!-- Bundle name (no spaces) -->
 <key>CFBundleName</key>
 <string>SpruceOSInstaller</string>  ← Change to YourOSInstaller
 
-<!-- Line 8 - Display name (shown in Finder) -->
+<!-- Display name (shown in Finder) -->
 <key>CFBundleDisplayName</key>
 <string>SpruceOS Installer</string>  ← Change to "YourOS Installer"
 
-<!-- Line 10 - Bundle identifier (reverse DNS, must be unique) -->
+<!-- Bundle identifier (reverse DNS, must be unique) -->
 <key>CFBundleIdentifier</key>
 <string>com.spruceos.installer</string>  ← Change to com.yourcompany.installer
 
-<!-- Line 18 - Executable name (MUST match binary from Cargo.toml!) -->
+<!-- Executable name (MUST match binary from Cargo.toml!) -->
 <key>CFBundleExecutable</key>
 <string>spruceos-installer</string>  ← Change to match Cargo.toml name
 
-<!-- Line 30 - Permission description shown to users -->
+<!-- Permission description shown to users -->
 <key>NSSystemAdministrationUsageDescription</key>
 <string>This app needs administrator privileges to write firmware images to SD cards.</string>  ← Update to reference your firmware
 
-<!-- Line 32 - Removable volumes permission description -->
+<!-- Removable volumes permission description -->
 <key>NSRemovableVolumesUsageDescription</key>
 <string>This app needs access to removable drives to install firmware.</string>  ← Update as needed
 ```
@@ -342,14 +347,15 @@ authors = ["SpruceOS Team", "NextUI Team", "Your Name <you@example.com>"]
 #### **STEP 5: `app.manifest` - Windows UAC Config**
 
 **Location:** `app.manifest` (root directory)
-**Lines:** 6, 9
+
+Update these fields:
 
 ```xml
-<!-- Line 6 - Application identifier -->
+<!-- Application identifier -->
 <assemblyIdentity name="SpruceOS.Installer" ... />
                         ↑ Change to "YourOS.Installer"
 
-<!-- Line 9 - Description (shown in UAC prompt) -->
+<!-- Description (shown in UAC prompt) -->
 <description>SpruceOS SD Card Installer</description>
              ↑ Change to your description
 ```
@@ -379,25 +385,27 @@ This controls how Windows displays your app in:
 
 ##### **Manual Method: Edit Colors Directly**
 
+Find the `get_theme_config()` method and update the `ThemeConfig` fields:
+
 **Most important colors to change:**
 
 ```rust
-// Line 7 - Theme name (cosmetic)
+// Theme name (cosmetic)
 name: "SpruceOS".to_string(),  // ← Change to your project name
 
-// Line 9 - Primary text color
+// Primary text color
 override_text_color: Some([251, 241, 199, 255]),  // Cream - change to your brand
 
-// Line 13 - Window background
+// Window background
 override_extreme_bg_color: Some([29, 32, 33, 255]),  // Dark gray
 
-// Line 24 - Accent/highlight color (selections, checkboxes)
+// Accent/highlight color (selections, checkboxes)
 override_selection_bg: Some([215, 180, 95, 255]),  // Gold - your brand color!
 
-// Line 15 - Warning messages
+// Warning messages
 override_warn_fg_color: Some([214, 93, 14, 255]),  // Orange
 
-// Line 16 - Error messages
+// Error messages
 override_error_fg_color: Some([204, 36, 29, 255]),  // Red
 ```
 
@@ -415,10 +423,10 @@ override_error_fg_color: Some([204, 36, 29, 255]),  // Red
 | `override_selection_bg` | [215, 180, 95, 255] | Highlight/accent |
 
 **Button/widget colors:**
-- `override_widget_inactive_fg_stroke_color` - Checkbox/button borders (line 40)
-- `override_widget_active_bg_fill` - Checked checkbox background (line 51)
-- `override_widget_active_fg_stroke_color` - Checkmark color (line 56)
-- `override_widget_hovered_bg_stroke_color` - Hover border (line 45)
+- `override_widget_inactive_fg_stroke_color` - Checkbox/button borders
+- `override_widget_active_bg_fill` - Checked checkbox background
+- `override_widget_active_fg_stroke_color` - Checkmark color
+- `override_widget_hovered_bg_stroke_color` - Hover border
 
 </details>
 
@@ -454,27 +462,27 @@ Color32::from_rgb(104, 157, 106)  // Green
 
 To use a custom font:
 1. Replace `assets/Fonts/nunwen.ttf` with your TTF/OTF file
-2. If renaming the file, update `src/config.rs` line 247:
+2. If renaming the file, search for `CUSTOM_FONT_NAME` in `src/config.rs` and update it:
    ```rust
-   pub const CUSTOM_FONT_NAME: &str = "YourFont";  // Line 247
+   pub const CUSTOM_FONT_NAME: &str = "YourFont";  // ← Change to match your font file
    ```
 
 ---
 
 #### **STEP 9: GitHub Actions Workflows** (Optional - Cosmetic)
 
-Update artifact names for consistency:
+Update artifact names for consistency (search for the old names and replace):
 
 **`.github/workflows/build-windows.yml`:**
-- Line 27: Change `spruceos-installer-windows.exe` to `yourname-installer-windows.exe`
-- Line 32: Update artifact name
+- Search for `spruceos-installer-windows.exe` → Change to `yourname-installer-windows.exe`
+- Update the corresponding artifact name
 
 **`.github/workflows/build-macos.yml`:**
-- Lines 53, 75, 94: Change `SpruceOSInstaller.app` to `YourOSInstaller.app`
-- Line 100: Update artifact name
+- Search for `SpruceOSInstaller.app` → Change to `YourOSInstaller.app`
+- Update the corresponding artifact name
 
 **`.github/workflows/build-linux.yml`:**
-- Lines 18, 23, 28, 33: Update artifact names for all 4 architectures
+- Search for `spruceos-installer` → Update artifact names for all 4 architectures
 
 ---
 
@@ -516,7 +524,7 @@ All update mode code can be found by searching for:
 - `"Update existing installation"` (the UI text)
 - `PreviewingUpdate` (the preview modal state)
 
-Files are marked with `// OPTION 3 - HIDE UPDATE MODE` comments for easy identification.
+Files are marked with `// HIDE UPDATE MODE` comments for easy identification.
 
 ---
 
