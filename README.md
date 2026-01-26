@@ -706,10 +706,10 @@ src/
 ├── config.rs            - ⚠️ BRANDING: App name, repos, constants
 ├── app/                 - Main application (modular)
 │   ├── mod.rs           - Module coordinator
-│   ├── state.rs         - AppState enum, InstallerApp struct (~224 lines)
-│   ├── theme.rs         - ⚠️ COLORS: Theme configuration (~77 lines)
-│   ├── logic.rs         - Installation orchestration (~1,500 lines)
-│   └── ui.rs            - ⚠️ COLORS: UI rendering (~900 lines)
+│   ├── state.rs         - AppState enum, InstallerApp struct
+│   ├── theme.rs         - ⚠️ COLORS: Theme configuration
+│   ├── logic.rs         - Installation orchestration
+│   └── ui.rs            - ⚠️ COLORS: UI rendering
 ├── drives.rs            - Cross-platform drive detection
 ├── format.rs            - FAT32 formatting (>32GB support on Windows)
 ├── extract.rs           - 7z extraction with embedded binaries
