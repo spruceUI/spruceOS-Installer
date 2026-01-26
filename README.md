@@ -1,9 +1,6 @@
 # SpruceOS Installer
 
 ## To-Do
-
-- Vertically center info text below Install button
-- ~~Refactor app.rs into modular structure~~ ✓ Done
 - Checkboxes for additional packages (themes, ports, games)
 - Backup and restore functionality
 - Scrape boxart for ROMs
