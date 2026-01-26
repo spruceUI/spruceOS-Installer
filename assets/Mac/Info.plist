@@ -26,5 +26,9 @@
     <true/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
+    <key>NSSystemAdministrationUsageDescription</key>
+    <string>This app needs administrator privileges to write firmware images to SD cards.</string>
+    <key>NSRemovableVolumesUsageDescription</key>
+    <string>This app needs access to removable drives to install firmware.</string>
 </dict>
 </plist>
