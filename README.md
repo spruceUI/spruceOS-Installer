@@ -706,10 +706,10 @@ src/
 ├── config.rs            - ⚠️ BRANDING: App name, repos, constants
 ├── app/                 - Main application (modular)
 │   ├── mod.rs           - Module coordinator
-│   ├── state.rs         - AppState enum, InstallerApp struct (~224 lines)
-│   ├── theme.rs         - ⚠️ COLORS: Theme configuration (~77 lines)
-│   ├── logic.rs         - Installation orchestration (~1,500 lines)
-│   └── ui.rs            - ⚠️ COLORS: UI rendering (~900 lines)
+│   ├── state.rs         - AppState enum, InstallerApp struct
+│   ├── theme.rs         - ⚠️ COLORS: Theme configuration
+│   ├── logic.rs         - Installation orchestration
+│   └── ui.rs            - ⚠️ COLORS: UI rendering
 ├── drives.rs            - Cross-platform drive detection
 ├── format.rs            - FAT32 formatting (>32GB support on Windows)
 ├── extract.rs           - 7z extraction with embedded binaries
@@ -763,6 +763,7 @@ src/
 
 - **[SpruceOS Team](https://github.com/spruceUI)** - Core development
 - **[NextUI Team](https://github.com/LoveRetro)** - Design and GUI enhancements
+- **[Tag](https://github.com/CMTag)** - Mac app bundles and so much more!
 - **[Helaas](https://github.com/Helaas)** - macOS testing, debugging, and research
 - **[7-Zip](https://www.7-zip.org/)** - We bundle the 7z binary (LGPL) for seamless archive extraction
 - **[Raspberry Pi Imager](https://github.com/raspberrypi/rpi-imager)** - macOS authopen implementation patterns
