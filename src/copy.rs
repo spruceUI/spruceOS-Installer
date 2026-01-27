@@ -1,3 +1,6 @@
+// Copyright (C) 2026 SpruceOS Team
+// Licensed under GPL-3.0-or-later
+
 use std::path::{Path, PathBuf};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;

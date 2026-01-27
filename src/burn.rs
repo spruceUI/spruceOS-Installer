@@ -1,3 +1,6 @@
+// Copyright (C) 2026 SpruceOS Team
+// Licensed under GPL-3.0-or-later
+
 use sha2::{Sha256, Digest};
 use std::path::Path;
 use tokio::sync::mpsc::UnboundedSender;

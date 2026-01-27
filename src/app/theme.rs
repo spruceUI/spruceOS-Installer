@@ -1,3 +1,6 @@
+// Copyright (C) 2026 SpruceOS Team
+// Licensed under GPL-3.0-or-later
+
 use super::InstallerApp;
 use egui_thematic::ThemeConfig;
 

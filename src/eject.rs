@@ -1,3 +1,6 @@
+// Copyright (C) 2026 SpruceOS Team
+// Licensed under GPL-3.0-or-later
+
 use crate::drives::DriveInfo;
 
 /// Safely eject a drive

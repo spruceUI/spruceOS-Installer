@@ -1,3 +1,6 @@
+// Copyright (C) 2026 SpruceOS Team
+// Licensed under GPL-3.0-or-later
+
 use crate::config::{setup_theme, DEFAULT_REPO_INDEX};
 use crate::drives::{get_removable_drives, DriveInfo};
 use crate::github::{Release, Asset};

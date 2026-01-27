@@ -1,3 +1,6 @@
+// Copyright (C) 2026 SpruceOS Team
+// Licensed under GPL-3.0-or-later
+
 use crate::config::USER_AGENT;
 use futures_util::StreamExt;
 use serde::Deserialize;

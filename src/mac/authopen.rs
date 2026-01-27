@@ -1,3 +1,6 @@
+// Copyright (C) 2026 SpruceOS Team
+// Licensed under GPL-3.0-or-later
+
 /// macOS-specific authorization and file opening using authopen
 /// Based on Raspberry Pi Imager's implementation with socketpair FD passing
 use std::fs::File;

@@ -1,3 +1,6 @@
+// Copyright (C) 2026 SpruceOS Team
+// Licensed under GPL-3.0-or-later
+
 // Module structure for the installer application
 // This breaks down the large app.rs file into focused modules:
 //
