@@ -671,32 +671,12 @@ No local build environment needed - just push to GitHub!
 
 ---
 
-## Building Locally (Optional)
-
-### Prerequisites
-- Rust (via [rustup.rs](https://rustup.rs/))
-- Platform-specific dependencies:
-  - **Windows:** MSVC build tools
-  - **Linux:** Standard build tools
-  - **macOS:** Xcode Command Line Tools
-
-### Build Commands
-
-```bash
-# Debug build (fast compilation)
-cargo build
-
-# Release build (optimized)
-cargo build --release --features icon
-
-# Run directly (debug mode)
-cargo run
-```
-
-**Tips:**
-- Press **Ctrl+T** while running to open the theme editor
-- Debug builds are in `target/debug/`
-- Release builds are in `target/release/`
+**🎨 Developer Note: Theme Editor & Releases**
+- Run `cargo run` locally to test changes - Press **Ctrl+T** to open the live theme editor
+- Use GitHub Actions to build releases:
+  - **"Build All Platforms"** - Creates beta builds for testing (all platforms)
+  - **"Release Latest"** - Creates production "latest" release (hides theme button, keeps Ctrl+T)
+- No local cross-platform build setup needed - GitHub Actions handles everything!
 
 ---
 
