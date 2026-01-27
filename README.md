@@ -25,13 +25,21 @@ GitHub Actions automatically build releases per branch. If you'd like to use thi
 
 ## Authors
 
-- SpruceOS Team
-- NextUI Team
+
+- [SpruceOS Team](https://github.com/spruceUI)
+- [NextUI Team](https://github.com/LoveRetro)
+- [Tag](https://github.com/CMTag)
 - [Helaas](https://github.com/Helaas)
 
 ---
 
 ## For End Users
+
+### Windows/Linux Users
+
+- Download the installer for your platform
+
+- On Linux you will need to mark the app as executable. When launched the app will automatically request privileges via `pkexec` if needed
 
 ### macOS Users
 
@@ -44,6 +52,10 @@ The installer is distributed as a `.zip` containing a self-contained `.app` bund
 ![Mac Full Disc Access](https://github.com/user-attachments/assets/a54aff52-cbad-40ca-a4ec-d826cbc40ede)
 
 **NOT ALL MAC ARE THE SAME, VARIOUS VERSIONS ETC MAY MAKE THE BELOW INSTRUCTIONS DIFFERENT FOR YOU!**
+
+https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac
+
+https://ordonez.tv/2024/11/04/how-to-run-unsigned-apps-in-macos-15-1/
 
 1. **Grant Terminal Full Disk Access:**
    - Open **System Settings** (or **System Preferences** on older macOS)
@@ -77,12 +89,6 @@ The installer is distributed as a `.zip` containing a self-contained `.app` bund
   ```
 
 **Note:** This app is not code-signed.
-
-### Windows/Linux Users
-
-1. Download the installer for your platform
-2. Run the executable
-3. On Linux, the app will automatically request privileges via `pkexec` if needed
 
 ---
 
