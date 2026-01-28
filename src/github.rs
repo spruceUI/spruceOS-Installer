@@ -2,6 +2,7 @@
 // Licensed under GPL-3.0-or-later
 
 use crate::config::USER_AGENT;
+use crate::manifest::Manifest;
 use futures_util::StreamExt;
 use serde::Deserialize;
 use std::path::Path;
@@ -23,6 +24,13 @@ pub struct Asset {
     pub name: String,
     pub size: u64,
     pub browser_download_url: String,
+
+    // Optional fields populated from manifest.json (not present in GitHub API responses)
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub display_name: Option<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub devices: Option<String>,
 }
 
 #[derive(Debug)]
@@ -73,6 +81,64 @@ pub async fn get_latest_release(repo_url: &str) -> Result<Release, String> {
         .json::<Release>()
         .await
         .map_err(|e| format!("Failed to parse release data: {}. The release format may be invalid.", e))
+}
+
+/// Check if a release contains a manifest.json file and fetch it
+/// Returns Some(Manifest) if found and successfully parsed, None otherwise
+pub async fn get_manifest_from_release(release: &Release) -> Option<Manifest> {
+    // Look for manifest.json in the release assets
+    let manifest_asset = release.assets.iter()
+        .find(|asset| asset.name.eq_ignore_ascii_case("manifest.json"))?;
+
+    crate::debug::log("Found manifest.json in release, fetching...");
+    crate::debug::log(&format!("Manifest URL: {}", manifest_asset.browser_download_url));
+
+    // Fetch the manifest file
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .ok()?;
+
+    let response = client
+        .get(&manifest_asset.browser_download_url)
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await
+        .ok()?;
+
+    if !response.status().is_success() {
+        crate::debug::log(&format!("Failed to fetch manifest: HTTP {}", response.status()));
+        return None;
+    }
+
+    // Parse the JSON
+    let manifest_text = response.text().await.ok()?;
+    crate::debug::log(&format!("Manifest content length: {} bytes", manifest_text.len()));
+
+    match serde_json::from_str::<Manifest>(&manifest_text) {
+        Ok(manifest) => {
+            crate::debug::log(&format!("Manifest parsed successfully: {} assets found", manifest.assets.len()));
+            Some(manifest)
+        }
+        Err(e) => {
+            crate::debug::log(&format!("Failed to parse manifest JSON: {}", e));
+            None
+        }
+    }
+}
+
+/// Convert a ManifestAsset to an Asset structure
+/// This allows manifest-based assets to work with the existing installation pipeline
+impl From<crate::manifest::ManifestAsset> for Asset {
+    fn from(manifest_asset: crate::manifest::ManifestAsset) -> Self {
+        Asset {
+            name: manifest_asset.name,
+            size: manifest_asset.size,
+            browser_download_url: manifest_asset.url,
+            display_name: manifest_asset.display_name,
+            devices: manifest_asset.devices,
+        }
+    }
 }
 
 pub async fn download_asset(

@@ -72,6 +72,10 @@ pub struct InstallerApp {
     pub(super) selected_asset_idx: Option<usize>,
     pub(super) release_rx: Option<mpsc::UnboundedReceiver<Result<Release, String>>>,
 
+    // Manifest support for external asset hosting
+    pub(super) manifest_rx: Option<mpsc::UnboundedReceiver<Option<crate::manifest::Manifest>>>,
+    pub(super) pending_release: Option<(Release, Option<&'static [&'static str]>)>,
+
     // Theme editor
     pub(super) theme_state: ThemeEditorState,
     pub(super) show_theme_editor: bool,
@@ -198,6 +202,8 @@ impl InstallerApp {
             available_assets: Vec::new(),
             selected_asset_idx: None,
             release_rx: None,
+            manifest_rx: None,
+            pending_release: None,
             theme_state: ThemeEditorState::default(),
             show_theme_editor: false,
             show_log: false,

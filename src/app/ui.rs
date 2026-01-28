@@ -24,6 +24,7 @@ use crate::config::REPO_OPTIONS;
 use crate::eject::eject_drive;
 use eframe::egui;
 use egui_thematic::render_theme_panel;
+use tokio::sync::mpsc;
 
 impl eframe::App for InstallerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -71,65 +72,110 @@ impl eframe::App for InstallerApp {
                         let repo_option = &REPO_OPTIONS[self.selected_repo_idx];
                         let allowed_extensions = repo_option.allowed_extensions;
 
-                        // Filter assets
-                        let mut assets = Self::filter_assets(release.assets.clone(), allowed_extensions);
+                        // Check for manifest.json in release
+                        let ctx_clone = ctx.clone();
+                        let release_clone = release.clone();
+                        let log_messages = self.log_messages.clone();
 
-                        if assets.is_empty() {
-                            let msg = if allowed_extensions.is_some() {
-                                "No compatible files found matching the allowed extensions for this repository"
-                            } else {
-                                "No compatible files found in release"
-                            };
-                            self.log(msg);
-                            self.state = AppState::Error;
-                            self.release_rx = None;
-                        } else {
-                            // Sort assets alphabetically
-                            assets.sort_by(|a, b| a.name.cmp(&b.name));
+                        // Spawn async task to check for manifest
+                        let (manifest_tx, mut manifest_rx) = mpsc::unbounded_channel();
+                        self.runtime.spawn(async move {
+                            let manifest_result = crate::github::get_manifest_from_release(&release_clone).await;
+                            let _ = manifest_tx.send(manifest_result);
+                            ctx_clone.request_repaint();
+                        });
 
-                            // Check if we should auto-select
-                            let (should_auto, auto_idx) = Self::should_auto_select(&assets);
-
-                            self.fetched_release = Some(release);
-                            self.available_assets = assets;
-
-                            if should_auto {
-                                // Auto-select and proceed
-                                self.selected_asset_idx = auto_idx;
-                                if let Some(idx) = auto_idx {
-                                    self.log(&format!("Auto-selected: {}", self.available_assets[idx].name));
-                                }
-
-                                // Check if selected asset is a raw image
-                                let is_raw_image = if let Some(idx) = auto_idx {
-                                    let asset_name = &self.available_assets[idx].name;
-                                    asset_name.ends_with(".img.gz") ||
-                                    asset_name.ends_with(".img.xz") ||
-                                    asset_name.ends_with(".img")
-                                } else {
-                                    false
-                                };
-
-                                // If update mode and NOT a raw image, show preview modal; otherwise go to confirmation
-                                if self.update_mode && !is_raw_image {
-                                    self.state = AppState::PreviewingUpdate;
-                                } else {
-                                    // Skip preview for image mode (update mode doesn't apply to raw images)
-                                    self.state = AppState::AwaitingConfirmation;
-                                }
-                            } else {
-                                // Show asset selection UI
-                                self.selected_asset_idx = Some(0); // Pre-select first item
-                                self.state = AppState::SelectingAsset;
-                            }
-
-                            self.release_rx = None;
-                        }
+                        // Store the release and set up for manifest check
+                        self.manifest_rx = Some(manifest_rx);
+                        self.pending_release = Some((release, allowed_extensions));
+                        self.state = AppState::FetchingAssets; // Keep in fetching state
+                        self.release_rx = None;
                     }
                     Err(e) => {
                         self.log(&format!("Error fetching release: {}", e));
                         self.state = AppState::Error;
                         self.release_rx = None;
+                    }
+                }
+                ctx.request_repaint();
+            }
+        }
+
+        // Check for manifest fetch results
+        if let Some(rx) = &mut self.manifest_rx {
+            if let Ok(manifest_opt) = rx.try_recv() {
+                // Get the pending release
+                if let Some((release, allowed_extensions)) = self.pending_release.take() {
+                    // Determine which assets to use
+                    let mut assets = if let Some(manifest) = manifest_opt {
+                        self.log("Using external assets from manifest.json");
+                        crate::debug::log("Converting manifest assets to Asset structs");
+
+                        // Convert manifest assets to Asset structs
+                        let manifest_assets: Vec<crate::github::Asset> = manifest.assets
+                            .into_iter()
+                            .map(|ma| ma.into())
+                            .collect();
+
+                        // Still apply extension filtering to manifest assets
+                        Self::filter_assets(manifest_assets, allowed_extensions)
+                    } else {
+                        // No manifest found, use GitHub assets
+                        crate::debug::log("No manifest found, using GitHub release assets");
+                        Self::filter_assets(release.assets.clone(), allowed_extensions)
+                    };
+
+                    // Continue with existing asset processing logic
+                    if assets.is_empty() {
+                        let msg = if allowed_extensions.is_some() {
+                            "No compatible files found matching the allowed extensions for this repository"
+                        } else {
+                            "No compatible files found in release"
+                        };
+                        self.log(msg);
+                        self.state = AppState::Error;
+                        self.manifest_rx = None;
+                    } else {
+                        // Sort assets alphabetically
+                        assets.sort_by(|a, b| a.name.cmp(&b.name));
+
+                        // Check if we should auto-select
+                        let (should_auto, auto_idx) = Self::should_auto_select(&assets);
+
+                        self.fetched_release = Some(release);
+                        self.available_assets = assets;
+
+                        if should_auto {
+                            // Auto-select and proceed
+                            self.selected_asset_idx = auto_idx;
+                            if let Some(idx) = auto_idx {
+                                self.log(&format!("Auto-selected: {}", self.available_assets[idx].name));
+                            }
+
+                            // Check if selected asset is a raw image
+                            let is_raw_image = if let Some(idx) = auto_idx {
+                                let asset_name = &self.available_assets[idx].name;
+                                asset_name.ends_with(".img.gz") ||
+                                asset_name.ends_with(".img.xz") ||
+                                asset_name.ends_with(".img")
+                            } else {
+                                false
+                            };
+
+                            // If update mode and NOT a raw image, show preview modal; otherwise go to confirmation
+                            if self.update_mode && !is_raw_image {
+                                self.state = AppState::PreviewingUpdate;
+                            } else {
+                                // Skip preview for image mode (update mode doesn't apply to raw images)
+                                self.state = AppState::AwaitingConfirmation;
+                            }
+                        } else {
+                            // Show asset selection UI
+                            self.selected_asset_idx = Some(0); // Pre-select first item
+                            self.state = AppState::SelectingAsset;
+                        }
+
+                        self.manifest_rx = None;
                     }
                 }
                 ctx.request_repaint();
@@ -266,16 +312,57 @@ impl eframe::App for InstallerApp {
                                         for (idx, asset) in self.available_assets.iter().enumerate() {
                                             let is_selected = self.selected_asset_idx == Some(idx);
 
-                                            // Try to find a display mapping for this asset
-                                            let mapping = display_mappings.and_then(|mappings| {
-                                                mappings.iter().find(|m| asset.name.contains(m.pattern))
-                                            });
+                                            // Check for manifest display info first, then fall back to config mappings
+                                            let has_manifest_info = asset.display_name.is_some() || asset.devices.is_some();
+
+                                            // Try to find a display mapping for this asset (only if no manifest info)
+                                            let mapping = if !has_manifest_info {
+                                                display_mappings.and_then(|mappings| {
+                                                    mappings.iter().find(|m| asset.name.contains(m.pattern))
+                                                })
+                                            } else {
+                                                None
+                                            };
 
                                             ui.group(|ui| {
                                                 ui.set_min_width(400.0);
 
-                                                if let Some(mapping) = mapping {
-                                                    // Show friendly display name with device list
+                                                if has_manifest_info {
+                                                    // Use manifest display info
+                                                    let label_response = ui.vertical(|ui| {
+                                                        let display_text = asset.display_name.as_ref()
+                                                            .map(|s| s.as_str())
+                                                            .unwrap_or(&asset.name);
+                                                        let response = ui.selectable_label(is_selected, display_text);
+
+                                                        // Show devices if available
+                                                        if let Some(devices) = &asset.devices {
+                                                            ui.add_space(2.0);
+                                                            ui.label(
+                                                                egui::RichText::new(devices)
+                                                                    .small()
+                                                                    .color(ui.style().visuals.weak_text_color())
+                                                            );
+                                                        }
+
+                                                        // Only show filename if we have a display name
+                                                        if asset.display_name.is_some() {
+                                                            ui.add_space(2.0);
+                                                            ui.label(
+                                                                egui::RichText::new(&asset.name)
+                                                                    .size(9.0)
+                                                                    .color(ui.style().visuals.weak_text_color().gamma_multiply(0.7))
+                                                            );
+                                                        }
+
+                                                        response
+                                                    }).inner;
+
+                                                    if label_response.clicked() {
+                                                        self.selected_asset_idx = Some(idx);
+                                                    }
+                                                } else if let Some(mapping) = mapping {
+                                                    // Show friendly display name with device list from config
                                                     let label_response = ui.vertical(|ui| {
                                                         let response = ui.selectable_label(is_selected, mapping.display_name);
 

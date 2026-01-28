@@ -15,6 +15,7 @@ mod extract;
 mod fat32;
 mod format;
 mod github;
+mod manifest;
 
 #[cfg(target_os = "macos")]
 mod mac;
