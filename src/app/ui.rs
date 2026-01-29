@@ -766,9 +766,10 @@ impl eframe::App for InstallerApp {
                         egui::Vec2::ZERO,
                         egui::Layout::right_to_left(egui::Align::TOP),
                         |ui| {
-                            if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
-                                self.show_theme_editor = !self.show_theme_editor;
-                            }
+                            // Theme editor button (hidden - use Ctrl+T shortcut instead)
+                            // if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
+                            //     self.show_theme_editor = !self.show_theme_editor;
+                            // }
                             if ui.button("📜").on_hover_text("Toggle Log Area").clicked() {
                                 self.show_log = !self.show_log;
 
@@ -982,7 +983,7 @@ impl eframe::App for InstallerApp {
 
                 ui.horizontal(|ui| {
                     ui.vertical_centered(|ui| {
-                        // Install button
+                        // Install/Resume button
                         let is_busy = matches!(
                             self.state,
                             AppState::FetchingAssets
@@ -1001,36 +1002,79 @@ impl eframe::App for InstallerApp {
 
                         if !is_busy {
                             ui.add_enabled_ui(!is_busy && self.selected_drive_idx.is_some() && !self.drives.is_empty(), |ui| {
-                                let button = egui::Button::new("Install")
+                                // Check if there's a partial download to resume
+                                let temp_dir = std::env::temp_dir();
+                                let has_partial = std::fs::read_dir(&temp_dir)
+                                    .ok()
+                                    .map(|entries| {
+                                        entries
+                                            .filter_map(|e| e.ok())
+                                            .any(|e| {
+                                                e.path()
+                                                    .extension()
+                                                    .map(|ext| ext == "partial")
+                                                    .unwrap_or(false)
+                                            })
+                                    })
+                                    .unwrap_or(false);
+
+                                let button_text = if has_partial { "Resume" } else { "Install" };
+
+                                let button = egui::Button::new(button_text)
                                     .min_size(egui::vec2(96.0, 48.0))
                                     .fill(egui::Color32::from_rgb(104, 157, 106)); // Green
                                 if ui.add(button).clicked() {
                                     self.fetch_and_check_assets(ctx.clone());
                                 }
+
+                                // Show info if partial download exists
+                                if has_partial {
+                                    ui.label(
+                                        egui::RichText::new("(partial download detected)")
+                                            .small()
+                                            .color(egui::Color32::from_rgb(214, 93, 14))
+                                    );
+                                }
                             });
-                        }
-
-                        // Cancel button (only show during cancellable operations)
-                        let can_cancel = matches!(
-                            self.state,
-                            AppState::FetchingRelease
-                                | AppState::Downloading
-                                | AppState::Formatting
-                                | AppState::Deleting
-                                | AppState::Extracting
-                                | AppState::Copying
-                        ) && self.cancel_token.is_some();
-
-                        if can_cancel {
-                            let button = egui::Button::new("Cancel")
-                                .min_size(egui::vec2(96.0, 48.0))
-                                .fill(egui::Color32::from_rgb(251, 73, 52)); // Red
-                            if ui.add(button).clicked() {
-                                self.cancel_installation();
-                            }
                         }
                     });
                 });
+
+                // Pause/Cancel buttons (only show during cancellable operations)
+                // These are outside the horizontal layout so they center properly
+                let can_cancel = matches!(
+                    self.state,
+                    AppState::FetchingRelease
+                        | AppState::Downloading
+                        | AppState::Formatting
+                        | AppState::Deleting
+                        | AppState::Extracting
+                        | AppState::Copying
+                ) && self.cancel_token.is_some();
+
+                if can_cancel {
+                    ui.add_space(8.0);
+                    ui.vertical_centered(|ui| {
+                        // Show Pause button only during downloads
+                        if matches!(self.state, AppState::Downloading) && self.pause_token.is_some() {
+                            let pause_button = egui::Button::new("Pause")
+                                .min_size(egui::vec2(96.0, 48.0))
+                                .fill(egui::Color32::from_rgb(214, 93, 14)); // Orange
+                            if ui.add(pause_button).clicked() {
+                                self.pause_download();
+                            }
+                            ui.add_space(8.0);
+                        }
+
+                        // Cancel button
+                        let cancel_button = egui::Button::new("Cancel")
+                            .min_size(egui::vec2(96.0, 48.0))
+                            .fill(egui::Color32::from_rgb(251, 73, 52)); // Red
+                        if ui.add(cancel_button).clicked() {
+                            self.cancel_installation();
+                        }
+                    });
+                }
 
                 // Repository info text (shown below Install button when not busy)
                 if !show_progress {

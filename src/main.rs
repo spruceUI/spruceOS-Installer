@@ -9,6 +9,7 @@ mod config;
 mod copy;
 mod debug;
 mod delete;
+mod download_state;
 mod drives;
 mod eject;
 mod extract;

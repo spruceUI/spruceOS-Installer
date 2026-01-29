@@ -15,7 +15,7 @@
 // Search for "update_mode" in this file to find all references.
 // ============================================================================
 
-use super::{InstallerApp, AppState, ProgressInfo, get_available_disk_space};
+use super::{InstallerApp, AppState, get_available_disk_space};
 use crate::config::{REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL};
 use crate::burn::{burn_image, BurnProgress};
 use crate::copy::{copy_directory_with_progress, CopyProgress};
@@ -62,6 +62,14 @@ impl InstallerApp {
             self.state = AppState::Cancelling;
             // Clear the cancel token so we don't try to cancel again
             self.cancel_token = None;
+        }
+    }
+
+    pub(super) fn pause_download(&mut self) {
+        if let Some(token) = &self.pause_token {
+            self.log("Pausing download...");
+            token.cancel();
+            // Don't clear pause token - we might need it for resume
         }
     }
 
@@ -244,9 +252,11 @@ impl InstallerApp {
         let update_mode = self.update_mode;
         let update_directories: Vec<String> = repo.update_directories.iter().map(|s| s.to_string()).collect();
 
-        // Create cancellation token
+        // Create cancellation and pause tokens
         let cancel_token = CancellationToken::new();
+        let pause_token = CancellationToken::new();
         self.cancel_token = Some(cancel_token.clone());
+        self.pause_token = Some(pause_token.clone());
 
         // Channel for state updates
         let (state_tx, mut state_rx) = mpsc::unbounded_channel::<AppState>();
@@ -258,6 +268,7 @@ impl InstallerApp {
         let state_tx_clone = state_tx.clone();
         let drive_poll_tx_clone = self.drive_poll_tx.clone();
         let cancel_token_clone = cancel_token.clone();
+        let pause_token_clone = pause_token.clone();
 
         // Spawn the installation task
         self.runtime.spawn(async move {
@@ -649,16 +660,39 @@ impl InstallerApp {
                                 p.message = format!("Download error: {}", e);
                             }
                         }
+                        DownloadProgress::Paused { downloaded, total } => {
+                            if let Ok(mut p) = progress_clone.lock() {
+                                p.current = downloaded;
+                                p.total = total;
+                                let pct = (downloaded as f64 / total as f64 * 100.0) as u32;
+                                p.message = format!("Download paused at {}%", pct);
+                            }
+                        }
+                        DownloadProgress::Resuming { downloaded, total } => {
+                            if let Ok(mut p) = progress_clone.lock() {
+                                p.current = downloaded;
+                                p.total = total;
+                                let pct = (downloaded as f64 / total as f64 * 100.0) as u32;
+                                p.message = format!("Resuming from {}%...", pct);
+                            }
+                        }
                     }
                     ctx_dl.request_repaint();
                 }
             });
 
-            if let Err(e) = download_asset(&asset_clone, &download_path_clone, dl_tx, cancel_token_clone.clone()).await {
+            if let Err(e) = download_asset(&asset_clone, &download_path_clone, dl_tx, cancel_token_clone.clone(), pause_token_clone.clone()).await {
                 if e.contains("cancelled") {
                     log("Download cancelled");
                     let _ = tokio::fs::remove_file(&download_path_clone).await;
                     crate::debug::log("Cleaned up partial download file");
+                    let _ = state_tx_clone.send(AppState::Idle);
+                    let _ = drive_poll_tx_clone.send(true);
+                    return;
+                }
+                if e.contains("paused") {
+                    log("Download paused - progress saved");
+                    crate::debug::log("Download paused, state saved for resume");
                     let _ = state_tx_clone.send(AppState::Idle);
                     let _ = drive_poll_tx_clone.send(true);
                     return;
