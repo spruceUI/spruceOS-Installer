@@ -17,7 +17,6 @@ mod fat32;
 mod format;
 mod github;
 mod manifest;
-mod manifest;
 
 #[cfg(target_os = "macos")]
 mod mac;
