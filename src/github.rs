@@ -319,10 +319,7 @@ async fn download_chunk(
         return Err(format!("Chunk download failed with status: {}", response.status()));
     }
 
-    let bytes = response.bytes().await
-        .map_err(|e| format!("Failed to download chunk data: {}", e))?;
-
-    // Write chunk to file at correct position
+    // Open file for writing at correct position
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .open(dest_path)
@@ -331,17 +328,35 @@ async fn download_chunk(
     file.seek(SeekFrom::Start(start))
         .map_err(|e| format!("Failed to seek to chunk position: {}", e))?;
 
-    file.write_all(&bytes)
-        .map_err(|e| format!("Failed to write chunk data: {}", e))?;
+    // Stream the chunk and report progress as we go
+    let mut stream = response.bytes_stream();
+    let mut chunk_bytes_written = 0u64;
 
-    // Update progress
-    let chunk_downloaded = downloaded.fetch_add(bytes.len() as u64, std::sync::atomic::Ordering::Relaxed) + bytes.len() as u64;
-    let _ = progress_tx.send(DownloadProgress::Progress {
-        downloaded: chunk_downloaded,
-        total: total_size,
-    });
+    while let Some(chunk_result) = stream.next().await {
+        if cancel_token.is_cancelled() {
+            return Err("Download cancelled".to_string());
+        }
 
-    crate::debug::log(&format!("Chunk complete: bytes {}-{}", start, end));
+        let chunk = chunk_result
+            .map_err(|e| format!("Failed to download chunk data: {}", e))?;
+
+        file.write_all(&chunk)
+            .map_err(|e| format!("Failed to write chunk data: {}", e))?;
+
+        chunk_bytes_written += chunk.len() as u64;
+
+        // Update global progress
+        let total_downloaded = downloaded.fetch_add(chunk.len() as u64, std::sync::atomic::Ordering::Relaxed) + chunk.len() as u64;
+        let _ = progress_tx.send(DownloadProgress::Progress {
+            downloaded: total_downloaded,
+            total: total_size,
+        });
+    }
+
+    file.flush()
+        .map_err(|e| format!("Failed to flush chunk data: {}", e))?;
+
+    crate::debug::log(&format!("Chunk complete: bytes {}-{} ({} bytes written)", start, end, chunk_bytes_written));
     Ok(())
 }
 
