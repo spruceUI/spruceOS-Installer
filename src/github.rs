@@ -308,7 +308,7 @@ async fn download_parallel(
     let state = std::sync::Arc::new(tokio::sync::Mutex::new(state));
 
     for &chunk_index in &incomplete_chunks {
-        let chunk = state.blocking_lock().chunks[chunk_index].clone();
+        let chunk = state.lock().await.chunks[chunk_index].clone();
 
         let client = client.clone();
         let url = url.to_string();
