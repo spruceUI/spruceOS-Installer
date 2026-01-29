@@ -660,6 +660,22 @@ impl InstallerApp {
                                 p.message = format!("Download error: {}", e);
                             }
                         }
+                        DownloadProgress::Paused { downloaded, total } => {
+                            if let Ok(mut p) = progress_clone.lock() {
+                                p.current = downloaded;
+                                p.total = total;
+                                let pct = (downloaded as f64 / total as f64 * 100.0) as u32;
+                                p.message = format!("Download paused at {}%", pct);
+                            }
+                        }
+                        DownloadProgress::Resuming { downloaded, total } => {
+                            if let Ok(mut p) = progress_clone.lock() {
+                                p.current = downloaded;
+                                p.total = total;
+                                let pct = (downloaded as f64 / total as f64 * 100.0) as u32;
+                                p.message = format!("Resuming from {}%...", pct);
+                            }
+                        }
                     }
                     ctx_dl.request_repaint();
                 }
