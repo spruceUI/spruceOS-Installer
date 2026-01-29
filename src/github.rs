@@ -168,7 +168,15 @@ pub async fn download_asset(
         .await
         .map_err(|e| format!("Failed to check download server capabilities: {}", e))?;
 
-    let total_size = head_response.content_length().unwrap_or(asset.size);
+    // Get file size from HEAD response, fallback to asset.size if not available or zero
+    let total_size = match head_response.content_length() {
+        Some(size) if size > 0 => size,
+        _ => {
+            crate::debug::log(&format!("HEAD request returned invalid size, using asset.size: {}", asset.size));
+            asset.size
+        }
+    };
+
     let accepts_ranges = head_response
         .headers()
         .get("accept-ranges")
