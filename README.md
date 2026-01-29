@@ -12,6 +12,7 @@
 **SpruceOS Installer** is an all-in-one **downloader, extractor, formatter, and installer** for **SpruceOS** and other custom firmware projects.
 
 - ✓ Download releases directly from GitHub
+- ✓ **External asset hosting** via manifest.json (bypass GitHub's 2GB limit)
 - ✓ Format SD cards (FAT32, supports >32GB on Windows)
 - ✓ Extract archives (.7z, .zip) or burn raw images (.img, .img.gz, .img.xz)
 - ✓ Cross-platform: Windows, Linux, macOS
@@ -30,6 +31,60 @@ GitHub Actions automatically build releases per branch. If you'd like to use thi
 - [NextUI Team](https://github.com/LoveRetro)
 - [Tag](https://github.com/CMTag)
 - [Helaas](https://github.com/Helaas)
+
+---
+
+## External Asset Hosting (manifest.json)
+
+### Bypassing GitHub's 2GB File Limit
+
+GitHub has a 2GB file size limit for release assets. For larger firmware images, the installer supports **external hosting** via a simple JSON manifest file.
+
+**How it works:**
+1. Host your large files on any CDN or file server with direct HTTP download URLs
+2. Create a `manifest.json` file listing your assets
+3. Upload `manifest.json` to your GitHub release
+4. The installer automatically detects and uses the external URLs
+
+**Example manifest.json:**
+```json
+{
+  "version": "1.0",
+  "assets": [
+    {
+      "name": "MyOS-Device1.img.gz",
+      "url": "https://cdn.example.com/myos-device1.img.gz",
+      "size": 3221225472,
+      "display_name": "Device Model X",
+      "devices": "Compatible with Device X, Y, Z"
+    },
+    {
+      "name": "MyOS-Device2.img.gz",
+      "url": "https://cdn.example.com/myos-device2.img.gz",
+      "size": 2147483648,
+      "display_name": "Device Model Y",
+      "devices": "Compatible with Device A, B, C"
+    }
+  ]
+}
+```
+
+**Supported hosting services:**
+- ✅ CDN services (AWS S3, Cloudflare R2, DigitalOcean Spaces, Backblaze B2)
+- ✅ Self-hosted web servers with direct download URLs
+- ✅ Any service providing direct HTTP/HTTPS download links
+- ❌ MEGA, GoFile, or other services requiring JavaScript/web interface
+
+**Manifest fields:**
+- `name` (required) - Filename with extension (determines archive vs. burn mode)
+- `url` (required) - Direct HTTP/HTTPS download URL
+- `size` (required) - File size in bytes
+- `display_name` (optional) - User-friendly name shown in selection UI
+- `devices` (optional) - Compatible devices description
+
+**Note:** The installer is fully backward compatible. Repos without `manifest.json` work normally using GitHub release assets.
+
+See `manifest-example.json` in the repository root for a complete example.
 
 ---
 

@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "assets": [
+    {
+      "name": "MyOS-RK3566.img.gz",
+      "url": "https://cdn.example.com/downloads/myos-rk3566-v1.0.img.gz",
+      "size": 3221225472,
+      "display_name": "RK3566 Chipset",
+      "devices": "Anbernic RG353P/V/VS/M, Powkiddy RGB30, RGB10 Max 3"
+    },
+    {
+      "name": "MyOS-RK3588.img.gz",
+      "url": "https://cdn.example.com/downloads/myos-rk3588-v1.0.img.gz",
+      "size": 4294967296,
+      "display_name": "RK3588 Chipset",
+      "devices": "Orange Pi 5, Gameforce Ace"
+    },
+    {
+      "name": "MyOS-AllDevices.7z",
+      "url": "https://cdn.example.com/downloads/myos-universal-v1.0.7z",
+      "size": 2147483648,
+      "display_name": "Universal Build (Archive)",
+      "devices": "All supported devices - extract to formatted SD card"
+    }
+  ]
+}
