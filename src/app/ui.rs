@@ -1049,7 +1049,7 @@ impl eframe::App for InstallerApp {
                         ) && self.cancel_token.is_some();
 
                         if can_cancel {
-                            ui.horizontal(|ui| {
+                            ui.vertical_centered(|ui| {
                                 // Show Pause button only during downloads
                                 if matches!(self.state, AppState::Downloading) && self.pause_token.is_some() {
                                     let pause_button = egui::Button::new("Pause")
