@@ -146,7 +146,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
         name: "Stable",
         url: "spruceUI/spruceOS",
-        info: "Stable releases of spruceOS.\nSupported devices: Miyoo A30",
+        info: "Stable releases of spruceOS.\nSupported devices: Miyoo A30\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
         supports_update_mode: true,  // Archive-based (.7z)
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
