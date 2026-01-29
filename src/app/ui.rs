@@ -1036,42 +1036,44 @@ impl eframe::App for InstallerApp {
                                 }
                             });
                         }
-
-                        // Pause/Cancel buttons (only show during cancellable operations)
-                        let can_cancel = matches!(
-                            self.state,
-                            AppState::FetchingRelease
-                                | AppState::Downloading
-                                | AppState::Formatting
-                                | AppState::Deleting
-                                | AppState::Extracting
-                                | AppState::Copying
-                        ) && self.cancel_token.is_some();
-
-                        if can_cancel {
-                            ui.vertical_centered(|ui| {
-                                // Show Pause button only during downloads
-                                if matches!(self.state, AppState::Downloading) && self.pause_token.is_some() {
-                                    let pause_button = egui::Button::new("Pause")
-                                        .min_size(egui::vec2(96.0, 48.0))
-                                        .fill(egui::Color32::from_rgb(214, 93, 14)); // Orange
-                                    if ui.add(pause_button).clicked() {
-                                        self.pause_download();
-                                    }
-                                    ui.add_space(8.0);
-                                }
-
-                                // Cancel button
-                                let cancel_button = egui::Button::new("Cancel")
-                                    .min_size(egui::vec2(96.0, 48.0))
-                                    .fill(egui::Color32::from_rgb(251, 73, 52)); // Red
-                                if ui.add(cancel_button).clicked() {
-                                    self.cancel_installation();
-                                }
-                            });
-                        }
                     });
                 });
+
+                // Pause/Cancel buttons (only show during cancellable operations)
+                // These are outside the horizontal layout so they center properly
+                let can_cancel = matches!(
+                    self.state,
+                    AppState::FetchingRelease
+                        | AppState::Downloading
+                        | AppState::Formatting
+                        | AppState::Deleting
+                        | AppState::Extracting
+                        | AppState::Copying
+                ) && self.cancel_token.is_some();
+
+                if can_cancel {
+                    ui.add_space(8.0);
+                    ui.vertical_centered(|ui| {
+                        // Show Pause button only during downloads
+                        if matches!(self.state, AppState::Downloading) && self.pause_token.is_some() {
+                            let pause_button = egui::Button::new("Pause")
+                                .min_size(egui::vec2(96.0, 48.0))
+                                .fill(egui::Color32::from_rgb(214, 93, 14)); // Orange
+                            if ui.add(pause_button).clicked() {
+                                self.pause_download();
+                            }
+                            ui.add_space(8.0);
+                        }
+
+                        // Cancel button
+                        let cancel_button = egui::Button::new("Cancel")
+                            .min_size(egui::vec2(96.0, 48.0))
+                            .fill(egui::Color32::from_rgb(251, 73, 52)); // Red
+                        if ui.add(cancel_button).clicked() {
+                            self.cancel_installation();
+                        }
+                    });
+                }
 
                 // Repository info text (shown below Install button when not busy)
                 if !show_progress {
