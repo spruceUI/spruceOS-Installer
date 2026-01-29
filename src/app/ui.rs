@@ -1085,7 +1085,46 @@ impl eframe::App for InstallerApp {
 
                         // Split by \n and display each line
                         for line in repo_info.split('\n') {
-                            ui.colored_label(text_color, line);
+                            // Parse markdown-style links: [text](url)
+                            if line.contains('[') && line.contains("](") {
+                                ui.horizontal_wrapped(|ui| {
+                                    let mut remaining = line;
+                                    while let Some(start) = remaining.find('[') {
+                                        // Render text before the link
+                                        if start > 0 {
+                                            ui.colored_label(text_color, &remaining[..start]);
+                                        }
+
+                                        remaining = &remaining[start + 1..];
+
+                                        if let Some(end) = remaining.find("](") {
+                                            let link_text = &remaining[..end];
+                                            remaining = &remaining[end + 2..];
+
+                                            if let Some(url_end) = remaining.find(')') {
+                                                let url = &remaining[..url_end];
+                                                ui.hyperlink_to(link_text, url);
+                                                remaining = &remaining[url_end + 1..];
+                                            } else {
+                                                // Malformed link, render as-is
+                                                ui.colored_label(text_color, &format!("[{}", link_text));
+                                                break;
+                                            }
+                                        } else {
+                                            // No matching ](, render as-is
+                                            ui.colored_label(text_color, &format!("[{}", remaining));
+                                            break;
+                                        }
+                                    }
+                                    // Render any remaining text
+                                    if !remaining.is_empty() {
+                                        ui.colored_label(text_color, remaining);
+                                    }
+                                });
+                            } else {
+                                // No links in this line
+                                ui.colored_label(text_color, line);
+                            }
                         }
                     });
                 }

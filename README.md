@@ -292,6 +292,29 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
 ];
 ```
 
+**Clickable Links in Info Text:**
+
+The `info` field supports markdown-style clickable links using the syntax `[text](url)`:
+
+```rust
+info: "Official stable builds.\nSupported: Device X, Y, Z\n[View Documentation](https://yourproject.com/docs)\n[Report Issues](https://github.com/yourorg/yourrepo/issues)",
+```
+
+- Links will be rendered as clickable hyperlinks in the UI
+- Clicking opens the URL in the default browser
+- You can have multiple links per line or mix links with regular text
+- Use `\n` for line breaks as usual
+
+**Example:**
+```rust
+RepoOption {
+    name: "Stable",
+    url: "yourorg/yourrepo",
+    info: "Official builds with full support.\n[Documentation](https://docs.example.com) | [Discord](https://discord.gg/example)",
+    // ...
+},
+```
+
 ---
 
 ##### **C. Default Selection**
