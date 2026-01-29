@@ -61,6 +61,9 @@ pub struct InstallerApp {
     // Cancellation token for aborting installation
     pub(super) cancel_token: Option<CancellationToken>,
 
+    // Pause token for pausing downloads
+    pub(super) pause_token: Option<CancellationToken>,
+
     // Channel for background drive updates
     pub(super) drive_rx: mpsc::UnboundedReceiver<Vec<DriveInfo>>,
     pub(super) drive_poll_tx: mpsc::UnboundedSender<bool>,
@@ -195,6 +198,7 @@ impl InstallerApp {
             log_messages: Arc::new(Mutex::new(Vec::new())),
             installed_drive: None,
             cancel_token: None,
+            pause_token: None,
             drive_rx: rx,
             drive_poll_tx: poll_tx,
             manual_refresh_tx: manual_refresh_tx,

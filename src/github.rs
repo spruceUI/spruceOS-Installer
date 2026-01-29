@@ -39,6 +39,8 @@ pub enum DownloadProgress {
     Progress { downloaded: u64, total: u64 },
     Completed,
     Cancelled,
+    Paused { downloaded: u64, total: u64 },
+    Resuming { downloaded: u64, total: u64 },
     #[allow(dead_code)]
     Error(String),
 }
@@ -146,7 +148,10 @@ pub async fn download_asset(
     dest_path: &Path,
     progress_tx: mpsc::UnboundedSender<DownloadProgress>,
     cancel_token: CancellationToken,
+    pause_token: CancellationToken,
 ) -> Result<(), String> {
+    use crate::download_state::DownloadState;
+
     // Check for cancellation before starting
     if cancel_token.is_cancelled() {
         let _ = progress_tx.send(DownloadProgress::Cancelled);
@@ -158,6 +163,28 @@ pub async fn download_asset(
         .connect_timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    // Check for existing partial download
+    let existing_state = DownloadState::load(dest_path).ok();
+
+    if let Some(ref state) = existing_state {
+        // Verify URL matches
+        if state.url == asset.browser_download_url {
+            crate::debug::log(&format!(
+                "Found partial download: {:.1}% complete ({} / {} bytes)",
+                state.completion_percentage(),
+                state.downloaded_bytes,
+                state.total_size
+            ));
+            let _ = progress_tx.send(DownloadProgress::Resuming {
+                downloaded: state.downloaded_bytes,
+                total: state.total_size,
+            });
+        } else {
+            crate::debug::log("Partial download URL mismatch - starting fresh");
+            DownloadState::delete_state_file(dest_path);
+        }
+    }
 
     // Send HEAD request to check for Range support and get file size
     crate::debug::log("Checking if server supports parallel downloads (Range requests)...");
@@ -177,6 +204,14 @@ pub async fn download_asset(
         }
     };
 
+    // Verify size matches if resuming
+    if let Some(ref state) = existing_state {
+        if state.total_size != total_size {
+            crate::debug::log("File size mismatch - starting fresh");
+            DownloadState::delete_state_file(dest_path);
+        }
+    }
+
     let accepts_ranges = head_response
         .headers()
         .get("accept-ranges")
@@ -189,15 +224,17 @@ pub async fn download_asset(
 
     // Use parallel download if server supports Range requests and file is large enough
     const MIN_SIZE_FOR_PARALLEL: u64 = 10 * 1024 * 1024; // 10 MB
-    if accepts_ranges && total_size > MIN_SIZE_FOR_PARALLEL {
+    let result = if accepts_ranges && total_size > MIN_SIZE_FOR_PARALLEL {
         crate::debug::log("Server supports Range requests - using parallel chunked download (8 connections)");
         download_parallel(
             &client,
             &asset.browser_download_url,
             dest_path,
             total_size,
-            progress_tx,
-            cancel_token,
+            progress_tx.clone(),
+            cancel_token.clone(),
+            pause_token.clone(),
+            existing_state,
         ).await
     } else {
         if !accepts_ranges {
@@ -210,10 +247,18 @@ pub async fn download_asset(
             &asset.browser_download_url,
             dest_path,
             total_size,
-            progress_tx,
-            cancel_token,
+            progress_tx.clone(),
+            cancel_token.clone(),
+            pause_token.clone(),
         ).await
+    };
+
+    // Clean up state file on successful completion
+    if result.is_ok() {
+        DownloadState::delete_state_file(dest_path);
     }
+
+    result
 }
 
 /// Download using parallel connections (8 chunks)
@@ -224,61 +269,115 @@ async fn download_parallel(
     total_size: u64,
     progress_tx: mpsc::UnboundedSender<DownloadProgress>,
     cancel_token: CancellationToken,
+    pause_token: CancellationToken,
+    existing_state: Option<crate::download_state::DownloadState>,
 ) -> Result<(), String> {
+    use crate::download_state::DownloadState;
+
     const NUM_CHUNKS: u64 = 8;
-    let chunk_size = total_size / NUM_CHUNKS;
+
+    // Use existing state or create new
+    let mut state = existing_state.unwrap_or_else(|| {
+        DownloadState::new(url.to_string(), total_size, dest_path.to_path_buf(), NUM_CHUNKS)
+    });
+
+    // Create or open file for writing
+    if !dest_path.exists() {
+        let file = std::fs::File::create(dest_path)
+            .map_err(|e| format!("Failed to create file: {}", e))?;
+        file.set_len(total_size)
+            .map_err(|e| format!("Failed to allocate file space: {}", e))?;
+    }
+
+    // Shared progress tracking
+    let downloaded = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(state.downloaded_bytes));
+
+    // Get incomplete chunks to download
+    let incomplete_chunks = state.get_incomplete_chunks();
+    if incomplete_chunks.is_empty() {
+        let _ = progress_tx.send(DownloadProgress::Completed);
+        return Ok(());
+    }
 
     let _ = progress_tx.send(DownloadProgress::Started { total_bytes: total_size });
 
-    // Create file and pre-allocate space
-    let file = std::fs::File::create(dest_path)
-        .map_err(|e| format!("Failed to create file: {}", e))?;
-    file.set_len(total_size)
-        .map_err(|e| format!("Failed to allocate file space: {}", e))?;
-    drop(file);
+    crate::debug::log(&format!("Downloading {} incomplete chunks", incomplete_chunks.len()));
 
-    // Shared progress tracking
-    let downloaded = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-
-    // Spawn chunk download tasks
+    // Spawn chunk download tasks for incomplete chunks only
     let mut tasks = Vec::new();
-    for i in 0..NUM_CHUNKS {
-        let start = i * chunk_size;
-        let end = if i == NUM_CHUNKS - 1 {
-            total_size - 1 // Last chunk gets remainder
-        } else {
-            (i + 1) * chunk_size - 1
-        };
+    let state = std::sync::Arc::new(tokio::sync::Mutex::new(state));
+
+    for &chunk_index in &incomplete_chunks {
+        let chunk = state.blocking_lock().chunks[chunk_index].clone();
 
         let client = client.clone();
         let url = url.to_string();
         let dest_path = dest_path.to_path_buf();
         let progress_tx = progress_tx.clone();
         let cancel_token = cancel_token.clone();
+        let pause_token = pause_token.clone();
         let downloaded = downloaded.clone();
+        let state = state.clone();
 
         let task = tokio::spawn(async move {
-            download_chunk(
+            let result = download_chunk(
                 &client,
                 &url,
                 &dest_path,
-                start,
-                end,
+                chunk.start,
+                chunk.end,
                 total_size,
                 progress_tx,
                 cancel_token,
+                pause_token,
                 downloaded,
-            ).await
+            ).await;
+
+            // Mark chunk as complete if successful
+            if result.is_ok() {
+                let chunk_size = chunk.end - chunk.start + 1;
+                state.lock().await.mark_chunk_complete(chunk_index, chunk_size);
+            }
+
+            result
         });
 
-        tasks.push(task);
+        tasks.push((chunk_index, task));
     }
 
-    // Wait for all chunks to complete
-    for (i, task) in tasks.into_iter().enumerate() {
-        task.await
-            .map_err(|e| format!("Chunk {} task failed: {}", i, e))?
-            .map_err(|e| format!("Chunk {} download failed: {}", i, e))?;
+    // Wait for all chunks to complete or pause/cancel
+    let mut paused = false;
+    for (chunk_index, task) in tasks {
+        match task.await {
+            Ok(Ok(())) => {
+                // Chunk completed successfully
+            }
+            Ok(Err(e)) => {
+                if e.contains("paused") {
+                    paused = true;
+                    crate::debug::log("Download paused");
+                    break;
+                } else if e.contains("cancelled") {
+                    return Err("Download cancelled".to_string());
+                } else {
+                    return Err(format!("Chunk {} download failed: {}", chunk_index, e));
+                }
+            }
+            Err(e) => {
+                return Err(format!("Chunk {} task failed: {}", chunk_index, e));
+            }
+        }
+    }
+
+    if paused {
+        // Save state and return paused status
+        let final_state = state.lock().await;
+        final_state.save(dest_path)?;
+        let _ = progress_tx.send(DownloadProgress::Paused {
+            downloaded: final_state.downloaded_bytes,
+            total: total_size,
+        });
+        return Err("Download paused".to_string());
     }
 
     let _ = progress_tx.send(DownloadProgress::Completed);
@@ -296,12 +395,17 @@ async fn download_chunk(
     total_size: u64,
     progress_tx: mpsc::UnboundedSender<DownloadProgress>,
     cancel_token: CancellationToken,
+    pause_token: CancellationToken,
     downloaded: std::sync::Arc<std::sync::atomic::AtomicU64>,
 ) -> Result<(), String> {
     use std::io::{Seek, SeekFrom, Write};
 
     if cancel_token.is_cancelled() {
         return Err("Download cancelled".to_string());
+    }
+
+    if pause_token.is_cancelled() {
+        return Err("Download paused".to_string());
     }
 
     let range_header = format!("bytes={}-{}", start, end);
@@ -337,6 +441,10 @@ async fn download_chunk(
             return Err("Download cancelled".to_string());
         }
 
+        if pause_token.is_cancelled() {
+            return Err("Download paused".to_string());
+        }
+
         let chunk = chunk_result
             .map_err(|e| format!("Failed to download chunk data: {}", e))?;
 
@@ -368,6 +476,7 @@ async fn download_single(
     total_size: u64,
     progress_tx: mpsc::UnboundedSender<DownloadProgress>,
     cancel_token: CancellationToken,
+    pause_token: CancellationToken,
 ) -> Result<(), String> {
     let response = client
         .get(url)
@@ -405,6 +514,15 @@ async fn download_single(
                 let _ = tokio::fs::remove_file(dest_path).await;
                 let _ = progress_tx.send(DownloadProgress::Cancelled);
                 return Err("Download cancelled".to_string());
+            }
+            _ = pause_token.cancelled() => {
+                // Flush and keep partial file for resume
+                let _ = file.flush().await;
+                let _ = progress_tx.send(DownloadProgress::Paused {
+                    downloaded,
+                    total: total_size,
+                });
+                return Err("Download paused".to_string());
             }
             chunk_result = stream.next() => {
                 match chunk_result {
