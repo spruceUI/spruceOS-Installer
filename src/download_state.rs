@@ -28,6 +28,9 @@ pub struct ChunkState {
     pub end: u64,
     /// Whether this chunk is fully downloaded
     pub completed: bool,
+    /// Bytes written so far for this chunk
+    #[serde(default)]
+    pub bytes_written: u64,
 }
 
 impl DownloadState {
@@ -48,6 +51,7 @@ impl DownloadState {
                 start,
                 end,
                 completed: false,
+                bytes_written: 0,
             });
         }
 
@@ -97,8 +101,11 @@ impl DownloadState {
         let json = std::fs::read_to_string(&state_path)
             .map_err(|e| format!("Failed to read download state: {}", e))?;
 
-        let state: DownloadState = serde_json::from_str(&json)
+        let mut state: DownloadState = serde_json::from_str(&json)
             .map_err(|e| format!("Failed to parse download state: {}", e))?;
+
+        // Recalculate downloaded_bytes from chunk progress for accuracy
+        state.recalculate_progress();
 
         crate::debug::log(&format!("Loaded download state from: {:?}", state_path));
         crate::debug::log(&format!("Resume info: {} / {} bytes ({:.1}%)",
@@ -150,5 +157,10 @@ impl DownloadState {
             return 0.0;
         }
         (self.downloaded_bytes as f64 / self.total_size as f64 * 100.0)
+    }
+
+    /// Recalculate downloaded_bytes from chunk progress
+    pub fn recalculate_progress(&mut self) {
+        self.downloaded_bytes = self.chunks.iter().map(|c| c.bytes_written).sum();
     }
 }

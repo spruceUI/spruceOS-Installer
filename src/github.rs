@@ -309,6 +309,7 @@ async fn download_parallel(
 
     for &chunk_index in &incomplete_chunks {
         let chunk = state.lock().await.chunks[chunk_index].clone();
+        let bytes_already_written = chunk.bytes_written;
 
         let client = client.clone();
         let url = url.to_string();
@@ -317,7 +318,7 @@ async fn download_parallel(
         let cancel_token = cancel_token.clone();
         let pause_token = pause_token.clone();
         let downloaded = downloaded.clone();
-        let state = state.clone();
+        let state_clone = state.clone();
 
         let task = tokio::spawn(async move {
             let result = download_chunk(
@@ -326,17 +327,20 @@ async fn download_parallel(
                 &dest_path,
                 chunk.start,
                 chunk.end,
+                bytes_already_written,
                 total_size,
                 progress_tx,
                 cancel_token,
                 pause_token,
                 downloaded,
+                chunk_index,
+                state_clone.clone(),
             ).await;
 
             // Mark chunk as complete if successful
             if result.is_ok() {
                 let chunk_size = chunk.end - chunk.start + 1;
-                state.lock().await.mark_chunk_complete(chunk_index, chunk_size);
+                state_clone.lock().await.mark_chunk_complete(chunk_index, chunk_size);
             }
 
             result
@@ -371,7 +375,9 @@ async fn download_parallel(
 
     if paused {
         // Save state and return paused status
-        let final_state = state.lock().await;
+        let mut final_state = state.lock().await;
+        // Sync the atomic counter to the state before saving
+        final_state.downloaded_bytes = downloaded.load(std::sync::atomic::Ordering::Relaxed);
         final_state.save(dest_path)?;
         let _ = progress_tx.send(DownloadProgress::Paused {
             downloaded: final_state.downloaded_bytes,
@@ -390,13 +396,16 @@ async fn download_chunk(
     client: &reqwest::Client,
     url: &str,
     dest_path: &Path,
-    start: u64,
-    end: u64,
+    chunk_start: u64,
+    chunk_end: u64,
+    bytes_already_written: u64,
     total_size: u64,
     progress_tx: mpsc::UnboundedSender<DownloadProgress>,
     cancel_token: CancellationToken,
     pause_token: CancellationToken,
     downloaded: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    chunk_index: usize,
+    state: std::sync::Arc<tokio::sync::Mutex<crate::download_state::DownloadState>>,
 ) -> Result<(), String> {
     use std::io::{Seek, SeekFrom, Write};
 
@@ -406,6 +415,15 @@ async fn download_chunk(
 
     if pause_token.is_cancelled() {
         return Err("Download paused".to_string());
+    }
+
+    // Resume from where we left off
+    let start = chunk_start + bytes_already_written;
+    let end = chunk_end;
+
+    // If this chunk is already complete, skip it
+    if start > end {
+        return Ok(());
     }
 
     let range_header = format!("bytes={}-{}", start, end);
@@ -452,6 +470,12 @@ async fn download_chunk(
             .map_err(|e| format!("Failed to write chunk data: {}", e))?;
 
         chunk_bytes_written += chunk.len() as u64;
+
+        // Update state's bytes_written for this chunk
+        {
+            let mut s = state.lock().await;
+            s.chunks[chunk_index].bytes_written = bytes_already_written + chunk_bytes_written;
+        }
 
         // Update global progress
         let total_downloaded = downloaded.fetch_add(chunk.len() as u64, std::sync::atomic::Ordering::Relaxed) + chunk.len() as u64;

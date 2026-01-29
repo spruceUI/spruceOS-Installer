@@ -13,6 +13,7 @@
 
 - ✓ Download releases directly from GitHub
 - ✓ **External asset hosting** via manifest.json (bypass GitHub's 2GB limit)
+- ✓ **Parallel downloads** with pause/resume support (8 concurrent connections)
 - ✓ Format SD cards (FAT32, supports >32GB on Windows)
 - ✓ Extract archives (.7z, .zip) or burn raw images (.img, .img.gz, .img.xz)
 - ✓ Cross-platform: Windows, Linux, macOS
@@ -85,6 +86,41 @@ GitHub has a 2GB file size limit for release assets. For larger firmware images,
 **Note:** The installer is fully backward compatible. Repos without `manifest.json` work normally using GitHub release assets.
 
 See `manifest-example.json` in the repository root for a complete example.
+
+---
+
+## Download Pause/Resume
+
+The installer supports pausing and resuming downloads, with automatic progress preservation across sessions.
+
+### Features
+
+**Parallel Downloads:**
+- Automatically uses 8 concurrent connections for faster downloads
+- Falls back to single connection if server doesn't support HTTP Range requests
+- Progress updates show real-time download percentage
+
+**Pause/Resume Controls:**
+- **Pause button** (orange) - Appears during active downloads
+- **Resume button** - Automatically shown when a partial download is detected
+- **Cancel button** (red) - Stops download and deletes partial files
+
+**State Persistence:**
+- Download progress is automatically saved to `.partial` files
+- Safe to close the app - resume from where you left off on next launch
+- Partial files are stored in your system's temp directory
+- Cancel cleans up partial files; Pause preserves them
+
+**How it works:**
+1. Start a download - it uses 8 parallel chunks for speed
+2. Click **Pause** to temporarily stop (progress saved)
+3. Close app or leave it open
+4. Relaunch installer - **Resume** button appears automatically
+5. Click **Resume** to continue from exact byte position
+6. Click **Cancel** anytime to abort and delete partial download
+
+**Cross-platform:**
+Works identically on Windows, Linux, and macOS with no configuration needed.
 
 ---
 
