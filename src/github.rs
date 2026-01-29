@@ -159,8 +159,218 @@ pub async fn download_asset(
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
+    // Send HEAD request to check for Range support and get file size
+    crate::debug::log("Checking if server supports parallel downloads (Range requests)...");
+    let head_response = client
+        .head(&asset.browser_download_url)
+        .header("User-Agent", USER_AGENT)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to check download server capabilities: {}", e))?;
+
+    // Get file size from HEAD response, fallback to asset.size if not available or zero
+    let total_size = match head_response.content_length() {
+        Some(size) if size > 0 => size,
+        _ => {
+            crate::debug::log(&format!("HEAD request returned invalid size, using asset.size: {}", asset.size));
+            asset.size
+        }
+    };
+
+    let accepts_ranges = head_response
+        .headers()
+        .get("accept-ranges")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v == "bytes")
+        .unwrap_or(false);
+
+    let size_mb = total_size as f64 / 1_048_576.0;
+    crate::debug::log(&format!("Download size: {:.1} MB ({} bytes)", size_mb, total_size));
+
+    // Use parallel download if server supports Range requests and file is large enough
+    const MIN_SIZE_FOR_PARALLEL: u64 = 10 * 1024 * 1024; // 10 MB
+    if accepts_ranges && total_size > MIN_SIZE_FOR_PARALLEL {
+        crate::debug::log("Server supports Range requests - using parallel chunked download (8 connections)");
+        download_parallel(
+            &client,
+            &asset.browser_download_url,
+            dest_path,
+            total_size,
+            progress_tx,
+            cancel_token,
+        ).await
+    } else {
+        if !accepts_ranges {
+            crate::debug::log("Server doesn't support Range requests - using single-connection download");
+        } else {
+            crate::debug::log("File too small for parallel download - using single-connection download");
+        }
+        download_single(
+            &client,
+            &asset.browser_download_url,
+            dest_path,
+            total_size,
+            progress_tx,
+            cancel_token,
+        ).await
+    }
+}
+
+/// Download using parallel connections (8 chunks)
+async fn download_parallel(
+    client: &reqwest::Client,
+    url: &str,
+    dest_path: &Path,
+    total_size: u64,
+    progress_tx: mpsc::UnboundedSender<DownloadProgress>,
+    cancel_token: CancellationToken,
+) -> Result<(), String> {
+    const NUM_CHUNKS: u64 = 8;
+    let chunk_size = total_size / NUM_CHUNKS;
+
+    let _ = progress_tx.send(DownloadProgress::Started { total_bytes: total_size });
+
+    // Create file and pre-allocate space
+    let file = std::fs::File::create(dest_path)
+        .map_err(|e| format!("Failed to create file: {}", e))?;
+    file.set_len(total_size)
+        .map_err(|e| format!("Failed to allocate file space: {}", e))?;
+    drop(file);
+
+    // Shared progress tracking
+    let downloaded = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+
+    // Spawn chunk download tasks
+    let mut tasks = Vec::new();
+    for i in 0..NUM_CHUNKS {
+        let start = i * chunk_size;
+        let end = if i == NUM_CHUNKS - 1 {
+            total_size - 1 // Last chunk gets remainder
+        } else {
+            (i + 1) * chunk_size - 1
+        };
+
+        let client = client.clone();
+        let url = url.to_string();
+        let dest_path = dest_path.to_path_buf();
+        let progress_tx = progress_tx.clone();
+        let cancel_token = cancel_token.clone();
+        let downloaded = downloaded.clone();
+
+        let task = tokio::spawn(async move {
+            download_chunk(
+                &client,
+                &url,
+                &dest_path,
+                start,
+                end,
+                total_size,
+                progress_tx,
+                cancel_token,
+                downloaded,
+            ).await
+        });
+
+        tasks.push(task);
+    }
+
+    // Wait for all chunks to complete
+    for (i, task) in tasks.into_iter().enumerate() {
+        task.await
+            .map_err(|e| format!("Chunk {} task failed: {}", i, e))?
+            .map_err(|e| format!("Chunk {} download failed: {}", i, e))?;
+    }
+
+    let _ = progress_tx.send(DownloadProgress::Completed);
+    crate::debug::log("Parallel download complete");
+    Ok(())
+}
+
+/// Download a single chunk of the file
+async fn download_chunk(
+    client: &reqwest::Client,
+    url: &str,
+    dest_path: &Path,
+    start: u64,
+    end: u64,
+    total_size: u64,
+    progress_tx: mpsc::UnboundedSender<DownloadProgress>,
+    cancel_token: CancellationToken,
+    downloaded: std::sync::Arc<std::sync::atomic::AtomicU64>,
+) -> Result<(), String> {
+    use std::io::{Seek, SeekFrom, Write};
+
+    if cancel_token.is_cancelled() {
+        return Err("Download cancelled".to_string());
+    }
+
+    let range_header = format!("bytes={}-{}", start, end);
+    crate::debug::log(&format!("Downloading chunk: {}", range_header));
+
     let response = client
-        .get(&asset.browser_download_url)
+        .get(url)
+        .header("User-Agent", USER_AGENT)
+        .header("Range", range_header)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to start chunk download: {}", e))?;
+
+    if !response.status().is_success() && response.status() != 206 {
+        return Err(format!("Chunk download failed with status: {}", response.status()));
+    }
+
+    // Open file for writing at correct position
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(dest_path)
+        .map_err(|e| format!("Failed to open file for writing chunk: {}", e))?;
+
+    file.seek(SeekFrom::Start(start))
+        .map_err(|e| format!("Failed to seek to chunk position: {}", e))?;
+
+    // Stream the chunk and report progress as we go
+    let mut stream = response.bytes_stream();
+    let mut chunk_bytes_written = 0u64;
+
+    while let Some(chunk_result) = stream.next().await {
+        if cancel_token.is_cancelled() {
+            return Err("Download cancelled".to_string());
+        }
+
+        let chunk = chunk_result
+            .map_err(|e| format!("Failed to download chunk data: {}", e))?;
+
+        file.write_all(&chunk)
+            .map_err(|e| format!("Failed to write chunk data: {}", e))?;
+
+        chunk_bytes_written += chunk.len() as u64;
+
+        // Update global progress
+        let total_downloaded = downloaded.fetch_add(chunk.len() as u64, std::sync::atomic::Ordering::Relaxed) + chunk.len() as u64;
+        let _ = progress_tx.send(DownloadProgress::Progress {
+            downloaded: total_downloaded,
+            total: total_size,
+        });
+    }
+
+    file.flush()
+        .map_err(|e| format!("Failed to flush chunk data: {}", e))?;
+
+    crate::debug::log(&format!("Chunk complete: bytes {}-{} ({} bytes written)", start, end, chunk_bytes_written));
+    Ok(())
+}
+
+/// Fallback: Download using single connection
+async fn download_single(
+    client: &reqwest::Client,
+    url: &str,
+    dest_path: &Path,
+    total_size: u64,
+    progress_tx: mpsc::UnboundedSender<DownloadProgress>,
+    cancel_token: CancellationToken,
+) -> Result<(), String> {
+    let response = client
+        .get(url)
         .header("User-Agent", USER_AGENT)
         .send()
         .await
@@ -177,12 +387,6 @@ pub async fn download_asset(
     if !response.status().is_success() {
         return Err(format!("Download failed with status {}: Please try again later.", response.status()));
     }
-
-    let total_size = response.content_length().unwrap_or(asset.size);
-
-    // Log download size for user awareness
-    let size_mb = total_size as f64 / 1_048_576.0;
-    crate::debug::log(&format!("Download size: {:.1} MB ({} bytes)", size_mb, total_size));
 
     let _ = progress_tx.send(DownloadProgress::Started { total_bytes: total_size });
 

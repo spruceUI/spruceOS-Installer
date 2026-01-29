@@ -176,7 +176,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         info: "SpruceOS for the GKD Pixel 2.",
         supports_update_mode: false,  // Raw disk images only (.img.gz)
         update_directories: &["Retroarch", "spruce"],
-        allowed_extensions: None,  // Show all assets
+        allowed_extensions: Some(&[".img.gz"]),  // Only show .img.gz files
         asset_display_mappings: None,
     },
 ];
