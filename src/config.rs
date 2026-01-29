@@ -179,6 +179,15 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         allowed_extensions: None,  // Show all assets
         asset_display_mappings: None,
     },
+    RepoOption {
+        name: "Test Repo",
+        url: "Sundownersport/Test-Releases-for-Installer-App",
+        info: "Test repository for manifest.json feature.\nUsed for testing external asset hosting.",
+        supports_update_mode: false,
+        update_directories: &[],
+        allowed_extensions: None,  // Show all assets
+        asset_display_mappings: None,
+    },
 ];
 
 /// Index of the default repository selection (0 = first option)
