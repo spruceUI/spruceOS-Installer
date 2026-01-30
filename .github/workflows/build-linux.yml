@@ -73,12 +73,13 @@ jobs:
           TARGET_DIR="${TARGET_DIR%%.*}"
           cp "target/${TARGET_DIR}/release/spruceos-installer" "${{ matrix.artifact }}"
           chmod +x "${{ matrix.artifact }}"
+          tar -czf "${{ matrix.artifact }}.tar.gz" "${{ matrix.artifact }}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.tar.gz
 
   release:
     needs: [build-linux]
@@ -103,15 +104,15 @@ jobs:
             **Warning:** This is a pre-release build and may contain bugs.
 
             ## Downloads
-            - **Linux x64:** `spruceos-installer-linux-x64`
-            - **Linux ARM64:** `spruceos-installer-linux-arm64`
-            - **Linux i686 (32-bit):** `spruceos-installer-linux-i686`
-            - **Linux ARMv7:** `spruceos-installer-linux-armv7`
+            - **Linux x64:** `spruceos-installer-linux-x64.tar.gz`
+            - **Linux ARM64:** `spruceos-installer-linux-arm64.tar.gz`
+            - **Linux i686 (32-bit):** `spruceos-installer-linux-i686.tar.gz`
+            - **Linux ARMv7:** `spruceos-installer-linux-armv7.tar.gz`
 
             ## Linux Instructions
 
             1. Download the appropriate binary for your architecture
-            2. Make it executable: `chmod +x spruceos-installer-linux-*`
+            2. Extract: `tar -xzf spruceos-installer-linux-*.tar.gz`
             3. Run: `./spruceos-installer-linux-*`
             4. The installer will automatically request privileges via `pkexec` when needed
 
