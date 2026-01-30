@@ -1,6 +1,8 @@
 # SpruceOS Installer
 
 ## To-Do
+- Show error in pop-up when an install fails
+- add field to config.rs of a seperate display name for the repo selection for pop-ups
 - Checkboxes for additional packages (themes, ports, games)
 - Backup and restore functionality
 - Scrape boxart for ROMs
