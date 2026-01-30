@@ -1,5 +1,5 @@
 // Copyright (C) 2026 SpruceOS Team
-// Licensed under GPL-3.0-or-later
+// Licensed under CC BY-NC 4.0 (Creative Commons Attribution-NonCommercial 4.0 International)
 
 use serde::{Deserialize, Serialize};
 

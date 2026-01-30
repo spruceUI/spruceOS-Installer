@@ -1,5 +1,5 @@
 // Copyright (C) 2026 SpruceOS Team
-// Licensed under GPL-3.0-or-later
+// Licensed under CC BY-NC 4.0 (Creative Commons Attribution-NonCommercial 4.0 International)
 
 // Custom FAT32 formatter that works for drives > 32GB
 // Windows artificially limits FAT32 to 32GB, but the filesystem supports up to 2TB

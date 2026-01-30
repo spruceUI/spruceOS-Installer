@@ -4,7 +4,7 @@ version = "1.0.0"
 edition = "2021"
 description = "SpruceOS SD Card Installer"
 authors = ["SpruceOS Team (https://github.com/spruceUI)", "CMTag (https://github.com/CMTag)",  "NextUI Team (https://github.com/LoveRetro)", "Helaas (https://github.com/Helaas)"]
-license = "GPL-3.0-or-later"
+license = "CC-BY-NC-4.0"
 
 [features]
 default = []
