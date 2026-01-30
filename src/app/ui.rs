@@ -1087,6 +1087,7 @@ impl eframe::App for InstallerApp {
                         for line in repo_info.split('\n') {
                             // Parse markdown-style links: [text](url)
                             if line.contains('[') && line.contains("](") {
+                                ui.with_layout(egui::Layout::top_down(egui::Align::Center), |ui| {
                                 ui.horizontal_wrapped(|ui| {
                                     let mut remaining = line;
                                     while let Some(start) = remaining.find('[') {
@@ -1120,6 +1121,7 @@ impl eframe::App for InstallerApp {
                                     if !remaining.is_empty() {
                                         ui.colored_label(text_color, remaining);
                                     }
+                                });
                                 });
                             } else {
                                 // No links in this line
