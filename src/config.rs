@@ -95,6 +95,9 @@ pub struct AssetDisplayMapping {
 /// - `url`: GitHub repository in "owner/repo" format (e.g., "spruceUI/spruceOS")
 /// - `info`: Description text shown below the Install button when this repo is selected
 ///           Use \n for line breaks in longer informative messages
+///           Supports markdown-style links: [text](url)
+/// - `display_name`: Optional full name used in success/error popups (e.g., Some("SpruceOS Stable"))
+///                   Falls back to `name` if set to None
 /// - `supports_update_mode`: Whether to show the update mode checkbox for this repo
 ///                           Set to true for archive-based installs (.7z, .zip)
 ///                           Set to false for raw disk images (.img.gz) that always do full burns
@@ -113,6 +116,7 @@ pub struct AssetDisplayMapping {
 ///     name: "Stable",
 ///     url: "spruceUI/spruceOS",
 ///     info: "Stable releases with update support.\nSupported devices: Device X, Y, Z",
+///     display_name: Some("SpruceOS Stable"),  // Optional: Full name for popups
 ///     supports_update_mode: true,  // Archives can be updated
 ///     update_directories: &["Retroarch", "spruce"],
 ///     allowed_extensions: Some(&[".7z", ".zip"]),  // Only show archives
@@ -126,6 +130,7 @@ pub struct AssetDisplayMapping {
 ///     name: "TwigUI",
 ///     url: "spruceUI/twigUI",
 ///     info: "Raw disk images for GKD Pixel 2.\nFresh install only - wipes all data.",
+///     display_name: None,  // Falls back to "TwigUI"
 ///     supports_update_mode: false,  // Raw images always do full burns
 ///     update_directories: &[],  // Not used for raw images
 ///     allowed_extensions: Some(&[".img.gz", ".img"]),  // Only raw images
@@ -136,6 +141,7 @@ pub struct RepoOption {
     pub name: &'static str,
     pub url: &'static str,
     pub info: &'static str,
+    pub display_name: Option<&'static str>,  // Optional: Full name for popups/messages (falls back to name)
     pub supports_update_mode: bool,
     pub update_directories: &'static [&'static str],
     pub allowed_extensions: Option<&'static [&'static str]>,
@@ -147,6 +153,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "Stable",
         url: "spruceUI/spruceOS",
         info: "Stable releases of spruceOS.\nSupported devices: Miyoo A30\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
+        display_name: Some("SpruceOS Stable"),  // Display name for popups
         supports_update_mode: true,  // Archive-based (.7z)
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
@@ -156,6 +163,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "Nightlies",
         url: "spruceUI/spruceOSNightlies",
         info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick",
+        display_name: Some("SpruceOS Nightly"),  // Display name for popups
         supports_update_mode: true,  // Supports archives
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: None,  // Show all assets
@@ -165,6 +173,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "SprigUI",
         url: "spruceUI/sprigUI",
         info: "SpruceOS for the Miyoo Mini Flip.",
+        display_name: None,  // Falls back to "SprigUI"
         supports_update_mode: true,  // Archive-based (.7z)
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
@@ -174,6 +183,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "TwigUI",
         url: "spruceUI/twigUI",
         info: "SpruceOS for the GKD Pixel 2.",
+        display_name: None,  // Falls back to "TwigUI"
         supports_update_mode: false,  // Raw disk images only (.img.gz)
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: Some(&[".img.gz"]),  // Only show .img.gz files

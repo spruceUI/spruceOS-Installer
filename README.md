@@ -251,6 +251,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "Stable",                              // ← Button label in UI
         url: "spruceUI/spruceOS",                   // ← YOUR GitHub repo (owner/repo format)
         info: "Stable releases of SpruceOS.\nSupported devices: Miyoo A30",  // ← Info text (use \n for line breaks)
+        display_name: Some("SpruceOS Stable"),      // ← OPTIONAL: Full name for success/error popups (falls back to name if None)
         supports_update_mode: true,                  // ← Show update mode checkbox (true for archives, false for raw images)
         update_directories: &["Retroarch", "spruce"],  // ← Folders deleted during updates
         allowed_extensions: Some(&[".7z"]),          // ← File types to show (None = all)

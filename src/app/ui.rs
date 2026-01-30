@@ -560,8 +560,9 @@ impl eframe::App for InstallerApp {
                                 ui.add_space(12.0);
                                 ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "SUCCESS");
                                 ui.add_space(12.0);
-                                let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].name;
-                                ui.label(format!("{} has been successfully installed.", selected_repo_name));
+                                let repo = &REPO_OPTIONS[self.selected_repo_idx];
+                                let display_name = repo.display_name.unwrap_or(repo.name);
+                                ui.label(format!("{} has been successfully installed.", display_name));
                                 ui.add_space(15.0);
                                 ui.separator();
                                 ui.add_space(8.0);
@@ -629,8 +630,9 @@ impl eframe::App for InstallerApp {
                                 ui.add_space(12.0);
                                 ui.colored_label(ui.visuals().error_fg_color, "FAILED");
                                 ui.add_space(12.0);
-                                let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].name;
-                                ui.label(format!("{} installation failed.", selected_repo_name));
+                                let repo = &REPO_OPTIONS[self.selected_repo_idx];
+                                let display_name = repo.display_name.unwrap_or(repo.name);
+                                ui.label(format!("{} installation failed.", display_name));
                                 ui.add_space(8.0);
                                 ui.label("Check the log for details.");
                                 ui.add_space(15.0);
