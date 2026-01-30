@@ -1104,7 +1104,6 @@ impl eframe::App for InstallerApp {
                                             if let Some(url_end) = remaining.find(')') {
                                                 let url = &remaining[..url_end];
                                                 ui.hyperlink_to(link_text, url);
-                                                ui.colored_label(text_color, format!(" ({})", url));
                                                 remaining = &remaining[url_end + 1..];
                                             } else {
                                                 // Malformed link, render as-is
