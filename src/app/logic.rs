@@ -69,7 +69,8 @@ impl InstallerApp {
         if let Some(token) = &self.pause_token {
             self.log("Pausing download...");
             token.cancel();
-            // Don't clear pause token - we might need it for resume
+            // Clear pause token to hide button immediately (gets recreated on next install)
+            self.pause_token = None;
         }
     }
 

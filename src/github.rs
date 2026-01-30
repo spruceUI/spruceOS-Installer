@@ -162,7 +162,11 @@ pub async fn download_asset(
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(30))
         .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+        .map_err(|e| {
+            let err_msg = format!("Failed to create HTTP client: {}", e);
+            crate::debug::log(&format!("ERROR: {}", err_msg));
+            err_msg
+        })?;
 
     // Check for existing partial download
     let existing_state = DownloadState::load(dest_path).ok();
@@ -193,7 +197,11 @@ pub async fn download_asset(
         .header("User-Agent", USER_AGENT)
         .send()
         .await
-        .map_err(|e| format!("Failed to check download server capabilities: {}", e))?;
+        .map_err(|e| {
+            let err_msg = format!("Failed to check download server capabilities: {}", e);
+            crate::debug::log(&format!("ERROR: {}", err_msg));
+            err_msg
+        })?;
 
     // Get file size from HEAD response, fallback to asset.size if not available or zero
     let total_size = match head_response.content_length() {
@@ -362,13 +370,18 @@ async fn download_parallel(
                     crate::debug::log("Download paused");
                     break;
                 } else if e.contains("cancelled") {
+                    crate::debug::log("Download cancelled");
                     return Err("Download cancelled".to_string());
                 } else {
-                    return Err(format!("Chunk {} download failed: {}", chunk_index, e));
+                    let err_msg = format!("Chunk {} download failed: {}", chunk_index, e);
+                    crate::debug::log(&format!("ERROR: {}", err_msg));
+                    return Err(err_msg);
                 }
             }
             Err(e) => {
-                return Err(format!("Chunk {} task failed: {}", chunk_index, e));
+                let err_msg = format!("Chunk {} task failed: {}", chunk_index, e);
+                crate::debug::log(&format!("ERROR: {}", err_msg));
+                return Err(err_msg);
             }
         }
     }
@@ -435,20 +448,34 @@ async fn download_chunk(
         .header("Range", range_header)
         .send()
         .await
-        .map_err(|e| format!("Failed to start chunk download: {}", e))?;
+        .map_err(|e| {
+            let err_msg = format!("Failed to start chunk download: {}", e);
+            crate::debug::log(&format!("ERROR: {}", err_msg));
+            err_msg
+        })?;
 
     if !response.status().is_success() && response.status() != 206 {
-        return Err(format!("Chunk download failed with status: {}", response.status()));
+        let err_msg = format!("Chunk download failed with status: {}", response.status());
+        crate::debug::log(&format!("ERROR: {}", err_msg));
+        return Err(err_msg);
     }
 
     // Open file for writing at correct position
     let mut file = std::fs::OpenOptions::new()
         .write(true)
         .open(dest_path)
-        .map_err(|e| format!("Failed to open file for writing chunk: {}", e))?;
+        .map_err(|e| {
+            let err_msg = format!("Failed to open file for writing chunk: {}", e);
+            crate::debug::log(&format!("ERROR: {}", err_msg));
+            err_msg
+        })?;
 
     file.seek(SeekFrom::Start(start))
-        .map_err(|e| format!("Failed to seek to chunk position: {}", e))?;
+        .map_err(|e| {
+            let err_msg = format!("Failed to seek to chunk position: {}", e);
+            crate::debug::log(&format!("ERROR: {}", err_msg));
+            err_msg
+        })?;
 
     // Stream the chunk and report progress as we go
     let mut stream = response.bytes_stream();
@@ -464,10 +491,18 @@ async fn download_chunk(
         }
 
         let chunk = chunk_result
-            .map_err(|e| format!("Failed to download chunk data: {}", e))?;
+            .map_err(|e| {
+                let err_msg = format!("Failed to download chunk data: {}", e);
+                crate::debug::log(&format!("ERROR: {}", err_msg));
+                err_msg
+            })?;
 
         file.write_all(&chunk)
-            .map_err(|e| format!("Failed to write chunk data: {}", e))?;
+            .map_err(|e| {
+                let err_msg = format!("Failed to write chunk data: {}", e);
+                crate::debug::log(&format!("ERROR: {}", err_msg));
+                err_msg
+            })?;
 
         chunk_bytes_written += chunk.len() as u64;
 
@@ -486,7 +521,11 @@ async fn download_chunk(
     }
 
     file.flush()
-        .map_err(|e| format!("Failed to flush chunk data: {}", e))?;
+        .map_err(|e| {
+            let err_msg = format!("Failed to flush chunk data: {}", e);
+            crate::debug::log(&format!("ERROR: {}", err_msg));
+            err_msg
+        })?;
 
     crate::debug::log(&format!("Chunk complete: bytes {}-{} ({} bytes written)", start, end, chunk_bytes_written));
     Ok(())
