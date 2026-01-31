@@ -217,7 +217,7 @@ impl eframe::App for InstallerApp {
                 self.update_mode = false; // Reset update mode
                 self.was_just_paused = false; // Clear pause flag on error
                 progress.message.clear();
-            } else if progress.message == "CANCELLED" {
+            } else if progress.message == "CANCELLED" || progress.message.contains("Download paused at") {
                 self.state = AppState::Idle;
                 self.cancel_token = None;
                 self.update_mode = false; // Reset update mode
@@ -1026,7 +1026,11 @@ impl eframe::App for InstallerApp {
                         if !is_busy {
                             ui.add_enabled_ui(!is_busy && self.selected_drive_idx.is_some() && !self.drives.is_empty(), |ui| {
                                 // Use in-memory flag to show Resume (works for both Windows and Linux)
-                                let button_text = if self.was_just_paused { "Resume" } else { "Install" };
+                                let button_text = if self.was_just_paused {
+                                    "Resume"
+                                } else {
+                                    "Install"
+                                };
 
                                 let button = egui::Button::new(button_text)
                                     .min_size(egui::vec2(96.0, 48.0))

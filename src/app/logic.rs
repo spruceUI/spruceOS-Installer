@@ -75,6 +75,9 @@ impl InstallerApp {
             self.pause_token = None;
             // Set flag to show Resume button
             self.was_just_paused = true;
+            crate::debug::log(&format!("DEBUG: was_just_paused set to TRUE"));
+        } else {
+            crate::debug::log("DEBUG: pause_download called but no pause_token!");
         }
     }
 
