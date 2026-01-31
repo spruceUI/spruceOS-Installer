@@ -302,16 +302,12 @@ fn create_partition_script(disk_number: u32, drive_letter: char) -> String {
     // Remove the drive letter first to force Windows to release the volume,
     // then clean and recreate. Assign the letter back at the end.
     format!(
-        r#"select volume {}
-remove letter={}
-select disk {}
+        r#"select disk {}
 clean
 create partition primary
-select partition 1
-assign letter={}
 exit
 "#,
-        drive_letter, drive_letter, disk_number, drive_letter
+        disk_number
     )
 }
 
