@@ -222,12 +222,7 @@ impl eframe::App for InstallerApp {
                 self.cancel_token = None;
                 self.update_mode = false; // Reset update mode
                 self.manifest_display_name = None;
-                // Assume this might be a pause (could also be cancel, but we'll clear flag on new install)
-                self.was_just_paused = true;
                 progress.message.clear();
-            } else if progress.message.contains("Download paused at") {
-                // Detect pause even if CANCELLED message didn't arrive
-                self.was_just_paused = true;
             } else {
                 // Update state based on progress message
                 if progress.message.contains("Downloading") {

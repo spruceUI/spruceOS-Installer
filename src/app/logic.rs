@@ -62,6 +62,8 @@ impl InstallerApp {
             self.state = AppState::Cancelling;
             // Clear the cancel token so we don't try to cancel again
             self.cancel_token = None;
+            // Clear pause flag on cancel
+            self.was_just_paused = false;
         }
     }
 
@@ -71,6 +73,8 @@ impl InstallerApp {
             token.cancel();
             // Clear pause token to hide button immediately (gets recreated on next install)
             self.pause_token = None;
+            // Set flag to show Resume button
+            self.was_just_paused = true;
         }
     }
 
