@@ -78,6 +78,7 @@ pub struct InstallerApp {
     // Manifest support for external asset hosting
     pub(super) manifest_rx: Option<mpsc::UnboundedReceiver<Option<crate::manifest::Manifest>>>,
     pub(super) pending_release: Option<(Release, Option<&'static [&'static str]>)>,
+    pub(super) manifest_display_name: Option<String>,  // Repository display name from manifest.json
 
     // Theme editor
     pub(super) theme_state: ThemeEditorState,
@@ -208,6 +209,7 @@ impl InstallerApp {
             release_rx: None,
             manifest_rx: None,
             pending_release: None,
+            manifest_display_name: None,
             theme_state: ThemeEditorState::default(),
             show_theme_editor: false,
             show_log: false,

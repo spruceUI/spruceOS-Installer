@@ -53,6 +53,7 @@ GitHub has a 2GB file size limit for release assets. For larger firmware images,
 ```json
 {
   "version": "1.0",
+  "display_name": "MyOS Hotfix 3.3.3",
   "assets": [
     {
       "name": "MyOS-Device1.img.gz",
@@ -79,6 +80,13 @@ GitHub has a 2GB file size limit for release assets. For larger firmware images,
 - ❌ MEGA, GoFile, or other services requiring JavaScript/web interface
 
 **Manifest fields:**
+
+**Top-level fields:**
+- `version` (required) - Manifest format version (currently "1.0")
+- `display_name` (optional) - Repository display name shown in success/error messages (overrides config.rs display_name)
+- `assets` (required) - Array of asset objects
+
+**Asset fields:**
 - `name` (required) - Filename with extension (determines archive vs. burn mode)
 - `url` (required) - Direct HTTP/HTTPS download URL
 - `size` (required) - File size in bytes

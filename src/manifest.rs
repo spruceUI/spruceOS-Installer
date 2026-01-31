@@ -11,6 +11,13 @@ use serde::{Deserialize, Serialize};
 pub struct Manifest {
     /// Manifest format version (e.g., "1.0")
     pub version: String,
+
+    /// Optional repository-level display name (e.g., "spruceOS Hotfix 3.3.3")
+    /// This overrides the display_name from config.rs for this specific release
+    /// Falls back to config.rs display_name if not provided
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+
     /// List of external assets available for download
     pub assets: Vec<ManifestAsset>,
 }

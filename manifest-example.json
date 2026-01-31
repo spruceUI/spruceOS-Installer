@@ -1,5 +1,6 @@
 {
   "version": "1.0",
+  "display_name": "MyOS Hotfix 1.0.1",
   "assets": [
     {
       "name": "MyOS-RK3566.img.gz",

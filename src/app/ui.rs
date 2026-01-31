@@ -111,6 +111,12 @@ impl eframe::App for InstallerApp {
                         self.log("Using external assets from manifest.json");
                         crate::debug::log("Converting manifest assets to Asset structs");
 
+                        // Store manifest display name if provided
+                        if let Some(ref display_name) = manifest.display_name {
+                            self.manifest_display_name = Some(display_name.clone());
+                            crate::debug::log(&format!("Using manifest display name: {}", display_name));
+                        }
+
                         // Convert manifest assets to Asset structs
                         let manifest_assets: Vec<crate::github::Asset> = manifest.assets
                             .into_iter()
@@ -122,6 +128,7 @@ impl eframe::App for InstallerApp {
                     } else {
                         // No manifest found, use GitHub assets
                         crate::debug::log("No manifest found, using GitHub release assets");
+                        self.manifest_display_name = None;  // Clear any previous manifest display name
                         Self::filter_assets(release.assets.clone(), allowed_extensions)
                     };
 
@@ -212,6 +219,7 @@ impl eframe::App for InstallerApp {
                 self.state = AppState::Idle;
                 self.cancel_token = None;
                 self.update_mode = false; // Reset update mode
+                self.manifest_display_name = None;
                 progress.message.clear();
             } else {
                 // Update state based on progress message
@@ -414,6 +422,7 @@ impl eframe::App for InstallerApp {
                                                 self.fetched_release = None;
                                                 self.available_assets.clear();
                                                 self.selected_asset_idx = None;
+                                                self.manifest_display_name = None;
                                             }
                                         },
                                     );
@@ -486,6 +495,7 @@ impl eframe::App for InstallerApp {
                                                 self.fetched_release = None;
                                                 self.available_assets.clear();
                                                 self.selected_asset_idx = None;
+                                                self.manifest_display_name = None;
                                             }
                                         },
                                     );
@@ -561,7 +571,10 @@ impl eframe::App for InstallerApp {
                                 ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "SUCCESS");
                                 ui.add_space(12.0);
                                 let repo = &REPO_OPTIONS[self.selected_repo_idx];
-                                let display_name = repo.display_name.unwrap_or(repo.name);
+                                // Fallback chain: manifest display_name → config.rs display_name → repo name
+                                let display_name = self.manifest_display_name.as_deref()
+                                    .or(repo.display_name)
+                                    .unwrap_or(repo.name);
                                 ui.label(format!("{} has been successfully installed.", display_name));
                                 ui.add_space(15.0);
                                 ui.separator();
@@ -574,6 +587,7 @@ impl eframe::App for InstallerApp {
                                         |ui| {
                                             if ui.button("Close").clicked() {
                                                 self.state = AppState::Idle;
+                                                self.manifest_display_name = None;
                                             }
                                         },
                                     );
@@ -624,6 +638,7 @@ impl eframe::App for InstallerApp {
                                 ui.add_space(15.0);
                                 if ui.button("OK").clicked() {
                                     self.state = AppState::Idle;
+                                    self.manifest_display_name = None;
                                 }
                             }
                             AppState::Error => {
@@ -631,13 +646,17 @@ impl eframe::App for InstallerApp {
                                 ui.colored_label(ui.visuals().error_fg_color, "FAILED");
                                 ui.add_space(12.0);
                                 let repo = &REPO_OPTIONS[self.selected_repo_idx];
-                                let display_name = repo.display_name.unwrap_or(repo.name);
+                                // Fallback chain: manifest display_name → config.rs display_name → repo name
+                                let display_name = self.manifest_display_name.as_deref()
+                                    .or(repo.display_name)
+                                    .unwrap_or(repo.name);
                                 ui.label(format!("{} installation failed.", display_name));
                                 ui.add_space(8.0);
                                 ui.label("Check the log for details.");
                                 ui.add_space(15.0);
                                 if ui.button("OK").clicked() {
                                     self.state = AppState::Idle;
+                                    self.manifest_display_name = None;
                                 }
                             }
                             _ => {}
