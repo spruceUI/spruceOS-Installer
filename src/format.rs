@@ -429,13 +429,13 @@ fn disable_autoplay() -> Option<u32> {
 
         // Set the value to 0xFF to disable AutoPlay for all drive types
         let new_value: u32 = 0xFF;
+        let new_value_bytes = new_value.to_le_bytes();
         let set_result = RegSetValueExA(
             hkey,
             PCSTR(AUTOPLAY_REG_VALUE.as_ptr()),
             0,
             REG_DWORD,
-            Some(&new_value as *const u32 as *const u8),
-            std::mem::size_of::<u32>() as u32,
+            Some(&new_value_bytes),
         );
 
         let _ = RegCloseKey(hkey);
@@ -479,13 +479,13 @@ fn restore_autoplay(previous_value: Option<u32>) {
         match previous_value {
             Some(value) => {
                 // Restore the previous value
+                let value_bytes = value.to_le_bytes();
                 let set_result = RegSetValueExA(
                     hkey,
                     PCSTR(AUTOPLAY_REG_VALUE.as_ptr()),
                     0,
                     REG_DWORD,
-                    Some(&value as *const u32 as *const u8),
-                    std::mem::size_of::<u32>() as u32,
+                    Some(&value_bytes),
                 );
 
                 if set_result.is_ok() {
