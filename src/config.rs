@@ -153,7 +153,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "Stable",
         url: "spruceUI/spruceOS",
         info: "Stable releases of spruceOS.\nSupported devices: Miyoo A30\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
-        display_name: Some("SpruceOS Stable"),  // Display name for popups
+        display_name: Some("spruceOS Stable"),  // Display name for popups
         supports_update_mode: true,  // Archive-based (.7z)
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
@@ -163,7 +163,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "Nightlies",
         url: "spruceUI/spruceOSNightlies",
         info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick",
-        display_name: Some("SpruceOS Nightly"),  // Display name for popups
+        display_name: Some("spruceOS Nightly"),  // Display name for popups
         supports_update_mode: true,  // Supports archives
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: None,  // Show all assets
