@@ -237,13 +237,14 @@ pub async fn format_drive_fat32(
     }
 
     // Wait for diskpart to finish and Windows to settle
-    tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
+    tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
 
     let _ = progress_tx.send(FormatProgress::Formatting);
     let _ = progress_tx.send(FormatProgress::Progress { percent: 60 });
 
-    // Lock/dismount again in case Windows auto-mounted the new partition
-    lock_and_dismount_volume(drive_letter).await;
+    // Lock the physical disk to prevent Windows from interfering
+    crate::debug::log("Locking physical disk before formatting...");
+    lock_physical_disk(disk_number);
 
     let _ = progress_tx.send(FormatProgress::Progress { percent: 70 });
 
@@ -367,6 +368,74 @@ async fn lock_and_dismount_volume(drive_letter: char) {
     // Keep the handle open briefly to maintain the lock
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     drop(file);
+}
+
+#[cfg(target_os = "windows")]
+fn lock_physical_disk(disk_number: u32) {
+    use std::fs::OpenOptions;
+    use std::os::windows::io::AsRawHandle;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::IO::DeviceIoControl;
+
+    const FSCTL_LOCK_VOLUME: u32 = 0x00090018;
+    const FSCTL_DISMOUNT_VOLUME: u32 = 0x00090020;
+
+    let disk_path = format!("\\\\.\\PhysicalDrive{}", disk_number);
+
+    crate::debug::log(&format!("Attempting to lock physical disk: {}", disk_path));
+
+    // Try to open the physical disk
+    let file = match OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&disk_path)
+    {
+        Ok(f) => f,
+        Err(e) => {
+            crate::debug::log(&format!("Could not open physical disk: {}", e));
+            return;
+        }
+    };
+
+    let handle = HANDLE(file.as_raw_handle() as *mut std::ffi::c_void);
+    let mut bytes_returned = 0u32;
+
+    // Try to lock the disk
+    let lock_result = unsafe {
+        DeviceIoControl(
+            handle,
+            FSCTL_LOCK_VOLUME,
+            None,
+            0,
+            None,
+            0,
+            Some(&mut bytes_returned),
+            None,
+        )
+    };
+
+    if lock_result.is_ok() {
+        crate::debug::log("Physical disk locked successfully");
+    } else {
+        crate::debug::log("Could not lock physical disk (may already be unlocked)");
+    }
+
+    // Try to dismount any volumes on the disk
+    let _ = unsafe {
+        DeviceIoControl(
+            handle,
+            FSCTL_DISMOUNT_VOLUME,
+            None,
+            0,
+            None,
+            0,
+            Some(&mut bytes_returned),
+            None,
+        )
+    };
+
+    // Don't drop the file handle - let it stay open to maintain the lock
+    std::mem::forget(file);
 }
 
 #[cfg(target_os = "windows")]
