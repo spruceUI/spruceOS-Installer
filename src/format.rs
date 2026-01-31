@@ -410,18 +410,18 @@ fn disable_autoplay() -> Option<u32> {
         // Try to read the current value
         let mut old_value: u32 = 0;
         let mut value_size: u32 = std::mem::size_of::<u32>() as u32;
-        let mut value_type: u32 = 0;
+        let mut value_type = REG_DWORD;
 
         let read_result = RegQueryValueExA(
             hkey,
             PCSTR(AUTOPLAY_REG_VALUE.as_ptr()),
             None,
-            Some(&mut value_type),
+            Some(&mut value_type as *mut _),
             Some(&mut old_value as *mut u32 as *mut u8),
-            Some(&mut value_size),
+            Some(&mut value_size as *mut _),
         );
 
-        let previous_value = if read_result.is_ok() && value_type == REG_DWORD.0 {
+        let previous_value = if read_result.is_ok() && value_type == REG_DWORD {
             Some(old_value)
         } else {
             None // Value didn't exist
