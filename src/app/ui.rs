@@ -209,18 +209,25 @@ impl eframe::App for InstallerApp {
                 self.state = AppState::Complete;
                 self.cancel_token = None;
                 self.update_mode = false; // Reset update mode
+                self.was_just_paused = false; // Clear pause flag on completion
                 progress.message.clear();
             } else if progress.message == "ERROR" {
                 self.state = AppState::Error;
                 self.cancel_token = None;
                 self.update_mode = false; // Reset update mode
+                self.was_just_paused = false; // Clear pause flag on error
                 progress.message.clear();
             } else if progress.message == "CANCELLED" {
                 self.state = AppState::Idle;
                 self.cancel_token = None;
                 self.update_mode = false; // Reset update mode
                 self.manifest_display_name = None;
+                // Assume this might be a pause (could also be cancel, but we'll clear flag on new install)
+                self.was_just_paused = true;
                 progress.message.clear();
+            } else if progress.message.contains("Download paused at") {
+                // Detect pause even if CANCELLED message didn't arrive
+                self.was_just_paused = true;
             } else {
                 // Update state based on progress message
                 if progress.message.contains("Downloading") {
@@ -1023,23 +1030,8 @@ impl eframe::App for InstallerApp {
 
                         if !is_busy {
                             ui.add_enabled_ui(!is_busy && self.selected_drive_idx.is_some() && !self.drives.is_empty(), |ui| {
-                                // Check if there's a partial download to resume
-                                let temp_dir = std::env::temp_dir();
-                                let has_partial = std::fs::read_dir(&temp_dir)
-                                    .ok()
-                                    .map(|entries| {
-                                        entries
-                                            .filter_map(|e| e.ok())
-                                            .any(|e| {
-                                                e.path()
-                                                    .extension()
-                                                    .map(|ext| ext == "partial")
-                                                    .unwrap_or(false)
-                                            })
-                                    })
-                                    .unwrap_or(false);
-
-                                let button_text = if has_partial { "Resume" } else { "Install" };
+                                // Use in-memory flag to show Resume (works for both Windows and Linux)
+                                let button_text = if self.was_just_paused { "Resume" } else { "Install" };
 
                                 let button = egui::Button::new(button_text)
                                     .min_size(egui::vec2(96.0, 48.0))
@@ -1049,7 +1041,7 @@ impl eframe::App for InstallerApp {
                                 }
 
                                 // Show info if partial download exists
-                                if has_partial {
+                                if self.was_just_paused {
                                     ui.label(
                                         egui::RichText::new("(partial download detected)")
                                             .small()

@@ -149,6 +149,7 @@ impl InstallerApp {
 
     pub(super) fn fetch_and_check_assets(&mut self, ctx: egui::Context) {
         self.state = AppState::FetchingAssets;
+        self.was_just_paused = false; // Clear pause flag when starting new install
         self.log("Fetching available downloads...");
 
         let repo = &REPO_OPTIONS[self.selected_repo_idx];

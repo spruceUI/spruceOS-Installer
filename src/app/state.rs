@@ -64,6 +64,9 @@ pub struct InstallerApp {
     // Pause token for pausing downloads
     pub(super) pause_token: Option<CancellationToken>,
 
+    // Track if download was just paused (for Resume button)
+    pub(super) was_just_paused: bool,
+
     // Channel for background drive updates
     pub(super) drive_rx: mpsc::UnboundedReceiver<Vec<DriveInfo>>,
     pub(super) drive_poll_tx: mpsc::UnboundedSender<bool>,
@@ -200,6 +203,7 @@ impl InstallerApp {
             installed_drive: None,
             cancel_token: None,
             pause_token: None,
+            was_just_paused: false,
             drive_rx: rx,
             drive_poll_tx: poll_tx,
             manual_refresh_tx: manual_refresh_tx,
