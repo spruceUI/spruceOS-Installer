@@ -16,6 +16,11 @@ use std::os::windows::process::CommandExt;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+#[cfg(target_os = "windows")]
+const AUTOPLAY_REG_KEY: &[u8] = b"Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\Explorer\0";
+#[cfg(target_os = "windows")]
+const AUTOPLAY_REG_VALUE: &[u8] = b"NoDriveTypeAutoRun\0";
+
 #[derive(Debug, Clone)]
 pub enum FormatProgress {
     Started,
@@ -178,6 +183,9 @@ pub async fn format_drive_fat32(
     let _ = progress_tx.send(FormatProgress::Progress { percent: 20 });
     crate::debug::log("Running diskpart to clean and partition disk...");
 
+    // Disable AutoPlay to prevent Windows from opening File Explorer
+    let previous_autoplay = disable_autoplay();
+
     // Create diskpart script for partitioning only (no format)
     let script = create_partition_script(disk_number, drive_letter);
 
@@ -214,6 +222,7 @@ pub async fn format_drive_fat32(
         || stdout.contains("Access is denied")
     {
         crate::debug::log(&format!("Diskpart error detected"));
+        restore_autoplay(previous_autoplay);
         return Err(format!("Diskpart error:\n{}", stdout));
     }
 
@@ -223,6 +232,7 @@ pub async fn format_drive_fat32(
     // Check for cancellation before format
     if cancel_token.is_cancelled() {
         let _ = progress_tx.send(FormatProgress::Cancelled);
+        restore_autoplay(previous_autoplay);
         return Err("Format cancelled".to_string());
     }
 
@@ -239,8 +249,14 @@ pub async fn format_drive_fat32(
 
     // Use our custom FAT32 formatter with disk number (writes to PhysicalDrive directly)
     crate::debug::log("Starting custom FAT32 format...");
-    crate::fat32::format_fat32_large(disk_number, volume_label, disk_size, progress_tx.clone())
-        .await?;
+    let format_result = crate::fat32::format_fat32_large(disk_number, volume_label, disk_size, progress_tx.clone())
+        .await;
+
+    // Restore AutoPlay settings before checking result
+    restore_autoplay(previous_autoplay);
+
+    // Check if formatting succeeded
+    format_result?;
 
     let _ = progress_tx.send(FormatProgress::Progress { percent: 95 });
     crate::debug::log("FAT32 format completed, waiting for Windows to recognize filesystem...");
@@ -356,6 +372,145 @@ async fn lock_and_dismount_volume(drive_letter: char) {
     // Keep the handle open briefly to maintain the lock
     tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
     drop(file);
+}
+
+#[cfg(target_os = "windows")]
+fn disable_autoplay() -> Option<u32> {
+    use windows::Win32::System::Registry::{
+        RegCreateKeyExA, RegQueryValueExA, RegSetValueExA, RegCloseKey,
+        HKEY, HKEY_CURRENT_USER, KEY_READ, KEY_WRITE, REG_OPTION_NON_VOLATILE,
+        REG_DWORD, REG_OPENED_EXISTING_KEY,
+    };
+    use windows::core::PCSTR;
+
+    crate::debug::log("Disabling AutoPlay to prevent File Explorer from opening...");
+
+    unsafe {
+        let mut hkey: HKEY = HKEY::default();
+        let mut disposition = REG_OPENED_EXISTING_KEY;
+
+        // Open or create the registry key
+        let result = RegCreateKeyExA(
+            HKEY_CURRENT_USER,
+            PCSTR(AUTOPLAY_REG_KEY.as_ptr()),
+            0,
+            None,
+            REG_OPTION_NON_VOLATILE,
+            KEY_READ | KEY_WRITE,
+            None,
+            &mut hkey,
+            Some(&mut disposition),
+        );
+
+        if result.is_err() {
+            crate::debug::log("Failed to open registry key for AutoPlay");
+            return None;
+        }
+
+        // Try to read the current value
+        let mut old_value: u32 = 0;
+        let mut value_size: u32 = std::mem::size_of::<u32>() as u32;
+        let mut value_type: u32 = 0;
+
+        let read_result = RegQueryValueExA(
+            hkey,
+            PCSTR(AUTOPLAY_REG_VALUE.as_ptr()),
+            None,
+            Some(&mut value_type),
+            Some(&mut old_value as *mut u32 as *mut u8),
+            Some(&mut value_size),
+        );
+
+        let previous_value = if read_result.is_ok() && value_type == REG_DWORD.0 {
+            Some(old_value)
+        } else {
+            None // Value didn't exist
+        };
+
+        // Set the value to 0xFF to disable AutoPlay for all drive types
+        let new_value: u32 = 0xFF;
+        let set_result = RegSetValueExA(
+            hkey,
+            PCSTR(AUTOPLAY_REG_VALUE.as_ptr()),
+            0,
+            REG_DWORD,
+            Some(&new_value as *const u32 as *const u8),
+            std::mem::size_of::<u32>() as u32,
+        );
+
+        let _ = RegCloseKey(hkey);
+
+        if set_result.is_ok() {
+            crate::debug::log("AutoPlay disabled successfully");
+            previous_value
+        } else {
+            crate::debug::log("Failed to disable AutoPlay");
+            None
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn restore_autoplay(previous_value: Option<u32>) {
+    use windows::Win32::System::Registry::{
+        RegOpenKeyExA, RegSetValueExA, RegDeleteValueA, RegCloseKey,
+        HKEY, HKEY_CURRENT_USER, KEY_WRITE, REG_DWORD,
+    };
+    use windows::core::PCSTR;
+
+    crate::debug::log("Restoring AutoPlay settings...");
+
+    unsafe {
+        let mut hkey: HKEY = HKEY::default();
+
+        let result = RegOpenKeyExA(
+            HKEY_CURRENT_USER,
+            PCSTR(AUTOPLAY_REG_KEY.as_ptr()),
+            0,
+            KEY_WRITE,
+            &mut hkey,
+        );
+
+        if result.is_err() {
+            crate::debug::log("Failed to open registry key to restore AutoPlay");
+            return;
+        }
+
+        match previous_value {
+            Some(value) => {
+                // Restore the previous value
+                let set_result = RegSetValueExA(
+                    hkey,
+                    PCSTR(AUTOPLAY_REG_VALUE.as_ptr()),
+                    0,
+                    REG_DWORD,
+                    Some(&value as *const u32 as *const u8),
+                    std::mem::size_of::<u32>() as u32,
+                );
+
+                if set_result.is_ok() {
+                    crate::debug::log(&format!("AutoPlay restored to previous value: {}", value));
+                } else {
+                    crate::debug::log("Failed to restore AutoPlay value");
+                }
+            }
+            None => {
+                // Value didn't exist before, so delete it
+                let delete_result = RegDeleteValueA(
+                    hkey,
+                    PCSTR(AUTOPLAY_REG_VALUE.as_ptr()),
+                );
+
+                if delete_result.is_ok() {
+                    crate::debug::log("AutoPlay value removed (didn't exist before)");
+                } else {
+                    crate::debug::log("Failed to delete AutoPlay value");
+                }
+            }
+        }
+
+        let _ = RegCloseKey(hkey);
+    }
 }
 
 // =============================================================================
