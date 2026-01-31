@@ -32,41 +32,10 @@ jobs:
           name: spruceos-installer-windows.exe
           path: spruceos-installer-windows.exe
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: spruceos-installer-windows.exe
-          path: artifacts
-
       - name: Upload to Beta Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: beta-${{ github.ref_name }}
-          name: Beta Build (${{ github.ref_name }})
-          body: |
-            Automated beta build from the `${{ github.ref_name }}` branch.
-
-            **Warning:** This is a pre-release build and may contain bugs.
-
-            ## Downloads
-            - **Windows (x64):** `spruceos-installer-windows.exe`
-
-            ## Windows Instructions
-
-            1. Download `spruceos-installer-windows.exe`
-            2. Run the executable
-            3. If Windows SmartScreen appears, click "More info" → "Run anyway" (app is not code-signed)
-            4. The installer will automatically request administrator privileges when needed
-
-            The installer supports Windows 7 and later (x64).
-          prerelease: true
-          files: artifacts/*
+          files: spruceos-installer-windows.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

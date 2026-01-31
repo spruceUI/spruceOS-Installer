@@ -4,7 +4,75 @@ on:
   workflow_dispatch:
 
 jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Create Beta Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: beta-${{ github.ref_name }}
+          name: Beta Build (${{ github.ref_name }})
+          body: |
+            Automated beta build from the `${{ github.ref_name }}` branch.
+
+            **Warning:** This is a pre-release build and may contain bugs.
+
+            ## Downloads
+
+            ### Windows
+            - **spruceos-installer-windows.exe**
+
+            ### Linux
+            - **Linux x64:** `spruceos-installer-linux-x64.tar.gz`
+            - **Linux ARM64:** `spruceos-installer-linux-arm64.tar.gz`
+            - **Linux i686 (32-bit):** `spruceos-installer-linux-i686.tar.gz`
+            - **Linux ARMv7:** `spruceos-installer-linux-armv7.tar.gz`
+
+            ### macOS
+            - **SpruceOS-Installer-macOS-Universal.zip** (Apple Silicon + Intel)
+
+            ---
+
+            ## Installation Instructions
+
+            ### Windows
+            1. Download `spruceos-installer-windows.exe`
+            2. Run the executable
+            3. If Windows SmartScreen appears, click "More info" → "Run anyway" (app is not code-signed)
+            4. The installer will automatically request administrator privileges when needed
+
+            The installer supports Windows 7 and later (x64).
+
+            ### Linux
+            1. Download the appropriate binary for your architecture
+            2. Extract: `tar -xzf spruceos-installer-linux-*.tar.gz`
+            3. Run: `./spruceos-installer-linux-*`
+            4. The installer will automatically request privileges via `pkexec` when needed
+
+            **Note:** Requires a desktop environment with `pkexec` support (most modern Linux distributions).
+
+            ### macOS
+            1. Extract the zip file
+            2. Double-click `launch-installer.command` to run
+
+            **If the app can't see your SD card:**
+            - You may need to grant Full Disk Access in System Settings → Privacy & Security
+            - Add either Terminal (if running via command line) or the app itself
+            - Restart the app after granting access
+
+            **Opening unsigned apps:** https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac
+
+            ---
+            Universal binary for Apple Silicon (M1/M2/M3/M4) and Intel Macs. Not code-signed.
+          prerelease: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   trigger-builds:
+    needs: create-release
     runs-on: ubuntu-latest
     steps:
       - name: Trigger Windows Build
@@ -44,9 +112,12 @@ jobs:
         run: |
           echo "## Build All Platforms" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Release created with complete instructions for all platforms." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
           echo "Triggered builds for:" >> $GITHUB_STEP_SUMMARY
           echo "- Windows" >> $GITHUB_STEP_SUMMARY
           echo "- Linux" >> $GITHUB_STEP_SUMMARY
           echo "- macOS (Universal)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Check the [Actions tab](/${{ github.repository }}/actions) for build progress." >> $GITHUB_STEP_SUMMARY
+          echo "Artifacts will be added to the release as builds complete." >> $GITHUB_STEP_SUMMARY

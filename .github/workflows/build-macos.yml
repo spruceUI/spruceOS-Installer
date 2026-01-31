@@ -66,15 +66,15 @@ jobs:
           lipo -create -output spruceos-installer-universal \
             target/aarch64-apple-darwin/release/spruceos-installer \
             target/x86_64-apple-darwin/release/spruceos-installer
-          
+
           # Verify the universal binary contains both architectures
           echo "Universal binary architectures:"
           lipo -info spruceos-installer-universal
-          
+
           # Create .app bundle structure (no spaces in name)
           mkdir -p "SpruceOSInstaller.app/Contents/MacOS"
           mkdir -p "SpruceOSInstaller.app/Contents/Resources"
-          
+
           # Copy universal binary
           cp spruceos-installer-universal "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
           chmod +x "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
@@ -86,10 +86,10 @@ jobs:
           # Copy 7zz binary to Resources so it inherits app's unquarantine status
           cp "assets/Mac/7zz" "SpruceOSInstaller.app/Contents/Resources/7zz"
           chmod +x "SpruceOSInstaller.app/Contents/Resources/7zz"
-          
+
           # Remove quarantine attribute to prevent macOS Gatekeeper issues
           xattr -cr "SpruceOSInstaller.app"
-          
+
           # Create zip for distribution with both app and launcher
           zip -r "SpruceOS-Installer-macOS-Universal.zip" "SpruceOSInstaller.app" "launch-installer.command"
 
@@ -99,50 +99,10 @@ jobs:
           name: SpruceOS-Installer-macOS-Universal
           path: SpruceOS-Installer-macOS-Universal.zip
 
-  release:
-    needs: build
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
       - name: Upload to Beta Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: beta-${{ github.ref_name }}
-          name: Beta Build (${{ github.ref_name }})
-          body: |
-            Automated beta build from the `${{ github.ref_name }}` branch.
-
-            **Warning:** This is a pre-release build and may contain bugs.
-
-            ## macOS Setup Instructions
-
-            ### First Time Setup:
-
-            **Grant Terminal Full Disk Access:**
-            1. Open **System Settings** → **Privacy & Security** → **Full Disk Access**
-            2. Click the **lock icon** and enter your password
-            3. Click **+** and add **Applications/Utilities/Terminal.app**
-            4. Check the box next to Terminal
-            5. **Quit and reopen Terminal**
-
-            ### Running the Installer:
-            1. Extract the zip file
-            2. Double-click `launch-installer.command`
-
-            **Alternative:** Right-click "SpruceOSInstaller.app" → "Open" → "Open"
-
-            **Troubleshooting:** If the installer can't access your SD card, verify Terminal has Full Disk Access and restart Terminal.
-
-            ---
-            Universal binary for Apple Silicon (M1/M2/M3/M4) and Intel Macs. Not code-signed.
-          prerelease: true
-          files: artifacts/**/*
+          files: SpruceOS-Installer-macOS-Universal.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

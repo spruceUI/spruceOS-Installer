@@ -81,43 +81,10 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.artifact }}.tar.gz
 
-  release:
-    needs: [build-linux]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-
       - name: Upload to Beta Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: beta-${{ github.ref_name }}
-          name: Beta Build (${{ github.ref_name }})
-          body: |
-            Automated beta build from the `${{ github.ref_name }}` branch.
-
-            **Warning:** This is a pre-release build and may contain bugs.
-
-            ## Downloads
-            - **Linux x64:** `spruceos-installer-linux-x64.tar.gz`
-            - **Linux ARM64:** `spruceos-installer-linux-arm64.tar.gz`
-            - **Linux i686 (32-bit):** `spruceos-installer-linux-i686.tar.gz`
-            - **Linux ARMv7:** `spruceos-installer-linux-armv7.tar.gz`
-
-            ## Linux Instructions
-
-            1. Download the appropriate binary for your architecture
-            2. Extract: `tar -xzf spruceos-installer-linux-*.tar.gz`
-            3. Run: `./spruceos-installer-linux-*`
-            4. The installer will automatically request privileges via `pkexec` when needed
-
-            **Note:** Requires a desktop environment with `pkexec` support (most modern Linux distributions).
-          prerelease: true
-          files: artifacts/**/*
+          files: ${{ matrix.artifact }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
