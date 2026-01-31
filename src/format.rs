@@ -308,7 +308,6 @@ select disk {}
 clean
 create partition primary
 select partition 1
-active
 assign letter={}
 exit
 "#,
