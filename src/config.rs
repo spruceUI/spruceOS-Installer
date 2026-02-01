@@ -155,7 +155,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         info: "Stable releases of spruceOS.\nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
         display_name: Some("spruceOS Stable"),  // Display name for popups
         supports_update_mode: true,  // Archive-based (.7z)
-        update_directories: &["Retroarch", "spruce"],
+        update_directories: &[".tmp_update", "App", "Emu", "Icons", "miyoo", "miyoo355", "RetroArch", "spruce", "trimui"],
         allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
         asset_display_mappings: None,
     },
@@ -165,7 +165,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick",
         display_name: Some("spruceOS Nightly"),  // Display name for popups
         supports_update_mode: true,  // Supports archives
-        update_directories: &["Retroarch", "spruce"],
+        update_directories: &[".tmp_update", "App", "Emu", "Icons", "miyoo", "miyoo355", "RetroArch", "spruce", "trimui"],
         allowed_extensions: None,  // Show all assets
         asset_display_mappings: None,
     },

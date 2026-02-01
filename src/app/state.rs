@@ -24,6 +24,7 @@ pub enum AppState {
     Extracting,
     Copying,
     Burning,
+    ScrapingBoxart,
     Complete,
     Ejecting,
     Ejected,
@@ -88,6 +89,11 @@ pub struct InstallerApp {
     pub(super) show_theme_editor: bool,
     pub(super) show_log: bool,
     pub(super) last_system_dark_mode: bool,
+
+    // Boxart scraper
+    pub(super) show_scraper_window: bool,
+    pub(super) scraper_roms_path: String,
+    pub(super) scraper_stats: Option<crate::boxart_scraper::ScrapeStats>,
 }
 
 /// Get available disk space for a given path (in bytes)
@@ -218,6 +224,9 @@ impl InstallerApp {
             show_theme_editor: false,
             show_log: false,
             last_system_dark_mode: is_dark,
+            show_scraper_window: false,
+            scraper_roms_path: String::new(),
+            scraper_stats: None,
         };
 
         app.theme_state.current_config = app.get_theme_config();
