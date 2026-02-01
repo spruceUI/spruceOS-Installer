@@ -6,6 +6,9 @@
 - Checkboxes for additional packages (themes, ports, games)
 - Backup and restore functionality
 - Scrape boxart for ROMs
+- Code cleanup: Remove unused `lock_physical_disk()` function in format.rs (lines 370-436)
+- Code cleanup: Update outdated comment in format.rs (lines 299-301) - no longer removes/reassigns drive letter
+- Code cleanup: Clear build warnings and remove dead code
 
 ---
 
