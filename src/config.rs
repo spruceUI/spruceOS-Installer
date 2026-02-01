@@ -152,7 +152,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
         name: "Stable",
         url: "spruceUI/spruceOS",
-        info: "Stable releases of spruceOS.\nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick",\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
+        info: "Stable releases of spruceOS.\nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
         display_name: Some("spruceOS Stable"),  // Display name for popups
         supports_update_mode: true,  // Archive-based (.7z)
         update_directories: &["Retroarch", "spruce"],
