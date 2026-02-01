@@ -226,7 +226,7 @@ pub async fn format_fat32_large(
     use windows::Win32::Foundation::{HANDLE, CloseHandle, GENERIC_READ, GENERIC_WRITE};
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, SetFilePointerEx, WriteFile, FILE_BEGIN,
-        FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+        FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_SHARE_MODE, OPEN_EXISTING,
         FILE_FLAG_NO_BUFFERING, FILE_FLAG_WRITE_THROUGH,
     };
     use windows::core::PCWSTR;
@@ -243,17 +243,35 @@ pub async fn format_fat32_large(
         .chain(Some(0))
         .collect();
 
+    // Try to open with exclusive access first
     let handle = unsafe {
         CreateFileW(
             PCWSTR(disk_path.as_ptr()),
             (GENERIC_READ.0 | GENERIC_WRITE.0).into(),
-            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            FILE_SHARE_MODE(0), // Exclusive access - no sharing
             None,
             OPEN_EXISTING,
             FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH,
             None,
         )
-    }.map_err(|e| format!("Failed to open disk {}: {}", disk_number, e))?;
+    };
+
+    // If exclusive fails, try with shared access
+    let handle = if handle.is_err() {
+        unsafe {
+            CreateFileW(
+                PCWSTR(disk_path.as_ptr()),
+                (GENERIC_READ.0 | GENERIC_WRITE.0).into(),
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                None,
+                OPEN_EXISTING,
+                FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH,
+                None,
+            )
+        }.map_err(|e| format!("Failed to open disk {}: {}", disk_number, e))?
+    } else {
+        handle.unwrap()
+    };
 
     // Helper to write a sector at a specific position
     let write_sector = |h: HANDLE, offset: u64, data: &[u8; 512]| -> Result<(), String> {

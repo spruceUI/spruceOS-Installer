@@ -237,14 +237,11 @@ pub async fn format_drive_fat32(
     }
 
     // Wait for diskpart to finish and Windows to settle
-    tokio::time::sleep(tokio::time::Duration::from_millis(2000)).await;
+    // Give Windows extra time to release the disk after creating the partition
+    tokio::time::sleep(tokio::time::Duration::from_millis(3000)).await;
 
     let _ = progress_tx.send(FormatProgress::Formatting);
     let _ = progress_tx.send(FormatProgress::Progress { percent: 60 });
-
-    // Lock the physical disk to prevent Windows from interfering
-    crate::debug::log("Locking physical disk before formatting...");
-    lock_physical_disk(disk_number);
 
     let _ = progress_tx.send(FormatProgress::Progress { percent: 70 });
 
