@@ -554,7 +554,7 @@ mod regex {
             if self.pattern == r"\(.*?\)" {
                 // Remove content in parentheses
                 let mut result = String::new();
-                let mut depth = 0;
+                let mut depth: u32 = 0;
                 for c in text.chars() {
                     match c {
                         '(' => depth += 1,
