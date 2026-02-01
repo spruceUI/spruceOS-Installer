@@ -549,7 +549,7 @@ mod regex {
             })
         }
 
-        pub fn replace_all(&self, text: &str, replacement: &str) -> std::borrow::Cow<str> {
+        pub fn replace_all<'a>(&self, text: &'a str, replacement: &str) -> std::borrow::Cow<'a, str> {
             // Simple implementation for our specific patterns
             if self.pattern == r"\(.*?\)" {
                 // Remove content in parentheses
