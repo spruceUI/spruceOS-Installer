@@ -459,7 +459,79 @@ impl BoxArtScraper {
         Ok(stats)
     }
 
-    /// Scan a system directory for ROMs that need boxart
+    /// Scrape boxart for only the selected subfolders
+    pub async fn scrape_selected_folders(
+        &mut self,
+        roms_path: &Path,
+        folders: &[String],
+        progress_tx: mpsc::UnboundedSender<ScrapeProgress>,
+    ) -> Result<ScrapeStats, String> {
+        let mut stats = ScrapeStats::default();
+        let mut tasks = Vec::new();
+
+        for folder in folders {
+            let sys_path = roms_path.join(folder);
+            if !sys_path.is_dir() {
+                continue;
+            }
+            if Self::get_ra_alias(folder).is_none() {
+                continue;
+            }
+            tasks.extend(self.scan_system_roms(&sys_path, folder).await?);
+        }
+
+        stats.total = tasks.len();
+        let _ = progress_tx.send(ScrapeProgress::Started { total: stats.total });
+
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(8));
+        let mut handles = Vec::new();
+
+        for (idx, (sys_name, rom_name, dest_path)) in tasks.into_iter().enumerate() {
+            let permit = semaphore.clone().acquire_owned().await.map_err(|e| e.to_string())?;
+            let image_name = self.find_image_name(&sys_name, &rom_name);
+            let progress_tx = progress_tx.clone();
+            let dest_path = dest_path.clone();
+            let sys_name = sys_name.clone();
+
+            let handle = tokio::spawn(async move {
+                let result = if let Some(img_name) = image_name {
+                    let scraper = BoxArtScraper::new();
+                    scraper.download_boxart(&sys_name, &img_name, &dest_path).await
+                } else {
+                    Err("No matching image found".to_string())
+                };
+
+                let status = match &result {
+                    Ok(_) => "Success".to_string(),
+                    Err(e) => format!("Failed: {}", e),
+                };
+
+                let _ = progress_tx.send(ScrapeProgress::Progress {
+                    current: idx + 1,
+                    rom_name: rom_name.clone(),
+                    status,
+                });
+
+                drop(permit);
+                result
+            });
+
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            match handle.await {
+                Ok(Ok(_)) => stats.succeeded += 1,
+                Ok(Err(_)) => stats.failed += 1,
+                Err(_) => stats.failed += 1,
+            }
+        }
+
+        let _ = progress_tx.send(ScrapeProgress::Completed(stats.clone()));
+        Ok(stats)
+    }
+
+    /// Scan a system directory (and subdirectories) for ROMs that need boxart
     async fn scan_system_roms(
         &self,
         sys_path: &Path,
@@ -468,40 +540,54 @@ impl BoxArtScraper {
         let mut tasks = Vec::new();
         let extensions = Self::get_common_extensions(sys_name);
 
-        let mut entries = fs::read_dir(sys_path)
-            .await
-            .map_err(|e| format!("Failed to read system directory: {}", e))?;
+        let mut dirs_to_scan = vec![sys_path.to_path_buf()];
 
-        while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
-            let path = entry.path();
+        while let Some(dir) = dirs_to_scan.pop() {
+            let mut entries = fs::read_dir(&dir)
+                .await
+                .map_err(|e| format!("Failed to read directory: {}", e))?;
 
-            if !path.is_file() {
-                continue;
+            while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
+                let path = entry.path();
+
+                if path.is_dir() {
+                    // Skip the Imgs directory itself
+                    let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    if dir_name != "Imgs" {
+                        dirs_to_scan.push(path);
+                    }
+                    continue;
+                }
+
+                if !path.is_file() {
+                    continue;
+                }
+
+                let file_name = path.file_name()
+                    .and_then(|n| n.to_str())
+                    .ok_or_else(|| "Invalid filename".to_string())?;
+
+                // Check if file has a supported extension
+                if !extensions.iter().any(|ext| file_name.to_lowercase().ends_with(ext)) {
+                    continue;
+                }
+
+                let rom_name = path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .ok_or_else(|| "Invalid ROM name".to_string())?
+                    .to_string();
+
+                // All boxart goes into the system-level Imgs folder
+                let imgs_dir = sys_path.join("Imgs");
+                let image_path = imgs_dir.join(format!("{}.png", rom_name));
+
+                // Skip if image already exists
+                if image_path.exists() {
+                    continue;
+                }
+
+                tasks.push((sys_name.to_string(), rom_name, image_path));
             }
-
-            let file_name = path.file_name()
-                .and_then(|n| n.to_str())
-                .ok_or_else(|| "Invalid filename".to_string())?;
-
-            // Check if file has a supported extension
-            if !extensions.iter().any(|ext| file_name.to_lowercase().ends_with(ext)) {
-                continue;
-            }
-
-            let rom_name = path.file_stem()
-                .and_then(|s| s.to_str())
-                .ok_or_else(|| "Invalid ROM name".to_string())?
-                .to_string();
-
-            let imgs_dir = sys_path.join("Imgs");
-            let image_path = imgs_dir.join(format!("{}.png", rom_name));
-
-            // Skip if image already exists
-            if image_path.exists() {
-                continue;
-            }
-
-            tasks.push((sys_name.to_string(), rom_name, image_path));
         }
 
         Ok(tasks)

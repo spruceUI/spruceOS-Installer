@@ -94,6 +94,7 @@ pub struct InstallerApp {
     pub(super) show_scraper_window: bool,
     pub(super) scraper_roms_path: String,
     pub(super) scraper_stats: Option<crate::boxart_scraper::ScrapeStats>,
+    pub(super) scraper_folders: Vec<(String, bool)>,
 }
 
 /// Get available disk space for a given path (in bytes)
@@ -227,6 +228,7 @@ impl InstallerApp {
             show_scraper_window: false,
             scraper_roms_path: String::new(),
             scraper_stats: None,
+            scraper_folders: Vec::new(),
         };
 
         app.theme_state.current_config = app.get_theme_config();

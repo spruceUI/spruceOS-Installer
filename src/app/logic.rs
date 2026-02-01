@@ -1086,6 +1086,10 @@ impl InstallerApp {
         let log_messages = self.log_messages.clone();
         let ctx_clone = ctx.clone();
         let roms_path_clone = roms_path.clone();
+        let selected_folders: Vec<String> = self.scraper_folders.iter()
+            .filter(|(_, selected)| *selected)
+            .map(|(name, _)| name.clone())
+            .collect();
 
         // Store stats in a shared location
         let stats_holder = std::sync::Arc::new(std::sync::Mutex::new(None));
@@ -1150,7 +1154,7 @@ impl InstallerApp {
             log("Initializing boxart scraper...");
             let mut scraper = BoxArtScraper::new();
 
-            match scraper.scrape_roms_folder(&roms_path_clone, progress_tx).await {
+            match scraper.scrape_selected_folders(&roms_path_clone, &selected_folders, progress_tx).await {
                 Ok(_stats) => {
                     log("Scraping completed successfully");
                     crate::debug::log("Boxart scraping completed successfully");

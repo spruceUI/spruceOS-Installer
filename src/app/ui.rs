@@ -721,15 +721,37 @@ impl eframe::App for InstallerApp {
                             }
                         }
 
-                        // Roms folder input
-                        ui.horizontal(|ui| {
-                            ui.label("Roms Folder:");
-                        });
-                        ui.add_space(4.0);
-                        ui.add(
-                            egui::TextEdit::singleline(&mut self.scraper_roms_path)
-                                .desired_width(300.0)
-                        );
+                        // Roms folder label
+                        ui.label(format!("Roms: {}", self.scraper_roms_path));
+                        ui.add_space(8.0);
+
+                        // Select All / Deselect All buttons
+                        if !self.scraper_folders.is_empty() && !matches!(self.state, AppState::ScrapingBoxart) && self.scraper_stats.is_none() {
+                            ui.horizontal(|ui| {
+                                if ui.button("Select All").clicked() {
+                                    for folder in &mut self.scraper_folders {
+                                        folder.1 = true;
+                                    }
+                                }
+                                if ui.button("Deselect All").clicked() {
+                                    for folder in &mut self.scraper_folders {
+                                        folder.1 = false;
+                                    }
+                                }
+                            });
+                            ui.add_space(4.0);
+
+                            // Scrollable checkbox list
+                            egui::ScrollArea::vertical()
+                                .max_height(200.0)
+                                .show(ui, |ui| {
+                                    for folder in &mut self.scraper_folders {
+                                        ui.checkbox(&mut folder.1, &folder.0);
+                                    }
+                                });
+                        } else if self.scraper_folders.is_empty() && !matches!(self.state, AppState::ScrapingBoxart) && self.scraper_stats.is_none() {
+                            ui.label("No supported ROM folders found.");
+                        }
                         ui.add_space(12.0);
 
                         // Show progress section during scraping
@@ -778,8 +800,10 @@ impl eframe::App for InstallerApp {
 
                         // Buttons
                         let is_scraping = matches!(self.state, AppState::ScrapingBoxart);
+                        let has_selection = self.scraper_folders.iter().any(|(_, selected)| *selected);
                         let path_valid = !self.scraper_roms_path.is_empty() &&
-                                        std::path::Path::new(&self.scraper_roms_path).exists();
+                                        std::path::Path::new(&self.scraper_roms_path).exists() &&
+                                        has_selection;
 
                         ui.columns(2, |columns| {
                             columns[0].allocate_ui_with_layout(
@@ -978,7 +1002,24 @@ impl eframe::App for InstallerApp {
                                                 let roms_path = format!("{}Roms", mount_path.display());
                                                 #[cfg(not(target_os = "windows"))]
                                                 let roms_path = mount_path.join("Roms").display().to_string();
-                                                self.scraper_roms_path = roms_path;
+                                                self.scraper_roms_path = roms_path.clone();
+
+                                                // Scan for valid subfolders
+                                                let mut folders = Vec::new();
+                                                if let Ok(entries) = std::fs::read_dir(&roms_path) {
+                                                    for entry in entries.flatten() {
+                                                        let path = entry.path();
+                                                        if path.is_dir() {
+                                                            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                                                                if crate::boxart_scraper::BoxArtScraper::get_ra_alias(name).is_some() {
+                                                                    folders.push((name.to_string(), true));
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                folders.sort_by(|a, b| a.0.cmp(&b.0));
+                                                self.scraper_folders = folders;
                                             }
                                         }
                                     }
