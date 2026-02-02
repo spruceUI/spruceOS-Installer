@@ -3,10 +3,11 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tokio::sync::mpsc;
 use tokio::fs;
 use reqwest;
+use regex::Regex;
 
 use crate::boxart_db;
 
@@ -144,7 +145,7 @@ impl BoxArtScraper {
             let tokenized: Vec<(String, HashSet<String>)> = image_list
                 .iter()
                 .map(|name| {
-                    let stripped = Self::strip_parentheses(&name.replace(".png", ""));
+                    let stripped = Self::normalize_name(&name.replace(".png", ""));
                     (name.clone(), Self::tokenize(&stripped))
                 })
                 .collect();
@@ -159,12 +160,36 @@ impl BoxArtScraper {
         self.find_image_from_list(sys_name, rom_without_ext)
     }
 
-    /// Strip parentheses and normalize spaces/symbols
-    fn strip_parentheses(s: &str) -> String {
-        let re = regex::Regex::new(r"\(.*?\)").unwrap();
-        let without_parens = re.replace_all(s, "");
-        let re_space = regex::Regex::new(r"[\s\-_,]+").unwrap();
-        re_space.replace_all(&without_parens, " ").trim().to_string()
+    fn re_parens() -> &'static Regex {
+        static RE: OnceLock<Regex> = OnceLock::new();
+        RE.get_or_init(|| Regex::new(r"\([^)]*\)").unwrap())
+    }
+
+    fn re_brackets() -> &'static Regex {
+        static RE: OnceLock<Regex> = OnceLock::new();
+        RE.get_or_init(|| Regex::new(r"\[[^\]]*\]").unwrap())
+    }
+
+    fn re_spaces() -> &'static Regex {
+        static RE: OnceLock<Regex> = OnceLock::new();
+        RE.get_or_init(|| Regex::new(r"[\s\-_,]+").unwrap())
+    }
+
+    fn re_punct() -> &'static Regex {
+        static RE: OnceLock<Regex> = OnceLock::new();
+        RE.get_or_init(|| Regex::new(r"[^\w\s]+").unwrap())
+    }
+
+    fn re_capture_parens() -> &'static Regex {
+        static RE: OnceLock<Regex> = OnceLock::new();
+        RE.get_or_init(|| Regex::new(r"\(([^)]*?)\)").unwrap())
+    }
+
+    /// Strip parentheses, brackets, and normalize spaces/symbols
+    fn normalize_name(s: &str) -> String {
+        let without_parens = Self::re_parens().replace_all(s, "");
+        let without_brackets = Self::re_brackets().replace_all(&without_parens, "");
+        Self::re_spaces().replace_all(&without_brackets, " ").trim().to_string()
     }
 
     /// Preprocess a single token (expand abbreviations, convert numbers to roman)
@@ -176,6 +201,16 @@ impl BoxArtScraper {
             ("ff", "final fantasy"),
             ("zelda", "legend of zelda"),
             ("mario", "super mario"),
+            ("smb", "super mario bros"),
+            ("smw", "super mario world"),
+            ("sf", "street fighter"),
+            ("mk", "mortal kombat"),
+            ("dkc", "donkey kong country"),
+            ("cv", "castlevania"),
+            ("mm", "mega man"),
+            ("dr", "doctor"),
+            ("st", "saint"),
+            ("mr", "mister"),
         ]
         .iter()
         .cloned()
@@ -187,7 +222,7 @@ impl BoxArtScraper {
 
         // Number to roman numeral conversion
         let num_to_roman: HashMap<&str, &str> = [
-            ("2", "ii"), ("3", "iii"), ("4", "iv"), ("5", "v"),
+            ("1", "i"), ("2", "ii"), ("3", "iii"), ("4", "iv"), ("5", "v"),
             ("6", "vi"), ("7", "vii"), ("8", "viii"), ("9", "ix"), ("10", "x"),
         ]
         .iter()
@@ -201,22 +236,6 @@ impl BoxArtScraper {
         token_lower
     }
 
-    /// Split long tokens for better matching
-    fn split_long_token(token: &str) -> HashSet<String> {
-        let mut result = HashSet::new();
-        let token_lower = token.to_lowercase();
-
-        result.insert(token_lower.clone());
-
-        if token_lower.len() >= 6 && !token_lower.contains(' ') {
-            let mid = token_lower.len() / 2;
-            result.insert(token_lower[..mid].to_string());
-            result.insert(token_lower[mid..].to_string());
-        }
-
-        result
-    }
-
     /// Tokenize a string into a set of processed tokens
     fn tokenize(s: &str) -> HashSet<String> {
         let stopwords: HashSet<&str> = ["and", "the", "of", "in", "is", "a", "an"]
@@ -225,8 +244,7 @@ impl BoxArtScraper {
             .collect();
 
         let s = s.replace(&['_', '-'][..], " ").to_lowercase();
-        let re = regex::Regex::new(r"[^\w\s]+").unwrap();
-        let s = re.replace_all(&s, " ");
+        let s = Self::re_punct().replace_all(&s, " ");
 
         let mut tokens = HashSet::new();
         for word in s.split_whitespace() {
@@ -234,68 +252,132 @@ impl BoxArtScraper {
                 continue;
             }
             let processed = Self::preprocess_token(word);
-            tokens.extend(Self::split_long_token(&processed));
+            for sub in processed.split_whitespace() {
+                tokens.insert(sub.to_string());
+            }
         }
 
         tokens
     }
 
-    /// Calculate weighted similarity between two token sets
+    /// Levenshtein edit distance between two strings
+    fn edit_distance(a: &str, b: &str) -> usize {
+        let a_len = a.len();
+        let b_len = b.len();
+        let mut prev: Vec<usize> = (0..=b_len).collect();
+        let mut curr = vec![0usize; b_len + 1];
+
+        for i in 1..=a_len {
+            curr[0] = i;
+            for j in 1..=b_len {
+                let cost = if a.as_bytes()[i - 1] == b.as_bytes()[j - 1] { 0 } else { 1 };
+                curr[j] = (prev[j] + 1)
+                    .min(curr[j - 1] + 1)
+                    .min(prev[j - 1] + cost);
+            }
+            std::mem::swap(&mut prev, &mut curr);
+        }
+
+        prev[b_len]
+    }
+
+    /// Check if two tokens match (exact, substring, or fuzzy)
+    fn tokens_match(a: &str, b: &str) -> bool {
+        if a == b {
+            return true;
+        }
+        if a.contains(b) || b.contains(a) {
+            // Only allow substring match if the shorter token is >= 3 chars
+            let shorter = a.len().min(b.len());
+            if shorter >= 3 {
+                return true;
+            }
+        }
+        // Levenshtein for tokens >= 4 chars, allow distance <= 2
+        if a.len() >= 4 && b.len() >= 4 {
+            let max_dist = if a.len().min(b.len()) >= 6 { 2 } else { 1 };
+            if Self::edit_distance(a, b) <= max_dist {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Calculate similarity between ROM tokens (target) and candidate tokens
     fn weighted_similarity(target_tokens: &HashSet<String>, candidate_tokens: &HashSet<String>) -> f32 {
-        let mut matched_tokens = HashSet::new();
+        if target_tokens.is_empty() || candidate_tokens.is_empty() {
+            return 0.0;
+        }
+
+        let mut matched_target = HashSet::new();
 
         for t in target_tokens {
             for c in candidate_tokens {
-                if t.contains(c) || c.contains(t) {
-                    matched_tokens.insert(t.clone());
+                if Self::tokens_match(t, c) {
+                    matched_target.insert(t.clone());
                     break;
                 }
             }
         }
 
-        let missing_tokens: HashSet<_> = target_tokens.difference(&matched_tokens).collect();
-        let penalty: f32 = missing_tokens
+        let target_len = target_tokens.len() as f32;
+        let candidate_len = candidate_tokens.len() as f32;
+
+        // Base score: fraction of ROM tokens that matched
+        let target_coverage = matched_target.len() as f32 / target_len;
+
+        // Penalty for missing ROM tokens (important — these are what the user expects)
+        let missing: Vec<_> = target_tokens.difference(&matched_target).collect();
+        let missing_penalty: f32 = missing
             .iter()
-            .map(|t| if t.as_str() == "1" || t.as_str() == "i" { 0.0 } else { 0.3 })
+            .map(|t| if t.as_str() == "i" { 0.0 } else { 0.25 })
             .sum();
 
-        let union_size = target_tokens.len().max(candidate_tokens.len());
-        if union_size == 0 {
-            return 0.0;
-        }
+        // Small penalty for extra candidate tokens (less important)
+        let extra_candidate = (candidate_len - target_len).max(0.0);
+        let extra_penalty = extra_candidate * 0.05;
 
-        let score = matched_tokens.len() as f32 / union_size as f32;
-        (score - penalty).max(0.0)
+        (target_coverage - missing_penalty - extra_penalty).max(0.0)
     }
 
     /// Find the best matching image from the cached list
     fn find_image_from_list(&self, sys_name: &str, rom_without_ext: &str) -> Option<String> {
         let cache_entry = self.cache.get(sys_name)?;
 
-        let target_tokens = Self::tokenize(&Self::strip_parentheses(rom_without_ext));
+        let normalized_rom = Self::normalize_name(rom_without_ext);
+        let rom_lower = normalized_rom.to_lowercase();
+
+        // Fast path: exact match after normalization
+        for (name, _) in cache_entry {
+            let normalized_candidate = Self::normalize_name(&name.replace(".png", "")).to_lowercase();
+            if rom_lower == normalized_candidate {
+                return Some(name.clone());
+            }
+        }
+
+        let target_tokens = Self::tokenize(&normalized_rom);
         let mut best_score = 0.0;
         let mut best_candidates = Vec::new();
 
         for (name, candidate_tokens) in cache_entry {
             let score = Self::weighted_similarity(&target_tokens, candidate_tokens);
 
-            if score > best_score {
+            if score > best_score + 0.001 {
                 best_score = score;
                 best_candidates = vec![name.clone()];
-            } else if (score - best_score).abs() < 0.001 {
+            } else if (score - best_score).abs() <= 0.001 {
                 best_candidates.push(name.clone());
             }
         }
 
-        if best_candidates.is_empty() || best_score < 0.3 {
+        if best_candidates.is_empty() || best_score < 0.4 {
             return None;
         }
 
         // Preferred region tie-breaker
         if let Some(ref region) = self.preferred_region {
             for candidate in &best_candidates {
-                let re = regex::Regex::new(r"\(([^)]*?)\)").unwrap();
-                for cap in re.captures_iter(candidate) {
+                for cap in Self::re_capture_parens().captures_iter(candidate) {
                     if let Some(matched) = cap.get(1) {
                         if matched.as_str().to_uppercase().contains(region) {
                             return Some(candidate.clone());
@@ -725,8 +807,10 @@ mod tests {
     }
 
     #[test]
-    fn test_strip_parentheses() {
-        let result = BoxArtScraper::strip_parentheses("Game Name (USA) (Rev 1)");
+    fn test_normalize_name() {
+        let result = BoxArtScraper::normalize_name("Game Name (USA) (Rev 1)");
+        assert_eq!(result, "Game Name");
+        let result = BoxArtScraper::normalize_name("Game Name [!] [b]");
         assert_eq!(result, "Game Name");
     }
 
