@@ -538,7 +538,9 @@ impl BoxArtScraper {
         sys_name: &str,
     ) -> Result<Vec<(String, String, PathBuf)>, String> {
         let mut tasks = Vec::new();
-        let extensions = Self::get_common_extensions(sys_name);
+
+        // Extensions to skip (non-ROM files that may appear in ROM folders)
+        let skip_extensions: &[&str] = &[".txt", ".xml", ".json", ".cfg", ".log", ".png", ".jpg", ".bmp", ".db", ".ini"];
 
         let mut dirs_to_scan = vec![sys_path.to_path_buf()];
 
@@ -567,8 +569,12 @@ impl BoxArtScraper {
                     .and_then(|n| n.to_str())
                     .ok_or_else(|| "Invalid filename".to_string())?;
 
-                // Check if file has a supported extension
-                if !extensions.iter().any(|ext| file_name.to_lowercase().ends_with(ext)) {
+                // Skip hidden files and known non-ROM extensions
+                if file_name.starts_with('.') {
+                    continue;
+                }
+                let lower = file_name.to_lowercase();
+                if skip_extensions.iter().any(|ext| lower.ends_with(ext)) {
                     continue;
                 }
 
@@ -593,32 +599,6 @@ impl BoxArtScraper {
         Ok(tasks)
     }
 
-    /// Get common ROM extensions for a system
-    fn get_common_extensions(sys_name: &str) -> Vec<&'static str> {
-        match sys_name.to_uppercase().as_str() {
-            "FC" => vec![".nes", ".fds"],
-            "SFC" => vec![".sfc", ".smc"],
-            "GB" => vec![".gb"],
-            "GBC" => vec![".gbc"],
-            "GBA" => vec![".gba"],
-            "N64" => vec![".n64", ".z64", ".v64"],
-            "NDS" => vec![".nds"],
-            "MD" => vec![".md", ".gen", ".bin"],
-            "MS" => vec![".sms"],
-            "GG" => vec![".gg"],
-            "PS" => vec![".cue", ".bin", ".iso"],
-            "PSP" => vec![".iso", ".cso"],
-            "PCE" => vec![".pce"],
-            "PCECD" => vec![".cue", ".ccd"],
-            "NGP" | "NGPC" => vec![".ngp", ".ngc"],
-            "WS" | "WSC" => vec![".ws", ".wsc"],
-            "LYNX" => vec![".lnx"],
-            "VB" => vec![".vb"],
-            "ATARI" => vec![".a26"],
-            "COLECO" => vec![".col"],
-            _ => vec![".bin", ".rom"],
-        }
-    }
 }
 
 // We need to add regex dependency
