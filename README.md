@@ -755,24 +755,43 @@ SystemMapping {
 
 ##### **B. Image Naming Pattern**
 
-**Location:** `src/config.rs` → `BOXART_CONFIG.image_name_pattern`
+**Location:** `src/config.rs` → `BOXART_CONFIG`
 
-Controls how scraped images are named. Use `{game_name}` as a placeholder:
+Controls how scraped images are named:
 
 ```rust
 pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
     roms_base_folder: "Roms",
-    image_name_pattern: "{game_name}.png",  // Standard pattern
+    image_name_pattern: "{game_name}.png",     // Pattern with {game_name} placeholder
+    include_extension_in_name: false,          // Whether to include ROM extension
 };
 ```
 
-**Common patterns:**
+**Pattern examples:**
 ```rust
 image_name_pattern: "{game_name}.png",         // Standard: "Super Mario Bros.png"
 image_name_pattern: "{game_name}-image.png",   // EmulationStation style
 image_name_pattern: "{game_name}_boxart.png",  // Custom suffix
 image_name_pattern: "boxart-{game_name}.png",  // Custom prefix
 ```
+
+**Extension handling:**
+
+The `include_extension_in_name` flag controls whether `{game_name}` includes the ROM's file extension:
+
+```rust
+// Example ROM file: "Super Mario Bros.gb"
+
+include_extension_in_name: false,  // Default
+// Result: "Super Mario Bros.png"
+
+include_extension_in_name: true,   // Include extension
+// Result: "Super Mario Bros.gb.png"
+```
+
+**Use cases:**
+- `false` - Most systems (cleaner names, frontend agnostic)
+- `true` - Systems where frontend expects extension in boxart name
 
 **Choose based on your frontend's requirements** - different UIs expect different naming conventions.
 
@@ -834,6 +853,7 @@ pub const SYSTEM_MAPPINGS: &[SystemMapping] = &[
 pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
     roms_base_folder: "games",                 // Different base folder
     image_name_pattern: "{game_name}-box.png", // Custom suffix
+    include_extension_in_name: true,           // Include ROM extension in image name
 };
 
 // Tuned behavior
@@ -851,13 +871,20 @@ With these settings, here's how paths are built:
 
 **ROM file:** `/mnt/sdcard/games/nes/Super Mario Bros (USA).nes`
 
-**Boxart saved to:** `/mnt/sdcard/games/nes/.covers/Super Mario Bros-box.png`
+**Boxart saved to:** `/mnt/sdcard/games/nes/.covers/Super Mario Bros.nes-box.png`
 
 **Breakdown:**
 - `games` - from `roms_base_folder`
 - `nes` - from system mapping `folder_name`
 - `.covers` - from system mapping `boxart_subfolder`
-- `Super Mario Bros-box.png` - from `image_name_pattern` (strips region tags)
+- `Super Mario Bros.nes-box.png` - from `image_name_pattern` with `include_extension_in_name: true`
+  - ROM name: "Super Mario Bros (USA).nes"
+  - Extension kept: ".nes"
+  - Region stripped: "(USA)" removed
+  - Pattern applied: `{game_name}-box.png` → `Super Mario Bros.nes-box.png`
+
+**If `include_extension_in_name: false` (default):**
+- Result would be: `/mnt/sdcard/games/nes/.covers/Super Mario Bros-box.png` (no .nes)
 
 ##### **G. Adding New Systems**
 

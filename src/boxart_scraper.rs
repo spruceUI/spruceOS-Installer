@@ -603,10 +603,20 @@ impl BoxArtScraper {
                     continue;
                 }
 
-                let rom_name = path.file_stem()
-                    .and_then(|s| s.to_str())
-                    .ok_or_else(|| "Invalid ROM name".to_string())?
-                    .to_string();
+                // Get ROM name - with or without extension based on config
+                let rom_name = if crate::config::BOXART_CONFIG.include_extension_in_name {
+                    // Use full filename including extension
+                    path.file_name()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| "Invalid ROM filename".to_string())?
+                        .to_string()
+                } else {
+                    // Use filename without extension (default behavior)
+                    path.file_stem()
+                        .and_then(|s| s.to_str())
+                        .ok_or_else(|| "Invalid ROM name".to_string())?
+                        .to_string()
+                };
 
                 // Get boxart subfolder from system mapping
                 let mapping = Self::get_system_mapping(sys_name)

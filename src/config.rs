@@ -375,11 +375,16 @@ pub struct BoxartConfig {
     /// Image filename pattern - use {game_name} as placeholder
     /// Examples: "{game_name}.png", "{game_name}-image.png", "boxart-{game_name}.png"
     pub image_name_pattern: &'static str,
+    /// Include ROM file extension in image name
+    /// - false: "Game Name.gb" → "Game Name.png"
+    /// - true: "Game Name.gb" → "Game Name.gb.png"
+    pub include_extension_in_name: bool,
 }
 
 pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
     roms_base_folder: "Roms",
     image_name_pattern: "{game_name}.png",
+    include_extension_in_name: false,
 };
 
 /// Scraper behavior configuration
