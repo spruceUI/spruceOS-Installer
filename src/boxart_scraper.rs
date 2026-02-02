@@ -35,11 +35,11 @@ pub struct BoxArtScraper {
 }
 
 impl BoxArtScraper {
-    /// Create a new BoxArtScraper
+    /// Create a new BoxArtScraper with default settings from config
     pub fn new() -> Self {
         Self {
             cache: HashMap::new(),
-            preferred_region: Some("USA".to_string()), // Default to USA region preference
+            preferred_region: crate::config::SCRAPER_CONFIG.preferred_region.map(|s| s.to_string()),
         }
     }
 
@@ -56,83 +56,16 @@ impl BoxArtScraper {
         self.preferred_region = region;
     }
 
+    /// Get the system mapping for a folder name
+    fn get_system_mapping(folder_name: &str) -> Option<&'static crate::config::SystemMapping> {
+        crate::config::SYSTEM_MAPPINGS
+            .iter()
+            .find(|m| m.folder_name.eq_ignore_ascii_case(folder_name))
+    }
+
     /// Get the Libretro alias name for a system
     pub fn get_ra_alias(sys_name: &str) -> Option<&'static str> {
-        let mapping: HashMap<&str, &str> = [
-            ("AMIGA", "Commodore - Amiga"),
-            ("ATARI", "Atari - 2600"),
-            ("ATARIST", "Atari - ST"),
-            ("ARCADE", "MAME"),
-            ("CPS1", "MAME"),
-            ("CPS2", "MAME"),
-            ("CPS3", "MAME"),
-            ("ARDUBOY", "Arduboy Inc - Arduboy"),
-            ("CHAI", "ChaiLove"),
-            ("COLECO", "Coleco - ColecoVision"),
-            ("COMMODORE", "Commodore - 64"),
-            ("CPC", "Amstrad - CPC"),
-            ("DC", "Sega - Dreamcast"),
-            ("DOOM", "DOOM"),
-            ("DOS", "DOS"),
-            ("EIGHTHUNDRED", "Atari - 8-bit"),
-            ("FAIRCHILD", "Fairchild - Channel F"),
-            ("FBNEO", "FBNeo - Arcade Games"),
-            ("FC", "Nintendo - Nintendo Entertainment System"),
-            ("FDS", "Nintendo - Family Computer Disk System"),
-            ("FIFTYTWOHUNDRED", "Atari - 5200"),
-            ("GB", "Nintendo - Game Boy"),
-            ("GBA", "Nintendo - Game Boy Advance"),
-            ("GBC", "Nintendo - Game Boy Color"),
-            ("GG", "Sega - Game Gear"),
-            ("GW", "Handheld Electronic Game"),
-            ("INTELLIVISION", "Mattel - Intellivision"),
-            ("LYNX", "Atari - Lynx"),
-            ("MD", "Sega - Mega Drive - Genesis"),
-            ("MS", "Sega - Master System - Mark III"),
-            ("MSU1", "Nintendo - Super Nintendo Entertainment System"),
-            ("MSUMD", "Sega - Mega Drive - Genesis"),
-            ("MSX", "Microsoft - MSX"),
-            ("N64", "Nintendo - Nintendo 64"),
-            ("NDS", "Nintendo - Nintendo DS"),
-            ("NEOCD", "SNK - Neo Geo CD"),
-            ("NEOGEO", "SNK - Neo Geo"),
-            ("NGP", "SNK - Neo Geo Pocket"),
-            ("NGPC", "SNK - Neo Geo Pocket Color"),
-            ("ODYSSEY", "Magnavox - Odyssey2"),
-            ("PCE", "NEC - PC Engine - TurboGrafx 16"),
-            ("PCECD", "NEC - PC Engine CD - TurboGrafx-CD"),
-            ("POKE", "Nintendo - Pokemon Mini"),
-            ("PS", "Sony - PlayStation"),
-            ("PSP", "Sony - PlayStation Portable"),
-            ("QUAKE", "Quake"),
-            ("SATELLAVIEW", "Nintendo - Satellaview"),
-            ("SATURN", "Sega - Saturn"),
-            ("SCUMMVM", "ScummVM"),
-            ("SEGACD", "Sega - Mega-CD - Sega CD"),
-            ("SEGASGONE", "Sega - SG-1000"),
-            ("SEVENTYEIGHTHUNDRED", "Atari - 7800"),
-            ("SFC", "Nintendo - Super Nintendo Entertainment System"),
-            ("SGB", "Nintendo - Game Boy"),
-            ("SGFX", "NEC - PC Engine SuperGrafx"),
-            ("SUFAMI", "Nintendo - Sufami Turbo"),
-            ("SUPERVISION", "Watara - Supervision"),
-            ("THIRTYTWOX", "Sega - 32X"),
-            ("TIC", "TIC-80"),
-            ("VB", "Nintendo - Virtual Boy"),
-            ("VECTREX", "GCE - Vectrex"),
-            ("VIC20", "Commodore - VIC-20"),
-            ("VIDEOPAC", "Philips - Videopac+"),
-            ("WOLF", "Wolfenstein 3D"),
-            ("WS", "Bandai - WonderSwan"),
-            ("WSC", "Bandai - WonderSwan Color"),
-            ("X68000", "Sharp - X68000"),
-            ("ZXS", "Sinclair - ZX Spectrum"),
-        ]
-        .iter()
-        .cloned()
-        .collect();
-
-        mapping.get(sys_name.to_uppercase().as_str()).copied()
+        Self::get_system_mapping(sys_name).map(|m| m.libretro_name)
     }
 
     /// Find the best matching image name for a given ROM
@@ -415,9 +348,11 @@ impl BoxArtScraper {
         )
         .replace(" ", "%20");
 
-        // Create parent directory if it doesn't exist
-        if let Some(parent) = dest_path.parent() {
-            fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
+        // Create parent directory if it doesn't exist (if configured to do so)
+        if crate::config::SCRAPER_CONFIG.create_missing_dirs {
+            if let Some(parent) = dest_path.parent() {
+                fs::create_dir_all(parent).await.map_err(|e| e.to_string())?;
+            }
         }
 
         // Try primary URL first
@@ -490,8 +425,10 @@ impl BoxArtScraper {
         stats.total = tasks.len();
         let _ = progress_tx.send(ScrapeProgress::Started { total: stats.total });
 
-        // Process tasks with concurrency limit (8 workers)
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(8));
+        // Process tasks with concurrency limit from config
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(
+            crate::config::SCRAPER_CONFIG.max_concurrent_downloads
+        ));
         let mut handles = Vec::new();
 
         for (idx, (sys_name, rom_name, dest_path)) in tasks.into_iter().enumerate() {
@@ -565,7 +502,9 @@ impl BoxArtScraper {
         stats.total = tasks.len();
         let _ = progress_tx.send(ScrapeProgress::Started { total: stats.total });
 
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(8));
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(
+            crate::config::SCRAPER_CONFIG.max_concurrent_downloads
+        ));
         let mut handles = Vec::new();
 
         for (idx, (sys_name, rom_name, dest_path)) in tasks.into_iter().enumerate() {
@@ -635,9 +574,13 @@ impl BoxArtScraper {
                 let path = entry.path();
 
                 if path.is_dir() {
-                    // Skip the Imgs directory itself
+                    // Skip boxart directories
                     let dir_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-                    if dir_name != "Imgs" {
+                    let is_boxart_dir = crate::config::SYSTEM_MAPPINGS
+                        .iter()
+                        .any(|m| dir_name == m.boxart_subfolder);
+
+                    if !is_boxart_dir {
                         dirs_to_scan.push(path);
                     }
                     continue;
@@ -665,12 +608,18 @@ impl BoxArtScraper {
                     .ok_or_else(|| "Invalid ROM name".to_string())?
                     .to_string();
 
-                // All boxart goes into the system-level Imgs folder
-                let imgs_dir = sys_path.join("Imgs");
-                let image_path = imgs_dir.join(format!("{}.png", rom_name));
+                // Get boxart subfolder from system mapping
+                let mapping = Self::get_system_mapping(sys_name)
+                    .ok_or_else(|| format!("No system mapping for: {}", sys_name))?;
+                let imgs_dir = sys_path.join(mapping.boxart_subfolder);
 
-                // Skip if image already exists
-                if image_path.exists() {
+                // Format image filename using config pattern
+                let image_filename = crate::config::BOXART_CONFIG.image_name_pattern
+                    .replace("{game_name}", &rom_name);
+                let image_path = imgs_dir.join(&image_filename);
+
+                // Skip if image already exists (if configured to do so)
+                if crate::config::SCRAPER_CONFIG.skip_existing && image_path.exists() {
                     continue;
                 }
 
@@ -818,6 +767,7 @@ mod tests {
     fn test_get_ra_alias() {
         assert_eq!(BoxArtScraper::get_ra_alias("FC"), Some("Nintendo - Nintendo Entertainment System"));
         assert_eq!(BoxArtScraper::get_ra_alias("GBA"), Some("Nintendo - Game Boy Advance"));
+        assert_eq!(BoxArtScraper::get_ra_alias("fc"), Some("Nintendo - Nintendo Entertainment System")); // Case insensitive
         assert_eq!(BoxArtScraper::get_ra_alias("UNKNOWN"), None);
     }
 
