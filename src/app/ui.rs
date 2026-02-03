@@ -975,7 +975,7 @@ impl eframe::App for InstallerApp {
                             // if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
                             //     self.show_theme_editor = !self.show_theme_editor;
                             // }
-                            if ui.button("📜").on_hover_text("Toggle Log Area").clicked() {
+                            if ui.button(egui::RichText::new("📜").size(24.0)).on_hover_text("Toggle Log Area").clicked() {
                                 self.show_log = !self.show_log;
 
                                 // Adjust window size when toggling log
@@ -992,7 +992,7 @@ impl eframe::App for InstallerApp {
                             let can_scrape = self.selected_drive_idx.is_some() &&
                                            matches!(self.state, AppState::Idle | AppState::Complete);
                             ui.add_enabled_ui(can_scrape, |ui| {
-                                if ui.button("🖼").on_hover_text("Scrape Boxart").clicked() {
+                                if ui.button(egui::RichText::new("🖼").size(24.0)).on_hover_text("Scrape Boxart").clicked() {
                                     // Set default Roms path based on selected drive
                                     if let Some(idx) = self.selected_drive_idx {
                                         if let Some(drive) = self.drives.get(idx) {
