@@ -419,8 +419,14 @@ impl BoxArtScraper {
                 };
 
                 let status = match &result {
-                    Ok(_) => "Success".to_string(),
-                    Err(e) => format!("Failed: {}", e),
+                    Ok(_) => {
+                        crate::debug::log(&format!("Boxart scraper: Downloaded {}", rom_name));
+                        "Success".to_string()
+                    }
+                    Err(e) => {
+                        crate::debug::log(&format!("Boxart scraper: Failed {} - {}", rom_name, e));
+                        format!("Failed: {}", e)
+                    }
                 };
 
                 let _ = progress_tx.send(ScrapeProgress::Progress {
@@ -526,6 +532,7 @@ impl BoxArtScraper {
 
                 // Skip if image already exists (if configured to do so)
                 if crate::config::SCRAPER_CONFIG.skip_existing && image_path.exists() {
+                    crate::debug::log(&format!("Boxart scraper: Skipped {} (already exists)", rom_name));
                     continue;
                 }
 
