@@ -4,12 +4,51 @@
 - Show error in pop-up when an install fails
 - Checkboxes for additional packages (themes, ports, games)
 - Backup and restore functionality
-- Code cleanup: Remove unused `lock_physical_disk()` function in format.rs (lines 370-436)
-- Code cleanup: Update outdated comment in format.rs (lines 299-301) - no longer removes/reassigns drive letter
-- Code cleanup: Clear build warnings and remove dead code
 
 ---
 
+# Key Features
+
+**Cross-platform drive detection:**
+- Windows: `GetLogicalDrives` + `IOCTL_STORAGE_GET_DEVICE_NUMBER`
+- Linux: `/sys/block` + `/proc/mounts` + label detection
+- macOS: `diskutil list -plist` with multi-heuristic filtering
+
+**FAT32 formatting:**
+- Windows: Custom formatter bypasses 32GB OS limit, diskpart partitioning
+- Linux: `parted` + `mkfs.vfat`
+- macOS: `diskutil eraseDisk` with automatic retry logic
+
+**Raw image burning:**
+- On-the-fly `.gz` decompression
+- Pre-scans to determine decompressed size
+- SHA256 verification (Linux only; disabled on Windows/macOS for reliability)
+- Sector-aligned writes (Windows: 512-byte, macOS: 512-byte with F_NOCACHE)
+- Direct hardware I/O on macOS (F_NOCACHE + O_SYNC flags prevent buffer cache stalls)
+
+**GitHub integration:**
+- Fetches latest releases via GitHub API
+- Chunked streaming for large downloads
+- Rate limit detection and timeout handling
+- Automatic filtering of source code archives
+
+**macOS privileged access:**
+- Uses native `authopen` utility (no code signing required!)
+- Unix domain socketpair for file descriptor passing (based on Raspberry Pi Imager)
+- F_NOCACHE flag bypasses kernel buffer cache for direct hardware writes (prevents 99% freeze)
+- O_SYNC flag ensures synchronous writes (data written before returning)
+- 512-byte sector-aligned buffering for .gz decompression compatibility
+- Proper error differentiation (cancelled, denied, system error)
+
+**Boxart scraper:**
+- Fuzzy matching with Levenshtein distance for ROM name matching
+- Downloads from Libretro thumbnail database (60+ systems)
+- Configurable paths, naming patterns, and folder structure
+- Concurrent downloads with progress tracking (configurable worker count)
+- Embedded database for zero runtime I/O
+- Region-aware tie-breaking for multi-region games
+
+---
 ## Overview
 
 **SpruceOS Installer** is an all-in-one **downloader, extractor, formatter, and installer** for **SpruceOS** and other custom firmware projects.
@@ -1028,48 +1067,6 @@ src/
     └── authopen.rs      - macOS privileged disk access
 ```
 
-### Key Features
-
-**Cross-platform drive detection:**
-- Windows: `GetLogicalDrives` + `IOCTL_STORAGE_GET_DEVICE_NUMBER`
-- Linux: `/sys/block` + `/proc/mounts` + label detection
-- macOS: `diskutil list -plist` with multi-heuristic filtering
-
-**FAT32 formatting:**
-- Windows: Custom formatter bypasses 32GB OS limit, diskpart partitioning
-- Linux: `parted` + `mkfs.vfat`
-- macOS: `diskutil eraseDisk` with automatic retry logic
-
-**Raw image burning:**
-- On-the-fly `.gz` decompression
-- Pre-scans to determine decompressed size
-- SHA256 verification (Linux only; disabled on Windows/macOS for reliability)
-- Sector-aligned writes (Windows: 512-byte, macOS: 512-byte with F_NOCACHE)
-- Direct hardware I/O on macOS (F_NOCACHE + O_SYNC flags prevent buffer cache stalls)
-
-**GitHub integration:**
-- Fetches latest releases via GitHub API
-- Chunked streaming for large downloads
-- Rate limit detection and timeout handling
-- Automatic filtering of source code archives
-
-**macOS privileged access:**
-- Uses native `authopen` utility (no code signing required!)
-- Unix domain socketpair for file descriptor passing (based on Raspberry Pi Imager)
-- F_NOCACHE flag bypasses kernel buffer cache for direct hardware writes (prevents 99% freeze)
-- O_SYNC flag ensures synchronous writes (data written before returning)
-- 512-byte sector-aligned buffering for .gz decompression compatibility
-- Proper error differentiation (cancelled, denied, system error)
-
-**Boxart scraper:**
-- Fuzzy matching with Levenshtein distance for ROM name matching
-- Downloads from Libretro thumbnail database (60+ systems)
-- Configurable paths, naming patterns, and folder structure
-- Concurrent downloads with progress tracking (configurable worker count)
-- Embedded database for zero runtime I/O
-- Region-aware tie-breaking for multi-region games
-
----
 
 ## Acknowledgments
 
