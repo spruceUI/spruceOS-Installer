@@ -162,7 +162,6 @@ impl eframe::App for InstallerApp {
                             let is_raw_image = if let Some(idx) = auto_idx {
                                 let asset_name = &self.available_assets[idx].name;
                                 asset_name.ends_with(".img.gz") ||
-                                asset_name.ends_with(".img.xz") ||
                                 asset_name.ends_with(".img")
                             } else {
                                 false
@@ -465,7 +464,6 @@ impl eframe::App for InstallerApp {
                                                     let is_raw_image = if let Some(idx) = self.selected_asset_idx {
                                                         let asset_name = &self.available_assets[idx].name;
                                                         asset_name.ends_with(".img.gz") ||
-                                                        asset_name.ends_with(".img.xz") ||
                                                         asset_name.ends_with(".img")
                                                     } else {
                                                         false

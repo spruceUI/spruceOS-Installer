@@ -110,7 +110,7 @@ impl InstallerApp {
         let mut base = name.to_string();
 
         // Remove known extensions in order of specificity
-        for ext in &[".img.gz", ".img.xz", ".tar.gz", ".7z", ".zip", ".img"] {
+        for ext in &[".img.gz", ".tar.gz", ".7z", ".zip", ".img"] {
             if base.ends_with(ext) {
                 base = base.strip_suffix(ext).unwrap_or(&base).to_string();
                 break; // Only strip one extension
@@ -135,8 +135,8 @@ impl InstallerApp {
 
         if base_names.len() == 1 {
             // Same base name, different extensions - pick by priority
-            // Priority: .7z > .zip > .img.gz > .img.xz > .img
-            const PRIORITY: &[&str] = &[".7z", ".zip", ".img.gz", ".img.xz", ".img"];
+            // Priority: .7z > .zip > .img.gz > .img
+            const PRIORITY: &[&str] = &[".7z", ".zip", ".img.gz", ".img"];
 
             for ext in PRIORITY {
                 if let Some((idx, _)) = assets.iter()
@@ -398,7 +398,6 @@ impl InstallerApp {
 
             // Detect installation mode: raw image vs archive
             let is_raw_image = asset.name.ends_with(".img.gz") ||
-                               asset.name.ends_with(".img.xz") ||
                                asset.name.ends_with(".img");
 
             if is_raw_image {

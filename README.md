@@ -57,7 +57,7 @@
 - ✓ **External asset hosting** via manifest.json (bypass GitHub's 2GB limit)
 - ✓ **Parallel downloads** with pause/resume support (8 concurrent connections)
 - ✓ Format SD cards (FAT32, supports >32GB on Windows)
-- ✓ Extract archives (.7z, .zip) or burn raw images (.img, .img.gz, .img.xz)
+- ✓ Extract archives (.7z, .zip) or burn raw images (.img, .img.gz)
 - ✓ Cross-platform: Windows, Linux, macOS
 - ✓ Update mode: preserve saves/ROMs while updating system files
 - ✓ Multi-repository support with asset filtering
