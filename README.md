@@ -2,10 +2,8 @@
 
 ## To-Do
 - Show error in pop-up when an install fails
-- add field to config.rs of a seperate display name for the repo selection for pop-ups
 - Checkboxes for additional packages (themes, ports, games)
 - Backup and restore functionality
-- Scrape boxart for ROMs
 - Code cleanup: Remove unused `lock_physical_disk()` function in format.rs (lines 370-436)
 - Code cleanup: Update outdated comment in format.rs (lines 299-301) - no longer removes/reassigns drive letter
 - Code cleanup: Clear build warnings and remove dead code
@@ -24,6 +22,7 @@
 - ✓ Cross-platform: Windows, Linux, macOS
 - ✓ Update mode: preserve saves/ROMs while updating system files
 - ✓ Multi-repository support with asset filtering
+- ✓ **Boxart scraper**: Download cover art for ROMs from Libretro database
 
 GitHub Actions automatically build releases per branch. If you'd like to use this installer for your own CFW project, let us know—we can create a branch for you or add you directly to the repository.
 
@@ -711,6 +710,195 @@ Files are marked with `// HIDE UPDATE MODE` comments for easy identification.
 
 ---
 
+#### **STEP 11: Boxart Scraper Configuration** (Optional - For ROM Projects)
+
+The boxart scraper downloads cover art for ROM files from Libretro's thumbnail database. All settings are in `src/config.rs`.
+
+<details>
+<summary><strong>Click to expand scraper customization guide</strong></summary>
+
+##### **A. System Folder Mappings**
+
+**Location:** `src/config.rs` → `SYSTEM_MAPPINGS`
+
+Maps your ROM folder names to Libretro system names. Customize if your folder structure differs:
+
+```rust
+pub const SYSTEM_MAPPINGS: &[SystemMapping] = &[
+    SystemMapping {
+        folder_name: "FC",           // Your folder name on SD card
+        libretro_name: "Nintendo - Nintendo Entertainment System",  // Libretro database name
+        boxart_subfolder: "Imgs",    // Where to save downloaded images
+    },
+    SystemMapping {
+        folder_name: "nes",          // Alternative folder name (case-insensitive lookup)
+        libretro_name: "Nintendo - Nintendo Entertainment System",
+        boxart_subfolder: ".images", // Different boxart location
+    },
+    // Add/modify entries for your system folders...
+];
+```
+
+**Common customizations:**
+- Change `folder_name` if your OS uses different names (e.g., "nes" instead of "FC", "genesis" instead of "MD")
+- Change `boxart_subfolder` if you store images elsewhere (e.g., ".images", "boxart", same folder as ROMs)
+- Add new systems if your OS supports additional platforms
+
+**Example for different folder structure:**
+```rust
+SystemMapping {
+    folder_name: "playstation",      // Your custom folder name
+    libretro_name: "Sony - PlayStation",  // Libretro name (don't change)
+    boxart_subfolder: "covers",       // Your custom boxart location
+},
+```
+
+##### **B. Image Naming Pattern**
+
+**Location:** `src/config.rs` → `BOXART_CONFIG`
+
+Controls how scraped images are named:
+
+```rust
+pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
+    image_name_pattern: "{game_name}.png",     // Pattern with {game_name} placeholder
+    include_extension_in_name: false,          // Whether to include ROM extension
+};
+```
+
+**Pattern examples:**
+```rust
+image_name_pattern: "{game_name}.png",         // Standard: "Super Mario Bros.png"
+image_name_pattern: "{game_name}-image.png",   // EmulationStation style
+image_name_pattern: "{game_name}_boxart.png",  // Custom suffix
+image_name_pattern: "boxart-{game_name}.png",  // Custom prefix
+```
+
+**Extension handling:**
+
+The `include_extension_in_name` flag controls whether `{game_name}` includes the ROM's file extension:
+
+```rust
+// Example ROM file: "Super Mario Bros.gb"
+
+include_extension_in_name: false,  // Default
+// Result: "Super Mario Bros.png"
+
+include_extension_in_name: true,   // Include extension
+// Result: "Super Mario Bros.gb.png"
+```
+
+**Use cases:**
+- `false` - Most systems (cleaner names, frontend agnostic)
+- `true` - Systems where frontend expects extension in boxart name
+
+**Choose based on your frontend's requirements** - different UIs expect different naming conventions.
+
+##### **C. Scraper Behavior Settings**
+
+**Location:** `src/config.rs` → `SCRAPER_CONFIG`
+
+```rust
+pub const SCRAPER_CONFIG: ScraperConfig = ScraperConfig {
+    skip_existing: true,              // Skip if image already exists (saves bandwidth)
+    create_missing_dirs: true,        // Auto-create boxart folders
+    max_concurrent_downloads: 8,      // Number of simultaneous downloads
+    preferred_region: Some("USA"),    // Region preference for tie-breaking
+};
+```
+
+**Field descriptions:**
+- `skip_existing`: Set `false` to re-download all images (useful for updating scraped art)
+- `create_missing_dirs`: Set `false` if you want manual folder management
+- `max_concurrent_downloads`: Higher = faster, but may hit rate limits (4-16 recommended)
+- `preferred_region`: Options: `"USA"`, `"Europe"`, `"Japan"`, or `None` (no preference)
+
+##### **D. Example: Complete Custom Configuration**
+
+Here's a full example for a hypothetical system with different conventions:
+
+```rust
+// System mappings with custom folder names and paths
+pub const SYSTEM_MAPPINGS: &[SystemMapping] = &[
+    SystemMapping {
+        folder_name: "nes",
+        libretro_name: "Nintendo - Nintendo Entertainment System",
+        boxart_subfolder: ".covers",  // Hidden folder
+    },
+    SystemMapping {
+        folder_name: "genesis",
+        libretro_name: "Sega - Mega Drive - Genesis",
+        boxart_subfolder: "art",      // Custom folder name
+    },
+    // ... more systems
+];
+
+// Custom paths and naming
+pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
+    image_name_pattern: "{game_name}-box.png", // Custom suffix
+    include_extension_in_name: true,           // Include ROM extension in image name
+};
+
+// Tuned behavior
+pub const SCRAPER_CONFIG: ScraperConfig = ScraperConfig {
+    skip_existing: false,           // Always re-download
+    create_missing_dirs: true,      // Auto-create folders
+    max_concurrent_downloads: 4,    // Conservative rate (slower but safer)
+    preferred_region: Some("Europe"), // European region preference
+};
+```
+
+##### **E. Path Resolution Example**
+
+With these settings, here's how paths are built:
+
+**ROM file:** `/mnt/sdcard/games/nes/Super Mario Bros (USA).nes`
+
+**Boxart saved to:** `/mnt/sdcard/games/nes/.covers/Super Mario Bros.nes-box.png`
+
+**Breakdown:**
+- `games` - user-selected ROM folder path
+- `nes` - from system mapping `folder_name`
+- `.covers` - from system mapping `boxart_subfolder`
+- `Super Mario Bros.nes-box.png` - from `image_name_pattern` with `include_extension_in_name: true`
+  - ROM name: "Super Mario Bros (USA).nes"
+  - Extension kept: ".nes"
+  - Region stripped: "(USA)" removed
+  - Pattern applied: `{game_name}-box.png` → `Super Mario Bros.nes-box.png`
+
+**If `include_extension_in_name: false` (default):**
+- Result would be: `/mnt/sdcard/games/nes/.covers/Super Mario Bros-box.png` (no .nes)
+
+##### **F. Adding New Systems**
+
+If your OS supports systems not in the default list, add them to `SYSTEM_MAPPINGS`:
+
+1. Find the Libretro system name from: https://github.com/libretro-thumbnails
+2. Add a new `SystemMapping` entry:
+
+```rust
+SystemMapping {
+    folder_name: "YOUR_FOLDER",           // Your folder name
+    libretro_name: "EXACT_LIBRETRO_NAME", // From GitHub repo list
+    boxart_subfolder: "Imgs",             // Where to save images
+},
+```
+
+**Important:** The `libretro_name` must exactly match a repository name from the libretro-thumbnails organization.
+
+##### **G. Testing Your Configuration**
+
+1. Build the installer with your changes
+2. Open the scraper UI (🖼 Scrape Boxart button)
+3. Select your SD card's ROM folder
+4. Pick a test system with a few ROMs
+5. Click "Scrape Selected Folders"
+6. Verify images appear in the correct location with correct names
+
+</details>
+
+---
+
 ### 🧪 Testing Your Rebrand
 
 #### **Local Build Test:**
@@ -834,6 +1022,8 @@ src/
 ├── github.rs            - GitHub API integration
 ├── fat32.rs             - Custom FAT32 formatter (Windows >32GB)
 ├── debug.rs             - Debug logging to file
+├── boxart_scraper.rs    - ⚠️ CONFIG: ROM boxart scraper with fuzzy matching
+├── boxart_db.rs         - Embedded Libretro thumbnail database
 └── mac/
     └── authopen.rs      - macOS privileged disk access
 ```
@@ -870,6 +1060,14 @@ src/
 - O_SYNC flag ensures synchronous writes (data written before returning)
 - 512-byte sector-aligned buffering for .gz decompression compatibility
 - Proper error differentiation (cancelled, denied, system error)
+
+**Boxart scraper:**
+- Fuzzy matching with Levenshtein distance for ROM name matching
+- Downloads from Libretro thumbnail database (60+ systems)
+- Configurable paths, naming patterns, and folder structure
+- Concurrent downloads with progress tracking (configurable worker count)
+- Embedded database for zero runtime I/O
+- Region-aware tie-breaking for multi-region games
 
 ---
 

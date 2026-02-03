@@ -126,11 +126,6 @@ impl DownloadState {
         }
     }
 
-    /// Check if a partial download exists
-    pub fn exists(dest_path: &Path) -> bool {
-        Self::get_state_file_path(dest_path).exists()
-    }
-
     /// Mark a chunk as completed and update downloaded bytes
     pub fn mark_chunk_complete(&mut self, chunk_index: usize, bytes_downloaded: u64) {
         if let Some(chunk) = self.chunks.get_mut(chunk_index) {
@@ -156,7 +151,7 @@ impl DownloadState {
         if self.total_size == 0 {
             return 0.0;
         }
-        (self.downloaded_bytes as f64 / self.total_size as f64 * 100.0)
+        self.downloaded_bytes as f64 / self.total_size as f64 * 100.0
     }
 
     /// Recalculate downloaded_bytes from chunk progress

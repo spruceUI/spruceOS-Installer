@@ -155,7 +155,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         info: "Stable releases of spruceOS.\nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
         display_name: Some("spruceOS Stable"),  // Display name for popups
         supports_update_mode: true,  // Archive-based (.7z)
-        update_directories: &["Retroarch", "spruce"],
+        update_directories: &[".tmp_update", "App", "Emu", "Icons", "miyoo", "miyoo355", "RetroArch", "spruce", "trimui"],
         allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
         asset_display_mappings: None,
     },
@@ -165,7 +165,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick",
         display_name: Some("spruceOS Nightly"),  // Display name for popups
         supports_update_mode: true,  // Supports archives
-        update_directories: &["Retroarch", "spruce"],
+        update_directories: &[".tmp_update", "App", "Emu", "Icons", "miyoo", "miyoo355", "RetroArch", "spruce", "trimui"],
         allowed_extensions: None,  // Show all assets
         asset_display_mappings: None,
     },
@@ -280,6 +280,128 @@ pub fn load_custom_fonts(ctx: &egui::Context) {
 
     ctx.set_fonts(fonts);
 }
+
+// ----------------------------------------------------------------------------
+// BOXART SCRAPER CONFIGURATION
+// ----------------------------------------------------------------------------
+
+/// System folder mapping for boxart scraper
+///
+/// Maps ROM folder names to Libretro system names for thumbnail downloads
+pub struct SystemMapping {
+    /// Folder name on the SD card (e.g., "FC", "nes", "NES")
+    pub folder_name: &'static str,
+    /// Libretro system name used for thumbnail URLs
+    pub libretro_name: &'static str,
+    /// Subfolder where boxart images are saved (e.g., "Imgs")
+    pub boxart_subfolder: &'static str,
+}
+
+pub const SYSTEM_MAPPINGS: &[SystemMapping] = &[
+    SystemMapping { folder_name: "AMIGA", libretro_name: "Commodore - Amiga", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "ATARI", libretro_name: "Atari - 2600", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "ATARIST", libretro_name: "Atari - ST", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "ARCADE", libretro_name: "MAME", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "CPS1", libretro_name: "MAME", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "CPS2", libretro_name: "MAME", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "CPS3", libretro_name: "MAME", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "ARDUBOY", libretro_name: "Arduboy Inc - Arduboy", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "CHAI", libretro_name: "ChaiLove", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "COLECO", libretro_name: "Coleco - ColecoVision", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "COMMODORE", libretro_name: "Commodore - 64", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "CPC", libretro_name: "Amstrad - CPC", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "DC", libretro_name: "Sega - Dreamcast", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "DOOM", libretro_name: "DOOM", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "DOS", libretro_name: "DOS", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "EIGHTHUNDRED", libretro_name: "Atari - 8-bit", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "FAIRCHILD", libretro_name: "Fairchild - Channel F", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "FBNEO", libretro_name: "FBNeo - Arcade Games", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "FC", libretro_name: "Nintendo - Nintendo Entertainment System", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "FDS", libretro_name: "Nintendo - Family Computer Disk System", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "FIFTYTWOHUNDRED", libretro_name: "Atari - 5200", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "GB", libretro_name: "Nintendo - Game Boy", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "GBA", libretro_name: "Nintendo - Game Boy Advance", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "GBC", libretro_name: "Nintendo - Game Boy Color", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "GG", libretro_name: "Sega - Game Gear", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "GW", libretro_name: "Handheld Electronic Game", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "INTELLIVISION", libretro_name: "Mattel - Intellivision", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "LYNX", libretro_name: "Atari - Lynx", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "MD", libretro_name: "Sega - Mega Drive - Genesis", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "MS", libretro_name: "Sega - Master System - Mark III", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "MSU1", libretro_name: "Nintendo - Super Nintendo Entertainment System", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "MSUMD", libretro_name: "Sega - Mega Drive - Genesis", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "MSX", libretro_name: "Microsoft - MSX", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "N64", libretro_name: "Nintendo - Nintendo 64", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "NDS", libretro_name: "Nintendo - Nintendo DS", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "NEOCD", libretro_name: "SNK - Neo Geo CD", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "NEOGEO", libretro_name: "SNK - Neo Geo", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "NGP", libretro_name: "SNK - Neo Geo Pocket", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "NGPC", libretro_name: "SNK - Neo Geo Pocket Color", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "ODYSSEY", libretro_name: "Magnavox - Odyssey2", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "PCE", libretro_name: "NEC - PC Engine - TurboGrafx 16", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "PCECD", libretro_name: "NEC - PC Engine CD - TurboGrafx-CD", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "POKE", libretro_name: "Nintendo - Pokemon Mini", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "PS", libretro_name: "Sony - PlayStation", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "PSP", libretro_name: "Sony - PlayStation Portable", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "QUAKE", libretro_name: "Quake", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "SATELLAVIEW", libretro_name: "Nintendo - Satellaview", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "SATURN", libretro_name: "Sega - Saturn", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "SCUMMVM", libretro_name: "ScummVM", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "SEGACD", libretro_name: "Sega - Mega-CD - Sega CD", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "SEGASGONE", libretro_name: "Sega - SG-1000", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "SEVENTYEIGHTHUNDRED", libretro_name: "Atari - 7800", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "SFC", libretro_name: "Nintendo - Super Nintendo Entertainment System", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "SGB", libretro_name: "Nintendo - Game Boy", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "SGFX", libretro_name: "NEC - PC Engine SuperGrafx", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "SUFAMI", libretro_name: "Nintendo - Sufami Turbo", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "SUPERVISION", libretro_name: "Watara - Supervision", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "THIRTYTWOX", libretro_name: "Sega - 32X", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "TIC", libretro_name: "TIC-80", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "VB", libretro_name: "Nintendo - Virtual Boy", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "VECTREX", libretro_name: "GCE - Vectrex", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "VIC20", libretro_name: "Commodore - VIC-20", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "VIDEOPAC", libretro_name: "Philips - Videopac+", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "WOLF", libretro_name: "Wolfenstein 3D", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "WS", libretro_name: "Bandai - WonderSwan", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "WSC", libretro_name: "Bandai - WonderSwan Color", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "X68000", libretro_name: "Sharp - X68000", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "ZXS", libretro_name: "Sinclair - ZX Spectrum", boxart_subfolder: "Imgs" },
+];
+
+/// Boxart path and naming configuration
+pub struct BoxartConfig {
+    /// Image filename pattern - use {game_name} as placeholder
+    /// Examples: "{game_name}.png", "{game_name}-image.png", "boxart-{game_name}.png"
+    pub image_name_pattern: &'static str,
+    /// Include ROM file extension in image name
+    /// - false: "Game Name.gb" → "Game Name.png"
+    /// - true: "Game Name.gb" → "Game Name.gb.png"
+    pub include_extension_in_name: bool,
+}
+
+pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
+    image_name_pattern: "{game_name}.png",
+    include_extension_in_name: false,
+};
+
+/// Scraper behavior configuration
+pub struct ScraperConfig {
+    /// Skip downloading if image already exists
+    pub skip_existing: bool,
+    /// Automatically create missing boxart directories
+    pub create_missing_dirs: bool,
+    /// Maximum concurrent downloads (number of worker threads)
+    pub max_concurrent_downloads: usize,
+    /// Preferred region for tie-breaking (e.g., "USA", "Europe", "Japan")
+    pub preferred_region: Option<&'static str>,
+}
+
+pub const SCRAPER_CONFIG: ScraperConfig = ScraperConfig {
+    skip_existing: true,
+    create_missing_dirs: true,
+    max_concurrent_downloads: 8,
+    preferred_region: Some("USA"),
+};
 
 // ============================================================================
 // THEME SETUP (internal use)

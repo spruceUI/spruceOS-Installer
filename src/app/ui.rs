@@ -75,10 +75,9 @@ impl eframe::App for InstallerApp {
                         // Check for manifest.json in release
                         let ctx_clone = ctx.clone();
                         let release_clone = release.clone();
-                        let log_messages = self.log_messages.clone();
 
                         // Spawn async task to check for manifest
-                        let (manifest_tx, mut manifest_rx) = mpsc::unbounded_channel();
+                        let (manifest_tx, manifest_rx) = mpsc::unbounded_channel();
                         self.runtime.spawn(async move {
                             let manifest_result = crate::github::get_manifest_from_release(&release_clone).await;
                             let _ = manifest_tx.send(manifest_result);
@@ -223,6 +222,31 @@ impl eframe::App for InstallerApp {
                 self.update_mode = false; // Reset update mode
                 self.manifest_display_name = None;
                 progress.message.clear();
+            } else if progress.message.starts_with("SCRAPE_COMPLETE") {
+                // Parse stats from message
+                let stats = if let Some(stats_str) = progress.message.strip_prefix("SCRAPE_COMPLETE:") {
+                    let parts: Vec<&str> = stats_str.split(':').collect();
+                    if parts.len() == 4 {
+                        crate::boxart_scraper::ScrapeStats {
+                            total: parts[0].parse().unwrap_or(0),
+                            succeeded: parts[1].parse().unwrap_or(0),
+                            skipped: parts[2].parse().unwrap_or(0),
+                            failed: parts[3].parse().unwrap_or(0),
+                        }
+                    } else {
+                        crate::boxart_scraper::ScrapeStats::default()
+                    }
+                } else {
+                    crate::boxart_scraper::ScrapeStats::default()
+                };
+                self.scraper_stats = Some(stats);
+                self.state = AppState::Idle;
+                self.cancel_token = None;
+                progress.message.clear();
+            } else if progress.message == "SCRAPE_ERROR" {
+                self.state = AppState::Idle;
+                self.cancel_token = None;
+                progress.message.clear();
             } else {
                 // Update state based on progress message
                 if progress.message.contains("Downloading") {
@@ -260,6 +284,7 @@ impl eframe::App for InstallerApp {
                 | AppState::Copying
                 | AppState::Ejecting
                 | AppState::Cancelling
+                | AppState::ScrapingBoxart
         );
         if is_busy {
             ctx.request_repaint();
@@ -668,6 +693,163 @@ impl eframe::App for InstallerApp {
                 });
         }
 
+        // Scraper Window
+        if self.show_scraper_window {
+            let window_frame = egui::Frame::window(&ctx.style())
+                .fill(ctx.style().visuals.window_fill)
+                .stroke(ctx.style().visuals.window_stroke);
+
+            egui::Window::new("Scrape Boxart")
+                .order(egui::Order::Foreground)
+                .collapsible(false)
+                .resizable(false)
+                .title_bar(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .frame(window_frame)
+                .show(ctx, |ui| {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(12.0);
+                        ui.heading("Scrape Boxart");
+                        ui.add_space(12.0);
+
+                        // Show selected drive
+                        if let Some(idx) = self.selected_drive_idx {
+                            if let Some(drive) = self.drives.get(idx) {
+                                ui.label(format!("Selected Drive: {}", drive.display_name()));
+                                ui.add_space(8.0);
+                            }
+                        }
+
+                        // Roms folder label
+                        ui.label(format!("Roms: {}", self.scraper_roms_path));
+                        ui.add_space(8.0);
+
+                        // Select All / Deselect All buttons
+                        if !self.scraper_folders.is_empty() && !matches!(self.state, AppState::ScrapingBoxart) && self.scraper_stats.is_none() {
+                            ui.horizontal(|ui| {
+                                if ui.button("Select All").clicked() {
+                                    for folder in &mut self.scraper_folders {
+                                        folder.1 = true;
+                                    }
+                                }
+                                if ui.button("Deselect All").clicked() {
+                                    for folder in &mut self.scraper_folders {
+                                        folder.1 = false;
+                                    }
+                                }
+                            });
+                            ui.add_space(4.0);
+
+                            // Scrollable checkbox list
+                            egui::ScrollArea::vertical()
+                                .max_height(200.0)
+                                .show(ui, |ui| {
+                                    for folder in &mut self.scraper_folders {
+                                        ui.checkbox(&mut folder.1, &folder.0);
+                                    }
+                                });
+                        } else if self.scraper_folders.is_empty() && !matches!(self.state, AppState::ScrapingBoxart) && self.scraper_stats.is_none() {
+                            ui.label("No supported ROM folders found.");
+                        }
+                        ui.add_space(12.0);
+
+                        // Show progress section during scraping
+                        if matches!(self.state, AppState::ScrapingBoxart) {
+                            ui.separator();
+                            ui.add_space(8.0);
+
+                            let (current, total, message) = {
+                                let p = self.progress.lock().unwrap();
+                                (p.current, p.total, p.message.clone())
+                            };
+
+                            ui.label(&message);
+                            ui.add_space(8.0);
+
+                            let progress = if total > 0 {
+                                current as f32 / total as f32
+                            } else {
+                                0.0
+                            };
+
+                            ui.add(
+                                egui::ProgressBar::new(progress)
+                                    .fill(ui.visuals().selection.bg_fill)
+                                    .desired_height(16.0)
+                                    .desired_width(300.0)
+                            );
+                            ui.add_space(12.0);
+                        }
+
+                        // Show results section when complete
+                        if let Some(ref stats) = self.scraper_stats {
+                            ui.separator();
+                            ui.add_space(8.0);
+                            ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "Scraping complete!");
+                            ui.add_space(8.0);
+                            ui.label(format!("{} total", stats.total));
+                            ui.label(format!("{} downloaded", stats.succeeded));
+                            ui.label(format!("{} skipped (already existed)", stats.skipped));
+                            ui.label(format!("{} failed", stats.failed));
+                            ui.add_space(12.0);
+                        }
+
+                        ui.separator();
+                        ui.add_space(8.0);
+
+                        // Buttons
+                        let is_scraping = matches!(self.state, AppState::ScrapingBoxart);
+                        let has_selection = self.scraper_folders.iter().any(|(_, selected)| *selected);
+                        let path_valid = !self.scraper_roms_path.is_empty() &&
+                                        std::path::Path::new(&self.scraper_roms_path).exists() &&
+                                        has_selection;
+
+                        ui.columns(2, |columns| {
+                            columns[0].allocate_ui_with_layout(
+                                egui::Vec2::ZERO,
+                                egui::Layout::right_to_left(egui::Align::Center),
+                                |ui| {
+                                    if is_scraping {
+                                        // Show Cancel button during scraping
+                                        if ui.button("Cancel").clicked() {
+                                            self.cancel_installation();
+                                        }
+                                    } else if self.scraper_stats.is_some() {
+                                        // Show Close button when complete
+                                        if ui.button("Close").clicked() {
+                                            self.show_scraper_window = false;
+                                            self.scraper_stats = None;
+                                            self.state = AppState::Idle;
+                                        }
+                                    } else {
+                                        // Show Cancel button before scraping
+                                        if ui.button("Cancel").clicked() {
+                                            self.show_scraper_window = false;
+                                        }
+                                    }
+                                },
+                            );
+
+                            columns[1].allocate_ui_with_layout(
+                                egui::Vec2::ZERO,
+                                egui::Layout::left_to_right(egui::Align::Center),
+                                |ui| {
+                                    if !is_scraping && self.scraper_stats.is_none() {
+                                        ui.add_enabled_ui(path_valid, |ui| {
+                                            if ui.button("Start Scraping").clicked() {
+                                                self.start_boxart_scraping(ctx.clone());
+                                            }
+                                        });
+                                    }
+                                },
+                            );
+                        });
+
+                        ui.add_space(8.0);
+                    });
+                });
+        }
+
         if self.show_log {
             egui::SidePanel::right("log_panel")
                 .resizable(true)
@@ -793,7 +975,7 @@ impl eframe::App for InstallerApp {
                             // if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
                             //     self.show_theme_editor = !self.show_theme_editor;
                             // }
-                            if ui.button("📜").on_hover_text("Toggle Log Area").clicked() {
+                            if ui.button(egui::RichText::new("📜").size(24.0)).on_hover_text("Toggle Log Area").clicked() {
                                 self.show_log = !self.show_log;
 
                                 // Adjust window size when toggling log
@@ -805,6 +987,45 @@ impl eframe::App for InstallerApp {
                                 };
                                 ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(new_width, current_size.y)));
                             }
+
+                            // Scrape Boxart button - only enabled when drive is selected and state is Idle or Complete
+                            let can_scrape = self.selected_drive_idx.is_some() &&
+                                           matches!(self.state, AppState::Idle | AppState::Complete);
+                            ui.add_enabled_ui(can_scrape, |ui| {
+                                if ui.button(egui::RichText::new("🖼").size(24.0)).on_hover_text("Scrape Boxart").clicked() {
+                                    // Set default Roms path based on selected drive
+                                    if let Some(idx) = self.selected_drive_idx {
+                                        if let Some(drive) = self.drives.get(idx) {
+                                            if let Some(mount_path) = &drive.mount_path {
+                                                #[cfg(target_os = "windows")]
+                                                let roms_path = format!("{}Roms", mount_path.display());
+                                                #[cfg(not(target_os = "windows"))]
+                                                let roms_path = mount_path.join("Roms").display().to_string();
+                                                self.scraper_roms_path = roms_path.clone();
+
+                                                // Scan for valid subfolders
+                                                let mut folders = Vec::new();
+                                                if let Ok(entries) = std::fs::read_dir(&roms_path) {
+                                                    for entry in entries.flatten() {
+                                                        let path = entry.path();
+                                                        if path.is_dir() {
+                                                            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                                                                if crate::boxart_scraper::BoxArtScraper::get_ra_alias(name).is_some() {
+                                                                    folders.push((name.to_string(), true));
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                folders.sort_by(|a, b| a.0.cmp(&b.0));
+                                                self.scraper_folders = folders;
+                                            }
+                                        }
+                                    }
+                                    self.show_scraper_window = true;
+                                    self.scraper_stats = None;
+                                }
+                            });
                             },
                     );
                 });

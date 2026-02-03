@@ -24,6 +24,7 @@ use crate::drives::DriveInfo;
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
 use crate::github::{download_asset, get_latest_release, DownloadProgress, Asset};
+use crate::boxart_scraper::{BoxArtScraper, ScrapeProgress};
 use eframe::egui;
 use std::path::PathBuf;
 use tokio::sync::mpsc;
@@ -1050,6 +1051,142 @@ impl InstallerApp {
                 }
                 ctx_state.request_repaint();
             }
+        });
+    }
+
+    pub(super) fn start_boxart_scraping(&mut self, ctx: egui::Context) {
+        // Validate roms path
+        let roms_path = std::path::PathBuf::from(&self.scraper_roms_path);
+        if !roms_path.exists() {
+            self.log(&format!("Error: Roms path does not exist: {}", self.scraper_roms_path));
+            return;
+        }
+
+        if !roms_path.is_dir() {
+            self.log(&format!("Error: Roms path is not a directory: {}", self.scraper_roms_path));
+            return;
+        }
+
+        self.log(&format!("Starting boxart scraping for: {}", self.scraper_roms_path));
+        crate::debug::log_section("Boxart Scraping Started");
+        crate::debug::log(&format!("Roms path: {}", self.scraper_roms_path));
+
+        // Set state to scraping
+        self.state = AppState::ScrapingBoxart;
+
+        // Create progress channel
+        let (progress_tx, mut progress_rx) = mpsc::unbounded_channel::<ScrapeProgress>();
+
+        // Create cancellation token
+        let cancel_token = CancellationToken::new();
+        self.cancel_token = Some(cancel_token.clone());
+
+        // Clone values for async task
+        let progress = self.progress.clone();
+        let log_messages = self.log_messages.clone();
+        let ctx_clone = ctx.clone();
+        let roms_path_clone = roms_path.clone();
+        let selected_folders: Vec<String> = self.scraper_folders.iter()
+            .filter(|(_, selected)| *selected)
+            .map(|(name, _)| name.clone())
+            .collect();
+
+        // Store stats in a shared location
+        let stats_holder = std::sync::Arc::new(std::sync::Mutex::new(None));
+        let stats_holder_clone = stats_holder.clone();
+
+        // Spawn progress handler
+        let progress_handle = self.runtime.spawn(async move {
+            while let Some(prog) = progress_rx.recv().await {
+                if let Ok(mut p) = progress.lock() {
+                    match prog {
+                        ScrapeProgress::Started { total } => {
+                            p.total = total as u64;
+                            p.current = 0;
+                            p.message = format!("Starting scrape... ({} ROMs found)", total);
+                        }
+                        ScrapeProgress::Progress { current, rom_name, status } => {
+                            p.current = current as u64;
+                            let truncated_name = if rom_name.len() > 30 {
+                                format!("...{}", &rom_name[rom_name.len()-27..])
+                            } else {
+                                rom_name.clone()
+                            };
+                            p.message = format!("Scraping... ({}/{}) - {}: {}",
+                                current, p.total, truncated_name, status);
+                        }
+                        ScrapeProgress::Completed(stats) => {
+                            p.current = p.total;
+                            p.message = "Scraping complete!".to_string();
+
+                            // Store stats
+                            if let Ok(mut holder) = stats_holder_clone.lock() {
+                                *holder = Some(stats.clone());
+                            }
+
+                            // Log stats
+                            if let Ok(mut logs) = log_messages.lock() {
+                                logs.push(format!("Scraping complete: {} total, {} downloaded, {} skipped, {} failed",
+                                    stats.total, stats.succeeded, stats.skipped, stats.failed));
+                            }
+                        }
+                    }
+                }
+                ctx_clone.request_repaint();
+            }
+        });
+
+        // Spawn scraping task
+        let log_messages_clone = self.log_messages.clone();
+        let progress_clone = self.progress.clone();
+        let ctx_scrape = ctx.clone();
+        let stats_holder_final = stats_holder.clone();
+
+        self.runtime.spawn(async move {
+            let log = |msg: &str| {
+                if let Ok(mut logs) = log_messages_clone.lock() {
+                    logs.push(msg.to_string());
+                }
+                crate::debug::log(msg);
+                ctx_scrape.request_repaint();
+            };
+
+            log("Initializing boxart scraper...");
+            let mut scraper = BoxArtScraper::new();
+
+            match scraper.scrape_selected_folders(&roms_path_clone, &selected_folders, progress_tx).await {
+                Ok(_stats) => {
+                    log("Scraping completed successfully");
+                    crate::debug::log("Boxart scraping completed successfully");
+
+                    let _ = progress_handle.await;
+
+                    // Get stats from holder and signal completion
+                    if let Ok(mut p) = progress_clone.lock() {
+                        if let Ok(holder) = stats_holder_final.lock() {
+                            if let Some(ref stats) = *holder {
+                                // Encode stats in message for UI to parse
+                                p.message = format!("SCRAPE_COMPLETE:{}:{}:{}:{}",
+                                    stats.total, stats.succeeded, stats.skipped, stats.failed);
+                            } else {
+                                p.message = "SCRAPE_COMPLETE".to_string();
+                            }
+                        } else {
+                            p.message = "SCRAPE_COMPLETE".to_string();
+                        }
+                    }
+                }
+                Err(e) => {
+                    log(&format!("Scraping error: {}", e));
+                    crate::debug::log(&format!("ERROR: {}", e));
+
+                    if let Ok(mut p) = progress_clone.lock() {
+                        p.message = "SCRAPE_ERROR".to_string();
+                    }
+                }
+            }
+
+            ctx_scrape.request_repaint();
         });
     }
 }

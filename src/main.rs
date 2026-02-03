@@ -4,6 +4,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod boxart_db;
+mod boxart_scraper;
 mod burn;
 mod config;
 mod copy;
