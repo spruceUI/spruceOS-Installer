@@ -370,8 +370,6 @@ pub const SYSTEM_MAPPINGS: &[SystemMapping] = &[
 
 /// Boxart path and naming configuration
 pub struct BoxartConfig {
-    /// Base ROM folder name (e.g., "Roms" or "roms")
-    pub roms_base_folder: &'static str,
     /// Image filename pattern - use {game_name} as placeholder
     /// Examples: "{game_name}.png", "{game_name}-image.png", "boxart-{game_name}.png"
     pub image_name_pattern: &'static str,
@@ -382,7 +380,6 @@ pub struct BoxartConfig {
 }
 
 pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
-    roms_base_folder: "Roms",
     image_name_pattern: "{game_name}.png",
     include_extension_in_name: false,
 };

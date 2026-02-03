@@ -43,19 +43,6 @@ impl BoxArtScraper {
         }
     }
 
-    /// Create with a custom region preference
-    pub fn with_region(region: Option<String>) -> Self {
-        Self {
-            cache: HashMap::new(),
-            preferred_region: region,
-        }
-    }
-
-    /// Set the preferred region for tie-breaking (e.g., "USA", "Europe", "Japan")
-    pub fn set_preferred_region(&mut self, region: Option<String>) {
-        self.preferred_region = region;
-    }
-
     /// Get the system mapping for a folder name
     fn get_system_mapping(folder_name: &str) -> Option<&'static crate::config::SystemMapping> {
         crate::config::SYSTEM_MAPPINGS
@@ -385,97 +372,6 @@ impl BoxArtScraper {
         fs::write(dest_path, &bytes).await.map_err(|e| e.to_string())?;
 
         Ok(())
-    }
-
-    /// Scrape boxart for all ROMs in a folder
-    pub async fn scrape_roms_folder(
-        &mut self,
-        roms_path: &Path,
-        progress_tx: mpsc::UnboundedSender<ScrapeProgress>,
-    ) -> Result<ScrapeStats, String> {
-        let mut stats = ScrapeStats::default();
-        let mut tasks = Vec::new();
-
-        // Scan for systems (subdirectories)
-        let mut entries = fs::read_dir(roms_path)
-            .await
-            .map_err(|e| format!("Failed to read roms directory: {}", e))?;
-
-        while let Some(entry) = entries.next_entry().await.map_err(|e| e.to_string())? {
-            let path = entry.path();
-
-            if !path.is_dir() {
-                continue;
-            }
-
-            let sys_name = path.file_name()
-                .and_then(|n| n.to_str())
-                .ok_or_else(|| "Invalid system directory name".to_string())?
-                .to_string();
-
-            // Check if this system has a Libretro alias
-            if Self::get_ra_alias(&sys_name).is_none() {
-                continue;
-            }
-
-            // Scan for ROM files
-            tasks.extend(self.scan_system_roms(&path, &sys_name).await?);
-        }
-
-        stats.total = tasks.len();
-        let _ = progress_tx.send(ScrapeProgress::Started { total: stats.total });
-
-        // Process tasks with concurrency limit from config
-        let semaphore = Arc::new(tokio::sync::Semaphore::new(
-            crate::config::SCRAPER_CONFIG.max_concurrent_downloads
-        ));
-        let mut handles = Vec::new();
-
-        for (idx, (sys_name, rom_name, dest_path)) in tasks.into_iter().enumerate() {
-            let permit = semaphore.clone().acquire_owned().await.map_err(|e| e.to_string())?;
-            let image_name = self.find_image_name(&sys_name, &rom_name);
-            let progress_tx = progress_tx.clone();
-            let dest_path = dest_path.clone();
-            let sys_name = sys_name.clone();
-
-            let handle = tokio::spawn(async move {
-                let result = if let Some(img_name) = image_name {
-                    let scraper = BoxArtScraper::new();
-                    scraper.download_boxart(&sys_name, &img_name, &dest_path).await
-                } else {
-                    Err("No matching image found".to_string())
-                };
-
-                let status = match &result {
-                    Ok(_) => "Success".to_string(),
-                    Err(e) => format!("Failed: {}", e),
-                };
-
-                let _ = progress_tx.send(ScrapeProgress::Progress {
-                    current: idx + 1,
-                    rom_name: rom_name.clone(),
-                    status,
-                });
-
-                drop(permit);
-                result
-            });
-
-            handles.push(handle);
-        }
-
-        // Wait for all tasks to complete
-        for handle in handles {
-            match handle.await {
-                Ok(Ok(_)) => stats.succeeded += 1,
-                Ok(Err(_)) => stats.failed += 1,
-                Err(_) => stats.failed += 1,
-            }
-        }
-
-        let _ = progress_tx.send(ScrapeProgress::Completed(stats.clone()));
-
-        Ok(stats)
     }
 
     /// Scrape boxart for only the selected subfolders

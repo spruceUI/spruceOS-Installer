@@ -75,10 +75,9 @@ impl eframe::App for InstallerApp {
                         // Check for manifest.json in release
                         let ctx_clone = ctx.clone();
                         let release_clone = release.clone();
-                        let log_messages = self.log_messages.clone();
 
                         // Spawn async task to check for manifest
-                        let (manifest_tx, mut manifest_rx) = mpsc::unbounded_channel();
+                        let (manifest_tx, manifest_rx) = mpsc::unbounded_channel();
                         self.runtime.spawn(async move {
                             let manifest_result = crate::github::get_manifest_from_release(&release_clone).await;
                             let _ = manifest_tx.send(manifest_result);

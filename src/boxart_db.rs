@@ -76,17 +76,3 @@ pub fn get_boxart_db(system: &str) -> Option<&'static str> {
         _ => None,
     }
 }
-
-/// Get list of all supported systems
-pub fn get_supported_systems() -> Vec<&'static str> {
-    vec![
-        "AMIGA", "ARCADE", "ARDUBOY", "ATARI", "CHAI", "COLECO", "COMMODORE",
-        "CPC", "DC", "DOOM", "DOS", "FAIRCHILD", "FBNEO", "FC", "FDS",
-        "FIFTYTWOHUNDRED", "GB", "GBA", "GBC", "GG", "INTELLIVISION", "LYNX",
-        "MD", "MS", "MSUMD", "MSX", "N64", "NDS", "NEOCD", "NEOGEO", "NGP",
-        "NGPC", "ODYSSEY", "PCE", "PCECD", "POKE", "PS", "PSP", "QUAKE",
-        "SATELLAVIEW", "SCUMMVM", "SEGACD", "SEGASGONE", "SEVENTYEIGHTHUNDRED",
-        "SFC", "SGB", "SGFX", "SUFAMI", "SUPERVISION", "THIRTYTWOX", "TIC",
-        "VB", "VECTREX", "VIC20", "VIDEOPAC", "WOLF", "WS", "WSC", "X68000", "ZXS",
-    ]
-}

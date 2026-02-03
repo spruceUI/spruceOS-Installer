@@ -285,7 +285,7 @@ async fn download_parallel(
     const NUM_CHUNKS: u64 = 8;
 
     // Use existing state or create new
-    let mut state = existing_state.unwrap_or_else(|| {
+    let state = existing_state.unwrap_or_else(|| {
         DownloadState::new(url.to_string(), total_size, dest_path.to_path_buf(), NUM_CHUNKS)
     });
 

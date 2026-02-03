@@ -761,7 +761,6 @@ Controls how scraped images are named:
 
 ```rust
 pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
-    roms_base_folder: "Roms",
     image_name_pattern: "{game_name}.png",     // Pattern with {game_name} placeholder
     include_extension_in_name: false,          // Whether to include ROM extension
 };
@@ -795,22 +794,7 @@ include_extension_in_name: true,   // Include extension
 
 **Choose based on your frontend's requirements** - different UIs expect different naming conventions.
 
-##### **C. ROM Base Folder Name**
-
-**Location:** `src/config.rs` → `BOXART_CONFIG.roms_base_folder`
-
-Change if your OS uses a different name for the ROM directory:
-
-```rust
-pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
-    roms_base_folder: "Roms",   // Change to "roms", "ROMS", "Games", etc.
-    image_name_pattern: "{game_name}.png",
-};
-```
-
-**Note:** This is just for internal path building. The actual folder is selected by users in the UI.
-
-##### **D. Scraper Behavior Settings**
+##### **C. Scraper Behavior Settings**
 
 **Location:** `src/config.rs` → `SCRAPER_CONFIG`
 
@@ -829,7 +813,7 @@ pub const SCRAPER_CONFIG: ScraperConfig = ScraperConfig {
 - `max_concurrent_downloads`: Higher = faster, but may hit rate limits (4-16 recommended)
 - `preferred_region`: Options: `"USA"`, `"Europe"`, `"Japan"`, or `None` (no preference)
 
-##### **E. Example: Complete Custom Configuration**
+##### **D. Example: Complete Custom Configuration**
 
 Here's a full example for a hypothetical system with different conventions:
 
@@ -851,7 +835,6 @@ pub const SYSTEM_MAPPINGS: &[SystemMapping] = &[
 
 // Custom paths and naming
 pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
-    roms_base_folder: "games",                 // Different base folder
     image_name_pattern: "{game_name}-box.png", // Custom suffix
     include_extension_in_name: true,           // Include ROM extension in image name
 };
@@ -865,7 +848,7 @@ pub const SCRAPER_CONFIG: ScraperConfig = ScraperConfig {
 };
 ```
 
-##### **F. Path Resolution Example**
+##### **E. Path Resolution Example**
 
 With these settings, here's how paths are built:
 
@@ -874,7 +857,7 @@ With these settings, here's how paths are built:
 **Boxart saved to:** `/mnt/sdcard/games/nes/.covers/Super Mario Bros.nes-box.png`
 
 **Breakdown:**
-- `games` - from `roms_base_folder`
+- `games` - user-selected ROM folder path
 - `nes` - from system mapping `folder_name`
 - `.covers` - from system mapping `boxart_subfolder`
 - `Super Mario Bros.nes-box.png` - from `image_name_pattern` with `include_extension_in_name: true`
@@ -886,7 +869,7 @@ With these settings, here's how paths are built:
 **If `include_extension_in_name: false` (default):**
 - Result would be: `/mnt/sdcard/games/nes/.covers/Super Mario Bros-box.png` (no .nes)
 
-##### **G. Adding New Systems**
+##### **F. Adding New Systems**
 
 If your OS supports systems not in the default list, add them to `SYSTEM_MAPPINGS`:
 
@@ -903,7 +886,7 @@ SystemMapping {
 
 **Important:** The `libretro_name` must exactly match a repository name from the libretro-thumbnails organization.
 
-##### **H. Testing Your Configuration**
+##### **G. Testing Your Configuration**
 
 1. Build the installer with your changes
 2. Open the scraper UI (🖼 Scrape Boxart button)
