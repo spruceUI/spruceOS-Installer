@@ -50,9 +50,7 @@ jobs:
             1. Download the appropriate binary for your architecture
             2. Extract: `tar -xzf spruceos-installer-linux-*.tar.gz`
             3. Run: `./spruceos-installer-linux-*`
-            4. The installer will automatically request privileges via `pkexec` when needed
-
-            **Note:** Requires a desktop environment with `pkexec` support (most modern Linux distributions).
+            4. The installer will automatically request privileges
 
             ### macOS
             1. Extract the zip file
