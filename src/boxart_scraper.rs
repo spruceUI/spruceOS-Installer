@@ -87,20 +87,24 @@ impl BoxArtScraper {
             .unwrap_or(rom_name);
 
         // For arcade systems, look up the display name in MAME database first
+        // If not found, skip this ROM entirely (don't attempt fallback matching)
         let search_name = if Self::is_arcade_system(sys_name) {
-            if let Some(display_name) = mame_db::get_display_name(rom_without_ext) {
-                crate::debug::log(&format!(
-                    "MAME lookup: {} -> {}",
-                    rom_without_ext,
+            match mame_db::get_display_name(rom_without_ext) {
+                Some(display_name) => {
+                    crate::debug::log(&format!(
+                        "MAME lookup: {} -> {}",
+                        rom_without_ext,
+                        display_name
+                    ));
                     display_name
-                ));
-                display_name
-            } else {
-                crate::debug::log(&format!(
-                    "MAME lookup: {} not found in database, using ROM code",
-                    rom_without_ext
-                ));
-                rom_without_ext
+                }
+                None => {
+                    crate::debug::log(&format!(
+                        "MAME lookup: {} not found in database, skipping",
+                        rom_without_ext
+                    ));
+                    return None; // Skip ROMs not in MAME database
+                }
             }
         } else {
             rom_without_ext
