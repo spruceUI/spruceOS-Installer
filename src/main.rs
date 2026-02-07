@@ -18,6 +18,7 @@ mod extract;
 mod fat32;
 mod format;
 mod github;
+mod mame_db;
 mod manifest;
 
 #[cfg(target_os = "macos")]

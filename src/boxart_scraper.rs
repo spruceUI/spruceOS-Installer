@@ -10,6 +10,7 @@ use reqwest;
 use regex::Regex;
 
 use crate::boxart_db;
+use crate::mame_db;
 
 /// Statistics for a boxart scraping operation
 #[derive(Debug, Clone, Default)]
@@ -55,6 +56,14 @@ impl BoxArtScraper {
         Self::get_system_mapping(sys_name).map(|m| m.libretro_name)
     }
 
+    /// Check if a system uses MAME-style ROM naming (requires XML lookup)
+    fn is_arcade_system(sys_name: &str) -> bool {
+        matches!(
+            sys_name.to_uppercase().as_str(),
+            "ARCADE" | "NEOGEO" | "CPS1" | "CPS2" | "CPS3" | "FBNEO" | "MAME2003PLUS"
+        )
+    }
+
     /// Find the best matching image name for a given ROM
     pub fn find_image_name(&mut self, sys_name: &str, rom_name: &str) -> Option<String> {
         // Load and cache the image list for this system from embedded database
@@ -77,7 +86,31 @@ impl BoxArtScraper {
             .and_then(|s| s.to_str())
             .unwrap_or(rom_name);
 
-        self.find_image_from_list(sys_name, rom_without_ext)
+        // For arcade systems, look up the display name in MAME database first
+        // If not found, skip this ROM entirely (don't attempt fallback matching)
+        let search_name = if Self::is_arcade_system(sys_name) {
+            match mame_db::get_display_name(rom_without_ext) {
+                Some(display_name) => {
+                    crate::debug::log(&format!(
+                        "MAME lookup: {} -> {}",
+                        rom_without_ext,
+                        display_name
+                    ));
+                    display_name
+                }
+                None => {
+                    crate::debug::log(&format!(
+                        "MAME lookup: {} not found in database, skipping",
+                        rom_without_ext
+                    ));
+                    return None; // Skip ROMs not in MAME database
+                }
+            }
+        } else {
+            rom_without_ext
+        };
+
+        self.find_image_from_list(sys_name, search_name)
     }
 
     fn re_parens() -> &'static Regex {
