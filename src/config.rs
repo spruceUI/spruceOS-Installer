@@ -316,6 +316,7 @@ pub const SYSTEM_MAPPINGS: &[SystemMapping] = &[
     SystemMapping { folder_name: "EIGHTHUNDRED", libretro_name: "Atari - 8-bit", boxart_subfolder: "Imgs" },
     SystemMapping { folder_name: "FAIRCHILD", libretro_name: "Fairchild - Channel F", boxart_subfolder: "Imgs" },
     SystemMapping { folder_name: "FBNEO", libretro_name: "FBNeo - Arcade Games", boxart_subfolder: "Imgs" },
+    SystemMapping { folder_name: "MAME2003PLUS", libretro_name: "MAME", boxart_subfolder: "Imgs" },
     SystemMapping { folder_name: "FC", libretro_name: "Nintendo - Nintendo Entertainment System", boxart_subfolder: "Imgs" },
     SystemMapping { folder_name: "FDS", libretro_name: "Nintendo - Family Computer Disk System", boxart_subfolder: "Imgs" },
     SystemMapping { folder_name: "FIFTYTWOHUNDRED", libretro_name: "Atari - 5200", boxart_subfolder: "Imgs" },
