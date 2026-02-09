@@ -207,18 +207,21 @@ impl eframe::App for InstallerApp {
                 self.state = AppState::Complete;
                 self.cancel_token = None;
                 self.update_mode = false; // Reset update mode
+                self.preserve_data = true; // Reset preserve data to default
                 self.was_just_paused = false; // Clear pause flag on completion
                 progress.message.clear();
             } else if progress.message == "ERROR" {
                 self.state = AppState::Error;
                 self.cancel_token = None;
                 self.update_mode = false; // Reset update mode
+                self.preserve_data = true; // Reset preserve data to default
                 self.was_just_paused = false; // Clear pause flag on error
                 progress.message.clear();
             } else if progress.message == "CANCELLED" || progress.message.contains("Download paused at") {
                 self.state = AppState::Idle;
                 self.cancel_token = None;
                 self.update_mode = false; // Reset update mode
+                self.preserve_data = true; // Reset preserve data to default
                 self.manifest_display_name = None;
                 progress.message.clear();
             } else if progress.message.starts_with("SCRAPE_COMPLETE") {
@@ -257,6 +260,9 @@ impl eframe::App for InstallerApp {
                     || progress.message.contains("partition")
                 {
                     self.state = AppState::Formatting;
+                } else if progress.message.contains("Backing up") || progress.message.contains("Backup")
+                {
+                    self.state = AppState::BackingUp;
                 } else if progress.message.contains("Deleting") || progress.message.contains("deletion")
                 {
                     self.state = AppState::Deleting;
@@ -266,6 +272,9 @@ impl eframe::App for InstallerApp {
                 } else if progress.message.contains("Copying") || progress.message.contains("Copy")
                 {
                     self.state = AppState::Copying;
+                } else if progress.message.contains("Restoring") || progress.message.contains("Restore")
+                {
+                    self.state = AppState::Restoring;
                 }
             }
         }
@@ -278,9 +287,11 @@ impl eframe::App for InstallerApp {
                 | AppState::FetchingRelease
                 | AppState::Downloading
                 | AppState::Formatting
+                | AppState::BackingUp
                 | AppState::Deleting
                 | AppState::Extracting
                 | AppState::Copying
+                | AppState::Restoring
                 | AppState::Ejecting
                 | AppState::Cancelling
                 | AppState::ScrapingBoxart
@@ -493,18 +504,38 @@ impl eframe::App for InstallerApp {
                                 // Show directories to be deleted
                                 let update_dirs = REPO_OPTIONS[self.selected_repo_idx].update_directories;
                                 egui::ScrollArea::vertical()
-                                    .max_height(200.0)
+                                    .max_height(150.0)
                                     .show(ui, |ui| {
                                         for dir in update_dirs {
-                                            ui.label(format!("• {}/", dir));
+                                            ui.label(format!("  \u{2022} {}/", dir));
                                         }
                                     });
 
                                 ui.add_space(12.0);
-                                ui.colored_label(
-                                    egui::Color32::from_rgb(104, 157, 106),
-                                    "All other files will be preserved."
-                                );
+
+                                if self.preserve_data {
+                                    ui.colored_label(
+                                        egui::Color32::from_rgb(104, 157, 106),
+                                        "The following user data will be preserved:"
+                                    );
+                                    ui.add_space(4.0);
+                                    ui.label("  \u{2022} RetroArch configs & overlays");
+                                    ui.label("  \u{2022} Emulator saves & settings");
+                                    ui.label("  \u{2022} Syncthing config & SSH keys");
+                                    ui.label("  \u{2022} Spruce config & theme backups");
+                                } else {
+                                    ui.colored_label(
+                                        ui.visuals().warn_fg_color,
+                                        "\u{26A0} User data preservation is disabled."
+                                    );
+                                    ui.add_space(4.0);
+                                    ui.label("Emulator configs, RetroArch settings, and other user");
+                                    ui.label("customizations within deleted directories will be lost.");
+                                    ui.colored_label(
+                                        egui::Color32::from_rgb(104, 157, 106),
+                                        "Roms, BIOS, and Saves will still be kept."
+                                    );
+                                }
                                 ui.add_space(12.0);
                                 ui.separator();
                                 ui.add_space(8.0);
@@ -932,9 +963,11 @@ impl eframe::App for InstallerApp {
                             | AppState::FetchingRelease
                             | AppState::Downloading
                             | AppState::Formatting
+                            | AppState::BackingUp
                             | AppState::Deleting
                             | AppState::Extracting
                             | AppState::Copying
+                            | AppState::Restoring
                             | AppState::Cancelling
                     );
 
@@ -1146,6 +1179,19 @@ impl eframe::App for InstallerApp {
                 // END HIDE UPDATE MODE - Comment through here to disable the checkbox
                 // ========================================================================
 
+                // Preserve user data checkbox (only show when update mode is ON and repo supports it)
+                let current_repo_supports_preserve = REPO_OPTIONS[self.selected_repo_idx].supports_preserve_mode;
+                if !show_progress && self.update_mode && current_repo_supports_preserve {
+                    ui.horizontal(|ui| {
+                        ui.vertical_centered(|ui| {
+                            ui.checkbox(&mut self.preserve_data, "Preserve user data");
+                        });
+                    });
+                } else if !current_repo_supports_preserve || !self.update_mode {
+                    // Reset preserve_data to default when conditions aren't met
+                    self.preserve_data = true;
+                }
+
                 ui.add_space(12.0);
 
                 // Progress bar
@@ -1170,7 +1216,7 @@ impl eframe::App for InstallerApp {
                             // Downloading, Formatting, Extracting, and Copying report percentages
                             let is_indeterminate = matches!(
                                 self.state,
-                                AppState::FetchingAssets | AppState::FetchingRelease | AppState::Deleting | AppState::Idle
+                                AppState::FetchingAssets | AppState::FetchingRelease | AppState::BackingUp | AppState::Deleting | AppState::Restoring | AppState::Idle
                             );
 
                             if is_indeterminate {
@@ -1234,9 +1280,11 @@ impl eframe::App for InstallerApp {
                                 | AppState::FetchingRelease
                                 | AppState::Downloading
                                 | AppState::Formatting
+                                | AppState::BackingUp
                                 | AppState::Deleting
                                 | AppState::Extracting
                                 | AppState::Copying
+                                | AppState::Restoring
                                 | AppState::AwaitingConfirmation
                                 | AppState::Ejecting
                                 | AppState::Cancelling
@@ -1278,9 +1326,11 @@ impl eframe::App for InstallerApp {
                     AppState::FetchingRelease
                         | AppState::Downloading
                         | AppState::Formatting
+                        | AppState::BackingUp
                         | AppState::Deleting
                         | AppState::Extracting
                         | AppState::Copying
+                        | AppState::Restoring
                 ) && self.cancel_token.is_some();
 
                 if can_cancel {

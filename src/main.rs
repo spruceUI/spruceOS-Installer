@@ -20,6 +20,7 @@ mod format;
 mod github;
 mod mame_db;
 mod manifest;
+mod preserve;
 
 #[cfg(target_os = "macos")]
 mod mac;

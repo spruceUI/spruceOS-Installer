@@ -3,7 +3,6 @@
 ## To-Do
 - Show error in pop-up when an install fails
 - Checkboxes for additional packages (themes, ports, games)
-- Backup and restore functionality
 
 ---
 
@@ -62,6 +61,7 @@
 - ✓ Extract archives (.7z, .zip) or burn raw images (.img, .img.gz)
 - ✓ Cross-platform: Windows, Linux, macOS
 - ✓ Update mode: preserve saves/ROMs while updating system files
+- ✓ **Preserve user data**: backup/restore emulator configs, RetroArch settings, SSH keys during updates
 - ✓ Multi-repository support with asset filtering
 - ✓ **Boxart scraper**: Download cover art for ROMs from Libretro database
 
@@ -451,9 +451,11 @@ update_directories: &["Retroarch", "spruce", "System"],  // These get deleted
 **How it works:**
 1. User checks "Update Mode" checkbox (only visible when `supports_update_mode: true`)
 2. Installer mounts existing SD card (no format!)
-3. Only deletes the specified directories
-4. Extracts new files
-5. User's saves/ROMs stay intact
+3. If "Preserve user data" is enabled: backs up user configs to local temp directory
+4. Only deletes the specified directories
+5. Extracts and copies new files
+6. If "Preserve user data" is enabled: restores backed-up configs to SD card
+7. User's saves/ROMs stay intact
 
 </details>
 
@@ -986,6 +988,107 @@ Arcade systems use MAME-style ROM naming where the ROM filename is a short code 
 
 ---
 
+#### **STEP 12: Preserve User Data Configuration** (Optional - For Update Mode)
+
+When update mode is enabled, the installer can back up and restore user-specific files (emulator configs, RetroArch settings, SSH keys, etc.) across updates. This mirrors the on-device updater's backup/restore behavior.
+
+<details>
+<summary><strong>Click to expand preserve mode configuration guide</strong></summary>
+
+##### **A. Per-Repository Control**
+
+The `supports_preserve_mode` field on each `RepoOption` controls whether the "Preserve user data" checkbox appears when update mode is active:
+
+```rust
+RepoOption {
+    name: "Stable",
+    supports_update_mode: true,
+    supports_preserve_mode: true,   // Show preserve checkbox in update mode
+    // ...
+},
+RepoOption {
+    name: "TwigUI",
+    supports_update_mode: false,
+    supports_preserve_mode: false,  // No preserve for raw image repos
+    // ...
+},
+```
+
+##### **B. Configuring Preserve Paths**
+
+**Location:** `src/config.rs` → `UPDATE_PRESERVE_PATHS`
+
+This constant lists all paths (relative to SD card root) that get backed up before deletion and restored after installation. Paths can be files or directories:
+
+```rust
+pub const UPDATE_PRESERVE_PATHS: &[&str] = &[
+    // Emulator configs and saves
+    "Emu/PICO8/.lexaloffle",
+    "Emu/DC/config",
+    "Emu/NDS/backup",
+    "Emu/NDS/config/drastic-A30.cfg",
+    // RetroArch configs
+    "RetroArch/.retroarch/config",
+    "RetroArch/.retroarch/overlay",
+    // Spruce system configs
+    "Saves/spruce/spruce-config.json",
+    // Network services
+    "spruce/bin/Syncthing/config",
+    "spruce/etc/ssh/keys",
+    // Add your custom paths here...
+];
+```
+
+**Adding/removing paths:**
+- Each entry is a path relative to the SD card root
+- Can be a file (e.g., `"Emu/NDS/config/drastic-A30.cfg"`) or directory (e.g., `"RetroArch/.retroarch/config"`)
+- Directories are backed up recursively
+- Paths that don't exist on the SD card are silently skipped
+- Order doesn't matter
+
+##### **C. How It Works**
+
+**Update mode with preserve ON (default):**
+1. Mount SD card
+2. **Backup**: Copy all `UPDATE_PRESERVE_PATHS` from SD → local temp directory
+3. **Delete**: Remove `update_directories` from SD card
+4. **Install**: Extract and copy new release files to SD
+5. **Restore**: Copy backed-up files from temp → SD card (overwriting new defaults)
+6. Clean up temp backup directory
+
+**Update mode with preserve OFF (hard reset):**
+1. Mount SD card
+2. **Delete**: Remove `update_directories` from SD card
+3. **Install**: Extract and copy new release files to SD
+4. *(No backup/restore — user gets fresh default configs)*
+
+In both cases, Roms, BIOS, and Saves directories are **not** in `update_directories`, so they are always kept.
+
+##### **D. UI Behavior**
+
+- The "Preserve user data" checkbox only appears when:
+  - Update mode is checked
+  - The selected repository has `supports_preserve_mode: true`
+- The checkbox defaults to ON (checked)
+- When the user clicks through to the Update Preview modal:
+  - **Preserve ON**: Shows list of preserved data categories
+  - **Preserve OFF**: Shows a warning that user configs will be lost
+- The checkbox resets to ON after installation completes, errors, or is cancelled
+
+##### **E. Implementation Files**
+
+| File | What it does |
+|------|-------------|
+| `src/config.rs` | `UPDATE_PRESERVE_PATHS` constant, `supports_preserve_mode` field |
+| `src/preserve.rs` | `backup_preserve_paths()` and `restore_preserve_paths()` functions |
+| `src/app/state.rs` | `BackingUp`/`Restoring` app states, `preserve_data` field |
+| `src/app/logic.rs` | Wires backup before delete, restore after copy |
+| `src/app/ui.rs` | Checkbox UI, preview modal, state wiring |
+
+</details>
+
+---
+
 ### 🧪 Testing Your Rebrand
 
 #### **Local Build Test:**
@@ -1011,6 +1114,7 @@ cargo build --release --features icon
 - [ ] Repository dropdown shows your repos
 - [ ] Colors match your brand
 - [ ] Update Mode: If enabled, checkbox lists correct directories; if disabled, checkbox is hidden
+- [ ] Preserve Mode: "Preserve user data" checkbox appears when update mode is checked (if repo supports it)
 - [ ] Download works from your GitHub repo
 - [ ] SD card gets labeled with your `VOLUME_LABEL`
 - [ ] macOS: Terminal has Full Disk Access granted (if testing on macOS)
@@ -1059,6 +1163,7 @@ cargo build --release --features icon
 8. ⬜ `assets/Fonts/nunwen.ttf` - Custom font
 9. ⬜ `.github/workflows/*.yml` - Artifact names
 10. ⬜ `.vscode/launch.json` - Debug config (if using VS Code)
+11. ⬜ `src/config.rs` `UPDATE_PRESERVE_PATHS` - Customize backup paths for update mode
 
 ---
 
@@ -1105,6 +1210,7 @@ src/
 ├── burn.rs              - Raw image burning (.img/.gz) with sector alignment
 ├── copy.rs              - File copying with progress tracking
 ├── delete.rs            - Selective directory deletion (update mode)
+├── preserve.rs          - Backup/restore user data during updates
 ├── eject.rs             - Safe drive ejection
 ├── github.rs            - GitHub API integration
 ├── fat32.rs             - Custom FAT32 formatter (Windows >32GB)

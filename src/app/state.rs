@@ -20,9 +20,11 @@ pub enum AppState {
     FetchingRelease,
     Downloading,
     Formatting,
+    BackingUp,
     Deleting,
     Extracting,
     Copying,
+    Restoring,
     Burning,
     ScrapingBoxart,
     Complete,
@@ -50,6 +52,7 @@ pub struct InstallerApp {
     // HIDE UPDATE MODE: To completely remove, delete this field and all references
     // (Easier approach: just hide the checkbox in ui.rs - this field stays but is unused)
     pub(super) update_mode: bool,
+    pub(super) preserve_data: bool,  // "Preserve user data" checkbox (backup/restore during update)
 
     // Progress tracking
     pub(super) state: AppState,
@@ -200,6 +203,7 @@ impl InstallerApp {
             selected_repo_idx: DEFAULT_REPO_INDEX,
             // HIDE UPDATE MODE: Remove this if you delete the update_mode field above
             update_mode: false,
+            preserve_data: true,
             state: AppState::Idle,
             progress: Arc::new(Mutex::new(ProgressInfo {
                 current: 0,

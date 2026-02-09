@@ -109,6 +109,9 @@ pub struct AssetDisplayMapping {
 ///                         Set to None to show all assets
 /// - `asset_display_mappings`: Optional mappings to show user-friendly device names
 ///                             instead of technical filenames in the selection UI
+/// - `supports_preserve_mode`: Whether to show "Preserve user data" checkbox in update mode
+///                             When enabled, user data is backed up before deletion and restored after install
+///                             The paths to preserve are defined in UPDATE_PRESERVE_PATHS
 ///
 /// Example (archive-based repository):
 /// ```
@@ -121,6 +124,7 @@ pub struct AssetDisplayMapping {
 ///     update_directories: &["Retroarch", "spruce"],
 ///     allowed_extensions: Some(&[".7z", ".zip"]),  // Only show archives
 ///     asset_display_mappings: None,
+///     supports_preserve_mode: true,  // Show preserve user data checkbox
 /// }
 /// ```
 ///
@@ -135,6 +139,7 @@ pub struct AssetDisplayMapping {
 ///     update_directories: &[],  // Not used for raw images
 ///     allowed_extensions: Some(&[".img.gz", ".img"]),  // Only raw images
 ///     asset_display_mappings: None,
+///     supports_preserve_mode: false,  // No preserve for raw images
 /// }
 /// ```
 pub struct RepoOption {
@@ -146,6 +151,7 @@ pub struct RepoOption {
     pub update_directories: &'static [&'static str],
     pub allowed_extensions: Option<&'static [&'static str]>,
     pub asset_display_mappings: Option<&'static [AssetDisplayMapping]>,
+    pub supports_preserve_mode: bool,  // Show "Preserve user data" checkbox in update mode
 }
 
 pub const REPO_OPTIONS: &[RepoOption] = &[
@@ -158,6 +164,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         update_directories: &[".tmp_update", "App", "Emu", "Icons", "miyoo", "miyoo355", "RetroArch", "spruce", "trimui"],
         allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
         asset_display_mappings: None,
+        supports_preserve_mode: true,
     },
     RepoOption {
         name: "Nightlies",
@@ -168,6 +175,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         update_directories: &[".tmp_update", "App", "Emu", "Icons", "miyoo", "miyoo355", "RetroArch", "spruce", "trimui"],
         allowed_extensions: None,  // Show all assets
         asset_display_mappings: None,
+        supports_preserve_mode: true,
     },
     RepoOption {
         name: "SprigUI",
@@ -178,6 +186,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
         asset_display_mappings: None,
+        supports_preserve_mode: false,
     },
     RepoOption {
         name: "TwigUI",
@@ -188,11 +197,62 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: Some(&[".img.gz"]),  // Only show .img.gz files
         asset_display_mappings: None,
+        supports_preserve_mode: false,
     },
 ];
 
 /// Index of the default repository selection (0 = first option)
 pub const DEFAULT_REPO_INDEX: usize = 0;
+
+// ----------------------------------------------------------------------------
+// UPDATE PRESERVE PATHS
+// ----------------------------------------------------------------------------
+// Paths to preserve during update mode (relative to SD card root).
+// These are backed up before deletion and restored after installation.
+// Can be files or directories. Only used when preserve_data is enabled.
+// Mirrors the on-device spruceBackup.sh backup paths.
+// ----------------------------------------------------------------------------
+
+pub const UPDATE_PRESERVE_PATHS: &[&str] = &[
+    // Emulator configs and saves
+    "App/spruceRestore/.lastUpdate",
+    "Emu/PICO8/.lexaloffle",
+    "Emu/.emu_setup/n64_controller/Custom.rmp",
+    "Emu/DC/config",
+    "Emu/NDS/backup",
+    "Emu/NDS/backup-32",
+    "Emu/NDS/backup-64",
+    "Emu/NDS/config/drastic-A30.cfg",
+    "Emu/NDS/config/drastic-Brick.cfg",
+    "Emu/NDS/config/drastic-SmartPro.cfg",
+    "Emu/NDS/config/drastic-SmartProS.cfg",
+    "Emu/NDS/config/drastic-Flip.cfg",
+    "Emu/NDS/config/drastic-Pixel2.cfg",
+    "Emu/NDS/savestates",
+    "Emu/NDS/resources/settings_A30.json",
+    "Emu/NDS/resources/settings_Flip.json",
+    "Emu/NDS/resources/settings_Pixel2.json",
+    "Emu/SATURN/.yabasanshiro",
+    // RetroArch configs
+    "RetroArch/.retroarch/config",
+    "RetroArch/.retroarch/overlay",
+    "RetroArch/.retroarch/shaders",
+    "RetroArch/.retroarch/cheats",
+    "RetroArch/platform/retroarch-A30.cfg",
+    "RetroArch/platform/retroarch-Brick.cfg",
+    "RetroArch/platform/retroarch-Flip.cfg",
+    "RetroArch/platform/retroarch-SmartPro.cfg",
+    "RetroArch/platform/retroarch-SmartProS.cfg",
+    "RetroArch/platform/retroarch-Pixel2.cfg",
+    // Spruce system configs
+    "Saves/spruce/spruce-config.json",
+    "Saves/spruce/backups/spruce-config.json",
+    "Saves/spruce/emu_backups",
+    "Saves/spruce/theme_backups",
+    // Network services
+    "spruce/bin/Syncthing/config",
+    "spruce/etc/ssh/keys",
+];
 
 // ----------------------------------------------------------------------------
 // WINDOW SETTINGS
