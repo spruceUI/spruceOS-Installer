@@ -154,6 +154,144 @@ pub struct RepoOption {
     pub supports_preserve_mode: bool,  // Show "Preserve user data" checkbox in update mode
 }
 
+// ----------------------------------------------------------------------------
+// SELECTIVE DELETE PATHS FOR UPDATE MODE
+// ----------------------------------------------------------------------------
+// Mirrors the on-device App/-Updater/delete_files.sh behavior.
+// Only specific subdirectories/files are deleted — NOT entire top-level dirs.
+// This preserves user customizations (custom apps, custom emu folders,
+// user-added RetroArch assets, etc.) that would be lost by wholesale deletion.
+// ----------------------------------------------------------------------------
+
+pub const SPRUCE_UPDATE_DELETE_PATHS: &[&str] = &[
+    // App: specific subdirs only
+    // (preserves BootLogo, fn_editor, PortMaster, RandomGame, user-added apps)
+    "App/-FirmwareUpdate-",
+    "App/-OTA",
+    "App/-Updater",
+    "App/Credits",
+    "App/FileManagement",
+    "App/GameNursery",
+    "App/MiyooGamelist",
+    "App/PixelReader",
+    "App/PyUI",
+    "App/RetroArch",
+    "App/spruceBackup",
+    "App/spruceRestore",
+    "App/ThemeGarden",
+    "App/USBStorageMode",
+    // Emu: specific system folders only
+    // (preserves custom-named folders the user created)
+    "Emu/A30PORTS",
+    "Emu/AMIGA",
+    "Emu/ARCADE",
+    "Emu/ARDUBOY",
+    "Emu/ATARI",
+    "Emu/ATARIST",
+    "Emu/CHAI",
+    "Emu/COLECO",
+    "Emu/COMMODORE",
+    "Emu/CPC",
+    "Emu/CPS1",
+    "Emu/CPS2",
+    "Emu/CPS3",
+    "Emu/-CUSTOM-SYSTEM-",
+    "Emu/DC",
+    "Emu/DOOM",
+    "Emu/DOS",
+    "Emu/EASYRPG",
+    "Emu/EIGHTHUNDRED",
+    "Emu/.emu_setup",
+    "Emu/FAIRCHILD",
+    "Emu/FAKE08",
+    "Emu/FBNEO",
+    "Emu/FC",
+    "Emu/FDS",
+    "Emu/FIFTYTWOHUNDRED",
+    "Emu/GAMETANK",
+    "Emu/GB",
+    "Emu/GBA",
+    "Emu/GBC",
+    "Emu/GG",
+    "Emu/GW",
+    "Emu/INTELLIVISION",
+    "Emu/LYNX",
+    "Emu/MAME2003PLUS",
+    "Emu/MD",
+    "Emu/MEDIA",
+    "Emu/MEGADUCK",
+    "Emu/MS",
+    "Emu/MSU1",
+    "Emu/MSUMD",
+    "Emu/MSX",
+    "Emu/N64",
+    "Emu/NAOMI",
+    "Emu/NDS",
+    "Emu/NEOCD",
+    "Emu/NEOGEO",
+    "Emu/NGP",
+    "Emu/NGPC",
+    "Emu/ODYSSEY",
+    "Emu/OPENBOR",
+    "Emu/PC98",
+    "Emu/PCE",
+    "Emu/PCECD",
+    "Emu/PICO8",
+    "Emu/POKE",
+    "Emu/PORTS",
+    "Emu/PS",
+    "Emu/PSP",
+    "Emu/QUAKE",
+    "Emu/SATELLAVIEW",
+    "Emu/SATURN",
+    "Emu/SCUMMVM",
+    "Emu/SEGACD",
+    "Emu/SEGASGONE",
+    "Emu/SEVENTYEIGHTHUNDRED",
+    "Emu/SFC",
+    "Emu/SGB",
+    "Emu/SGFX",
+    "Emu/SUFAMI",
+    "Emu/SUPERVISION",
+    "Emu/THIRTYTWOX",
+    "Emu/TIC",
+    "Emu/VB",
+    "Emu/VECTREX",
+    "Emu/VIC20",
+    "Emu/VIDEOPAC",
+    "Emu/WOLF",
+    "Emu/WS",
+    "Emu/WSC",
+    "Emu/X68000",
+    "Emu/ZXS",
+    // spruce: specific subdirs only
+    // (preserves bin, bin64, a30, brick, flip, miyoomini — needed for PyUI)
+    "spruce/archives",
+    "spruce/etc",
+    "spruce/FIRMWARE_UPDATE",
+    "spruce/flags",
+    "spruce/imgs",
+    "spruce/scripts",
+    "spruce/www",
+    "spruce/spruce",
+    // SD card root: specific items
+    // (RetroArch is NOT deleted — preserves user-added overlays/shaders/cheats)
+    ".github",
+    ".tmp_update",
+    "Icons",
+    "miyoo",
+    "miyoo355",
+    "trimui",
+    ".gitattributes",
+    ".gitignore",
+    "autorun.inf",
+    "create_spruce_release.bat",
+    "create_spruce_release.sh",
+    "LICENSE",
+    "Pico8.Native.INFO.txt",
+    "README.md",
+];
+
 pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
         name: "Stable",
@@ -161,7 +299,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         info: "Stable releases of spruceOS.\nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
         display_name: Some("spruceOS Stable"),  // Display name for popups
         supports_update_mode: true,  // Archive-based (.7z)
-        update_directories: &[".tmp_update", "App", "Emu", "Icons", "miyoo", "miyoo355", "RetroArch", "spruce", "trimui"],
+        update_directories: SPRUCE_UPDATE_DELETE_PATHS,
         allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
         asset_display_mappings: None,
         supports_preserve_mode: true,
@@ -172,7 +310,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick",
         display_name: Some("spruceOS Nightly"),  // Display name for popups
         supports_update_mode: true,  // Supports archives
-        update_directories: &[".tmp_update", "App", "Emu", "Icons", "miyoo", "miyoo355", "RetroArch", "spruce", "trimui"],
+        update_directories: SPRUCE_UPDATE_DELETE_PATHS,
         allowed_extensions: None,  // Show all assets
         asset_display_mappings: None,
         supports_preserve_mode: true,
@@ -244,11 +382,6 @@ pub const UPDATE_PRESERVE_PATHS: &[&str] = &[
     "RetroArch/platform/retroarch-SmartPro.cfg",
     "RetroArch/platform/retroarch-SmartProS.cfg",
     "RetroArch/platform/retroarch-Pixel2.cfg",
-    // Spruce system configs
-    "Saves/spruce/spruce-config.json",
-    "Saves/spruce/backups/spruce-config.json",
-    "Saves/spruce/emu_backups",
-    "Saves/spruce/theme_backups",
     // Network services
     "spruce/bin/Syncthing/config",
     "spruce/etc/ssh/keys",

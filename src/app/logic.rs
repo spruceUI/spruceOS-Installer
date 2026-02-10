@@ -24,7 +24,7 @@ use crate::drives::DriveInfo;
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
 use crate::github::{download_asset, get_latest_release, DownloadProgress, Asset};
-use crate::preserve::{backup_preserve_paths, restore_preserve_paths, PreserveProgress};
+use crate::preserve::{backup_preserve_paths, restore_preserve_paths, backup_dynamic_configs, restore_and_merge_configs, PreserveProgress};
 use crate::boxart_scraper::{BoxArtScraper, ScrapeProgress};
 use eframe::egui;
 use std::path::PathBuf;
@@ -665,6 +665,46 @@ impl InstallerApp {
                     let _ = bak_handle.await;
                     log("User data backup complete");
                     crate::debug::log("User data backup complete");
+
+                    // Backup dynamic configs (emu settings, spruce config, theme configs)
+                    log("Backing up dynamic configs...");
+                    set_progress(0, 100, "Backing up dynamic configs...");
+
+                    let (dbak_tx, mut dbak_rx) = mpsc::unbounded_channel::<PreserveProgress>();
+                    let progress_dbak = progress.clone();
+                    let ctx_dbak = ctx_clone.clone();
+
+                    let dbak_handle = tokio::spawn(async move {
+                        while let Some(prog) = dbak_rx.recv().await {
+                            if let Ok(mut p) = progress_dbak.lock() {
+                                match &prog {
+                                    PreserveProgress::BackingUp { path } => {
+                                        p.message = format!("Backing up: {}", path);
+                                    }
+                                    PreserveProgress::Cancelled => {
+                                        p.message = "Backup cancelled".to_string();
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            ctx_dbak.request_repaint();
+                        }
+                    });
+
+                    if let Err(e) = backup_dynamic_configs(&mount_path, &temp_backup_dir, dbak_tx, cancel_token_clone.clone()).await {
+                        if e.contains("cancelled") {
+                            log("Backup cancelled");
+                            let _ = tokio::fs::remove_dir_all(&temp_backup_dir).await;
+                            let _ = state_tx_clone.send(AppState::Idle);
+                            let _ = drive_poll_tx_clone.send(true);
+                            return;
+                        }
+                        // Non-fatal - static backup already succeeded
+                        log(&format!("Warning: Dynamic config backup error: {}", e));
+                        crate::debug::log(&format!("WARNING: Dynamic config backup error: {}", e));
+                    }
+                    let _ = dbak_handle.await;
+                    crate::debug::log("Dynamic config backup phase complete");
                 }
 
                 // Delete old directories
@@ -1109,6 +1149,25 @@ impl InstallerApp {
                     }
                 });
 
+                // Smart merge dynamic configs first (before blind overwrite of static files)
+                log("Merging dynamic configs...");
+                let merge_tx = rst_tx.clone();
+                if let Err(e) = restore_and_merge_configs(&dest_for_restore, &temp_backup_dir, merge_tx, cancel_token_clone.clone()).await {
+                    if e.contains("cancelled") {
+                        log("Restore cancelled");
+                        let _ = state_tx_clone.send(AppState::Idle);
+                        let _ = drive_poll_tx_clone.send(true);
+                        return;
+                    }
+                    // Non-fatal - continue with static restore
+                    log(&format!("Warning: Config merge error: {}", e));
+                    crate::debug::log(&format!("WARNING: Config merge error: {}", e));
+                } else {
+                    log("Dynamic config merge complete");
+                    crate::debug::log("Dynamic config merge complete");
+                }
+
+                // Restore static files (blind overwrite) and clean up backup directory
                 if let Err(e) = restore_preserve_paths(&dest_for_restore, &temp_backup_dir, rst_tx, cancel_token_clone.clone()).await {
                     if e.contains("cancelled") {
                         log("Restore cancelled");
