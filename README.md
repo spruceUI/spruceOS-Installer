@@ -304,7 +304,8 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         info: "Stable releases of SpruceOS.\nSupported devices: Miyoo A30",  // ← Info text (use \n for line breaks)
         display_name: Some("SpruceOS Stable"),      // ← OPTIONAL: Full name for success/error popups (falls back to name if None)
         supports_update_mode: true,                  // ← Show update mode checkbox (true for archives, false for raw images)
-        update_directories: &["Retroarch", "spruce"],  // ← Folders deleted during updates
+        supports_preserve_mode: true,                // ← Enable preserve/merge of user data during updates
+        update_directories: &["Retroarch", "spruce"],  // ← Paths deleted during updates (can be selective)
         allowed_extensions: Some(&[".7z"]),          // ← File types to show (None = all)
         asset_display_mappings: None,                // ← User-friendly names (see advanced below)
     },
@@ -320,7 +321,8 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "Stable",
         url: "yourorg/yourrepo",  // ← Your GitHub username/repo
         info: "Official stable builds.\nSupported: Device X, Y, Z",
-        supports_update_mode: true,  // Archives support updates
+        supports_update_mode: true,   // Archives support updates
+        supports_preserve_mode: false, // ← Set false unless you need spruce-specific preserve/merge logic
         update_directories: &["System", "Apps"],  // What gets replaced during updates
         allowed_extensions: None,  // Show all file types
         asset_display_mappings: None,
@@ -329,7 +331,8 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         name: "Beta",
         url: "yourorg/yourrepo-beta",
         info: "Beta builds - may be unstable!\nTesting new features.",
-        supports_update_mode: true,  // Archives support updates
+        supports_update_mode: true,   // Archives support updates
+        supports_preserve_mode: false, // ← Set false for non-spruce repos
         update_directories: &["System"],
         allowed_extensions: Some(&[".7z", ".zip"]),  // Only show archives
         asset_display_mappings: None,
@@ -339,6 +342,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         url: "yourorg/yourrepo-images",
         info: "Full disk images for fresh installs only.",
         supports_update_mode: false,  // Raw images (.img.gz) don't support updates
+        supports_preserve_mode: false,
         update_directories: &[],  // Not used for raw images
         allowed_extensions: Some(&[".img.gz", ".img"]),  // Only raw images
         asset_display_mappings: None,
@@ -441,18 +445,26 @@ supports_update_mode: false,  // Hide checkbox - for raw disk images (.img.gz, .
 
 ##### **G. Advanced: Update Mode Directories**
 
-When update mode is enabled (archives only), these directories get deleted before extraction:
+When update mode is enabled (archives only), the paths listed in `update_directories` get deleted before extraction. These can be top-level directories **or** selective subdirectory/file paths:
 
 ```rust
-update_directories: &["Retroarch", "spruce", "System"],  // These get deleted
-// Everything else (Roms/, Saves/, etc.) is preserved!
+// Simple: delete entire top-level directories
+update_directories: &["Retroarch", "spruce", "System"],
+
+// Selective: delete specific subdirectories/files within parents
+// (preserves user-added content in the parent directory)
+update_directories: &["App/SystemApp1", "App/SystemApp2", "Emu/NES", "Emu/SNES"],
 ```
+
+The SpruceOS repos use a shared constant `SPRUCE_UPDATE_DELETE_PATHS` that lists ~113 selective paths
+mirroring the on-device updater's behavior. **Other CFW teams** should define their own list of
+directories/files to delete, or use simple top-level directory names.
 
 **How it works:**
 1. User checks "Update Mode" checkbox (only visible when `supports_update_mode: true`)
 2. Installer mounts existing SD card (no format!)
 3. If "Preserve user data" is enabled: backs up user configs to local temp directory
-4. Only deletes the specified directories
+4. Deletes the specified paths (directories are removed recursively, files are removed individually)
 5. Extracts and copies new files
 6. If "Preserve user data" is enabled: restores backed-up configs to SD card
 7. User's saves/ROMs stay intact
@@ -990,12 +1002,40 @@ Arcade systems use MAME-style ROM naming where the ROM filename is a short code 
 
 #### **STEP 12: Preserve User Data Configuration** (Optional - For Update Mode)
 
-When update mode is enabled, the installer can back up and restore user-specific files (emulator configs, RetroArch settings, SSH keys, etc.) across updates. This mirrors the on-device updater's backup/restore behavior.
+When update mode is enabled, the installer can back up and restore user-specific files across updates. This is **entirely controlled by the `supports_preserve_mode` flag** on each repository — set it to `false` and none of the preserve/merge logic runs.
 
 <details>
 <summary><strong>Click to expand preserve mode configuration guide</strong></summary>
 
-##### **A. Per-Repository Control**
+##### **A. For Other CFW/OS Teams (Non-Spruce)**
+
+**The simplest approach: set `supports_preserve_mode: false` on all your repos.** This disables the entire preserve system — no backup, no restore, no config merging. Your update mode will simply delete `update_directories` and extract the new release, which is all most projects need.
+
+```rust
+RepoOption {
+    name: "Stable",
+    supports_update_mode: true,
+    supports_preserve_mode: false,  // ← No preserve logic runs. Simple delete + extract.
+    update_directories: &["System", "Apps"],
+    // ...
+},
+```
+
+When `supports_preserve_mode` is `false`:
+- The "Preserve user data" checkbox is hidden from the UI
+- No backup or restore operations occur during updates
+- The spruce-specific config merge code never executes
+- The spruce-specific `SPRUCE_UPDATE_DELETE_PATHS` constant is not used (you define your own `update_directories`)
+- `UPDATE_PRESERVE_PATHS` is ignored
+- `src/preserve.rs` is never called
+
+**In short: with `supports_preserve_mode: false`, the preserve system is completely inert.** The installer behaves as a straightforward delete-and-extract updater with no spruce-specific behavior.
+
+##### **B. SpruceOS-Specific Preserve System**
+
+The following sections describe the preserve system as configured for SpruceOS. This is only relevant if you set `supports_preserve_mode: true` and want to use or adapt the spruce-specific logic.
+
+##### **C. Per-Repository Control**
 
 The `supports_preserve_mode` field on each `RepoOption` controls whether the "Preserve user data" checkbox appears when update mode is active:
 
@@ -1014,24 +1054,22 @@ RepoOption {
 },
 ```
 
-##### **B. Configuring Preserve Paths**
+##### **D. Static Preserve Paths**
 
 **Location:** `src/config.rs` → `UPDATE_PRESERVE_PATHS`
 
-This constant lists all paths (relative to SD card root) that get backed up before deletion and restored after installation. Paths can be files or directories:
+This constant lists paths (relative to SD card root) that get backed up before deletion and blindly restored after installation, overwriting new defaults with the user's existing files:
 
 ```rust
 pub const UPDATE_PRESERVE_PATHS: &[&str] = &[
-    // Emulator configs and saves
+    // Emulator configs
     "Emu/PICO8/.lexaloffle",
     "Emu/DC/config",
     "Emu/NDS/backup",
     "Emu/NDS/config/drastic-A30.cfg",
-    // RetroArch configs
+    // RetroArch user customizations
     "RetroArch/.retroarch/config",
     "RetroArch/.retroarch/overlay",
-    // Spruce system configs
-    "Saves/spruce/spruce-config.json",
     // Network services
     "spruce/bin/Syncthing/config",
     "spruce/etc/ssh/keys",
@@ -1039,32 +1077,54 @@ pub const UPDATE_PRESERVE_PATHS: &[&str] = &[
 ];
 ```
 
-**Adding/removing paths:**
 - Each entry is a path relative to the SD card root
-- Can be a file (e.g., `"Emu/NDS/config/drastic-A30.cfg"`) or directory (e.g., `"RetroArch/.retroarch/config"`)
-- Directories are backed up recursively
+- Can be a file or directory (directories are backed up recursively)
 - Paths that don't exist on the SD card are silently skipped
-- Order doesn't matter
 
-##### **C. How It Works**
+##### **E. Dynamic Config Merge (SpruceOS-Specific)**
 
-**Update mode with preserve ON (default):**
+In addition to the static backup/restore above, the installer performs **smart config merging** for spruce-specific JSON config files. This mirrors the on-device updater's `merge_configs.py` behavior:
+
+- **Emu configs** (`Emu/*/config.json`): Dynamically discovered at backup time. On restore, the user's `"selected"` values are merged into the new release's config — but only if the selected value still exists in the new config's `"options"` array. This prevents broken references to removed options.
+- **Spruce system config** (`Saves/spruce/spruce-config.json`): Same smart merge logic.
+- **Theme configs** (`Themes/*/config*.json`): Dynamically discovered and blindly restored (plain copy, no merge).
+
+This logic lives in `src/preserve.rs` (`backup_dynamic_configs()` and `restore_and_merge_configs()`). It only runs when `supports_preserve_mode: true`.
+
+##### **F. Selective Deletion (SpruceOS-Specific)**
+
+The SpruceOS repos use `SPRUCE_UPDATE_DELETE_PATHS` — a shared constant listing ~113 selective paths that mirror the on-device updater's `delete_files.sh`. Instead of deleting entire top-level directories (e.g., all of `App/`), it deletes specific subdirectories and files within each parent, preserving:
+
+| Preserved Item | Why |
+|------|------|
+| Custom apps in `App/` | User-installed apps like PortMaster, BootLogo |
+| Custom `Emu/` folders | User-created emulator folders with custom names |
+| `RetroArch/` (entire dir) | User-added overlays, shaders, cheats |
+| `spruce/bin`, `spruce/bin64` | PyUI binaries and platform-specific files |
+
+**Other CFW teams** don't use this constant — they define their own `update_directories` list (see STEP 1, Section G).
+
+##### **G. How It Works**
+
+**Update mode with preserve ON (default for spruce repos):**
 1. Mount SD card
-2. **Backup**: Copy all `UPDATE_PRESERVE_PATHS` from SD → local temp directory
-3. **Delete**: Remove `update_directories` from SD card
-4. **Install**: Extract and copy new release files to SD
-5. **Restore**: Copy backed-up files from temp → SD card (overwriting new defaults)
-6. Clean up temp backup directory
+2. **Static backup**: Copy all `UPDATE_PRESERVE_PATHS` from SD to local temp directory
+3. **Dynamic backup**: Scan and copy emu/theme/spruce configs from SD to temp (spruce-specific)
+4. **Delete**: Remove `update_directories` paths from SD card
+5. **Install**: Extract and copy new release files to SD
+6. **Smart merge**: Merge backed-up emu/spruce configs into new release configs (spruce-specific)
+7. **Static restore**: Copy remaining backed-up files from temp to SD (overwriting new defaults)
+8. Clean up temp backup directory
 
 **Update mode with preserve OFF (hard reset):**
 1. Mount SD card
-2. **Delete**: Remove `update_directories` from SD card
+2. **Delete**: Remove `update_directories` paths from SD card
 3. **Install**: Extract and copy new release files to SD
 4. *(No backup/restore — user gets fresh default configs)*
 
 In both cases, Roms, BIOS, and Saves directories are **not** in `update_directories`, so they are always kept.
 
-##### **D. UI Behavior**
+##### **H. UI Behavior**
 
 - The "Preserve user data" checkbox only appears when:
   - Update mode is checked
@@ -1075,12 +1135,13 @@ In both cases, Roms, BIOS, and Saves directories are **not** in `update_director
   - **Preserve OFF**: Shows a warning that user configs will be lost
 - The checkbox resets to ON after installation completes, errors, or is cancelled
 
-##### **E. Implementation Files**
+##### **I. Implementation Files**
 
 | File | What it does |
 |------|-------------|
-| `src/config.rs` | `UPDATE_PRESERVE_PATHS` constant, `supports_preserve_mode` field |
-| `src/preserve.rs` | `backup_preserve_paths()` and `restore_preserve_paths()` functions |
+| `src/config.rs` | `UPDATE_PRESERVE_PATHS`, `SPRUCE_UPDATE_DELETE_PATHS`, `supports_preserve_mode` field |
+| `src/preserve.rs` | Static backup/restore + dynamic config merge (spruce-specific smart merge logic) |
+| `src/delete.rs` | Deletes directories and files listed in `update_directories` |
 | `src/app/state.rs` | `BackingUp`/`Restoring` app states, `preserve_data` field |
 | `src/app/logic.rs` | Wires backup before delete, restore after copy |
 | `src/app/ui.rs` | Checkbox UI, preview modal, state wiring |
