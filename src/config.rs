@@ -371,11 +371,8 @@ pub const UPDATE_PRESERVE_PATHS: &[&str] = &[
     "Emu/NDS/resources/settings_Flip.json",
     "Emu/NDS/resources/settings_Pixel2.json",
     "Emu/SATURN/.yabasanshiro",
-    // RetroArch configs
+    // RetroArch configs (overlays/shaders/cheats not needed — RetroArch/ is no longer deleted)
     "RetroArch/.retroarch/config",
-    "RetroArch/.retroarch/overlay",
-    "RetroArch/.retroarch/shaders",
-    "RetroArch/.retroarch/cheats",
     "RetroArch/platform/retroarch-A30.cfg",
     "RetroArch/platform/retroarch-Brick.cfg",
     "RetroArch/platform/retroarch-Flip.cfg",

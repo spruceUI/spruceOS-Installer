@@ -1067,9 +1067,8 @@ pub const UPDATE_PRESERVE_PATHS: &[&str] = &[
     "Emu/DC/config",
     "Emu/NDS/backup",
     "Emu/NDS/config/drastic-A30.cfg",
-    // RetroArch user customizations
+    // RetroArch configs (overlays/shaders/cheats not needed — RetroArch/ is no longer deleted)
     "RetroArch/.retroarch/config",
-    "RetroArch/.retroarch/overlay",
     // Network services
     "spruce/bin/Syncthing/config",
     "spruce/etc/ssh/keys",
