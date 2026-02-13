@@ -44,11 +44,11 @@ pub async fn delete_directories(
 
         let dir_path = mount_path.join(dir_name);
 
-        crate::debug::log(&format!("Checking directory: {:?}", dir_path));
+        crate::debug::log(&format!("Checking path: {:?}", dir_path));
 
-        // Check if directory exists
+        // Check if path exists (file or directory)
         if !dir_path.exists() {
-            crate::debug::log(&format!("Directory does not exist, skipping: {}", dir_name));
+            crate::debug::log(&format!("Path does not exist, skipping: {}", dir_name));
             continue;
         }
 
@@ -57,10 +57,16 @@ pub async fn delete_directories(
             name: dir_name.to_string(),
         });
 
-        crate::debug::log(&format!("Deleting directory: {}", dir_name));
+        crate::debug::log(&format!("Deleting: {}", dir_name));
 
-        // Delete the directory recursively
-        match tokio::fs::remove_dir_all(&dir_path).await {
+        // Delete directory or file as appropriate
+        let result = if dir_path.is_dir() {
+            tokio::fs::remove_dir_all(&dir_path).await
+        } else {
+            tokio::fs::remove_file(&dir_path).await
+        };
+
+        match result {
             Ok(_) => {
                 crate::debug::log(&format!("Successfully deleted: {}", dir_name));
             }

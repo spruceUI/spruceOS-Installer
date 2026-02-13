@@ -16,7 +16,7 @@
 // ============================================================================
 
 use super::{InstallerApp, AppState, get_available_disk_space};
-use crate::config::{REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL};
+use crate::config::{REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL, UPDATE_PRESERVE_PATHS};
 use crate::burn::{burn_image, BurnProgress};
 use crate::copy::{copy_directory_with_progress, CopyProgress};
 use crate::delete::{delete_directories, DeleteProgress};
@@ -24,6 +24,7 @@ use crate::drives::DriveInfo;
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
 use crate::github::{download_asset, get_latest_release, DownloadProgress, Asset};
+use crate::preserve::{backup_preserve_paths, restore_preserve_paths, backup_dynamic_configs, restore_and_merge_configs, PreserveProgress};
 use crate::boxart_scraper::{BoxArtScraper, ScrapeProgress};
 use eframe::egui;
 use std::path::PathBuf;
@@ -260,6 +261,7 @@ impl InstallerApp {
         let ctx_clone = ctx.clone();
         let volume_label = VOLUME_LABEL.to_string();
         let update_mode = self.update_mode;
+        let preserve_data = self.preserve_data && self.update_mode;
         let update_directories: Vec<String> = repo.update_directories.iter().map(|s| s.to_string()).collect();
 
         // Create cancellation and pause tokens
@@ -587,7 +589,8 @@ impl InstallerApp {
                 crate::debug::log("Format complete");
             } // End of format block for archive mode
 
-            // Step 3.5: Get mount path and delete directories for update mode (only for archive mode)
+            // Step 3.5: Get mount path, backup user data, and delete directories for update mode (only for archive mode)
+            let temp_backup_dir = temp_dir.join(format!("{}_backup", TEMP_PREFIX));
             let dest_path_from_update = if !is_raw_image && update_mode {
                 // First, get mount path for the existing installation
                 crate::debug::log("Update mode: Getting existing mount path...");
@@ -601,6 +604,108 @@ impl InstallerApp {
                         return;
                     }
                 };
+
+                // Backup user data before deletion (if preserve_data is enabled)
+                if preserve_data {
+                    let _ = state_tx_clone.send(AppState::BackingUp);
+                    log("Backing up user data...");
+                    set_progress(0, 100, "Backing up user data...");
+
+                    // Clean up any previous backup
+                    let _ = tokio::fs::remove_dir_all(&temp_backup_dir).await;
+
+                    let (bak_tx, mut bak_rx) = mpsc::unbounded_channel::<PreserveProgress>();
+                    let progress_bak = progress.clone();
+                    let ctx_bak = ctx_clone.clone();
+
+                    let bak_handle = tokio::spawn(async move {
+                        while let Some(prog) = bak_rx.recv().await {
+                            if let Ok(mut p) = progress_bak.lock() {
+                                match prog {
+                                    PreserveProgress::Started { total_paths } => {
+                                        p.current = 0;
+                                        p.total = total_paths as u64;
+                                        p.message = format!("Backing up {} paths...", total_paths);
+                                    }
+                                    PreserveProgress::BackingUp { ref path } => {
+                                        p.message = format!("Backing up: {}", path);
+                                    }
+                                    PreserveProgress::Restoring { .. } => {}
+                                    PreserveProgress::Completed => {
+                                        p.current = p.total;
+                                        p.message = "Backup complete".to_string();
+                                    }
+                                    PreserveProgress::Cancelled => {
+                                        p.message = "Backup cancelled".to_string();
+                                    }
+                                    PreserveProgress::Error(ref e) => {
+                                        p.message = format!("Backup error: {}", e);
+                                    }
+                                }
+                            }
+                            ctx_bak.request_repaint();
+                        }
+                    });
+
+                    if let Err(e) = backup_preserve_paths(&mount_path, UPDATE_PRESERVE_PATHS, &temp_backup_dir, bak_tx, cancel_token_clone.clone()).await {
+                        if e.contains("cancelled") {
+                            log("Backup cancelled");
+                            let _ = tokio::fs::remove_dir_all(&temp_backup_dir).await;
+                            let _ = state_tx_clone.send(AppState::Idle);
+                            let _ = drive_poll_tx_clone.send(true);
+                            return;
+                        }
+                        log(&format!("Backup error: {}", e));
+                        let _ = tokio::fs::remove_dir_all(&temp_backup_dir).await;
+                        let _ = state_tx_clone.send(AppState::Error);
+                        let _ = drive_poll_tx_clone.send(true);
+                        return;
+                    }
+
+                    let _ = bak_handle.await;
+                    log("User data backup complete");
+                    crate::debug::log("User data backup complete");
+
+                    // Backup dynamic configs (emu settings, spruce config, theme configs)
+                    log("Backing up dynamic configs...");
+                    set_progress(0, 100, "Backing up dynamic configs...");
+
+                    let (dbak_tx, mut dbak_rx) = mpsc::unbounded_channel::<PreserveProgress>();
+                    let progress_dbak = progress.clone();
+                    let ctx_dbak = ctx_clone.clone();
+
+                    let dbak_handle = tokio::spawn(async move {
+                        while let Some(prog) = dbak_rx.recv().await {
+                            if let Ok(mut p) = progress_dbak.lock() {
+                                match &prog {
+                                    PreserveProgress::BackingUp { path } => {
+                                        p.message = format!("Backing up: {}", path);
+                                    }
+                                    PreserveProgress::Cancelled => {
+                                        p.message = "Backup cancelled".to_string();
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            ctx_dbak.request_repaint();
+                        }
+                    });
+
+                    if let Err(e) = backup_dynamic_configs(&mount_path, &temp_backup_dir, dbak_tx, cancel_token_clone.clone()).await {
+                        if e.contains("cancelled") {
+                            log("Backup cancelled");
+                            let _ = tokio::fs::remove_dir_all(&temp_backup_dir).await;
+                            let _ = state_tx_clone.send(AppState::Idle);
+                            let _ = drive_poll_tx_clone.send(true);
+                            return;
+                        }
+                        // Non-fatal - static backup already succeeded
+                        log(&format!("Warning: Dynamic config backup error: {}", e));
+                        crate::debug::log(&format!("WARNING: Dynamic config backup error: {}", e));
+                    }
+                    let _ = dbak_handle.await;
+                    crate::debug::log("Dynamic config backup phase complete");
+                }
 
                 // Delete old directories
                 let _ = state_tx_clone.send(AppState::Deleting);
@@ -1003,6 +1108,83 @@ impl InstallerApp {
             write_card_log("Cleaned up temp download file");
             crate::debug::log("Cleaned up temp download file");
 
+            // Step 6: Restore preserved user data (if update mode with preserve_data)
+            if update_mode && preserve_data && temp_backup_dir.exists() {
+                let _ = state_tx_clone.send(AppState::Restoring);
+                log("Restoring user data...");
+                set_progress(0, 100, "Restoring user data...");
+
+                let dest_for_restore = dest_path.as_ref().expect("dest_path should be Some in archive mode").clone();
+
+                let (rst_tx, mut rst_rx) = mpsc::unbounded_channel::<PreserveProgress>();
+                let progress_rst = progress.clone();
+                let ctx_rst = ctx_clone.clone();
+
+                let rst_handle = tokio::spawn(async move {
+                    while let Some(prog) = rst_rx.recv().await {
+                        if let Ok(mut p) = progress_rst.lock() {
+                            match prog {
+                                PreserveProgress::Started { total_paths } => {
+                                    p.current = 0;
+                                    p.total = total_paths as u64;
+                                    p.message = format!("Restoring {} files...", total_paths);
+                                }
+                                PreserveProgress::BackingUp { .. } => {}
+                                PreserveProgress::Restoring { ref path } => {
+                                    p.message = format!("Restoring: {}", path);
+                                }
+                                PreserveProgress::Completed => {
+                                    p.current = p.total;
+                                    p.message = "Restore complete".to_string();
+                                }
+                                PreserveProgress::Cancelled => {
+                                    p.message = "Restore cancelled".to_string();
+                                }
+                                PreserveProgress::Error(ref e) => {
+                                    p.message = format!("Restore error: {}", e);
+                                }
+                            }
+                        }
+                        ctx_rst.request_repaint();
+                    }
+                });
+
+                // Smart merge dynamic configs first (before blind overwrite of static files)
+                log("Merging dynamic configs...");
+                let merge_tx = rst_tx.clone();
+                if let Err(e) = restore_and_merge_configs(&dest_for_restore, &temp_backup_dir, merge_tx, cancel_token_clone.clone()).await {
+                    if e.contains("cancelled") {
+                        log("Restore cancelled");
+                        let _ = state_tx_clone.send(AppState::Idle);
+                        let _ = drive_poll_tx_clone.send(true);
+                        return;
+                    }
+                    // Non-fatal - continue with static restore
+                    log(&format!("Warning: Config merge error: {}", e));
+                    crate::debug::log(&format!("WARNING: Config merge error: {}", e));
+                } else {
+                    log("Dynamic config merge complete");
+                    crate::debug::log("Dynamic config merge complete");
+                }
+
+                // Restore static files (blind overwrite) and clean up backup directory
+                if let Err(e) = restore_preserve_paths(&dest_for_restore, &temp_backup_dir, rst_tx, cancel_token_clone.clone()).await {
+                    if e.contains("cancelled") {
+                        log("Restore cancelled");
+                        let _ = state_tx_clone.send(AppState::Idle);
+                        let _ = drive_poll_tx_clone.send(true);
+                        return;
+                    }
+                    // Restore errors are non-fatal - log warning but continue
+                    log(&format!("Warning: Could not restore some user data: {}", e));
+                    crate::debug::log(&format!("WARNING: Restore error: {}", e));
+                } else {
+                    let _ = rst_handle.await;
+                    log("User data restore complete");
+                    crate::debug::log("User data restore complete");
+                }
+            }
+
             // Copy debug log to SD card
             log("Writing debug log to SD card...");
             crate::debug::log("Copying debug log to SD card...");
@@ -1038,9 +1220,11 @@ impl InstallerApp {
                         AppState::FetchingRelease => "Fetching release...".to_string(),
                         AppState::Downloading => "Downloading...".to_string(),
                         AppState::Formatting => "Formatting...".to_string(),
+                        AppState::BackingUp => "Backing up user data...".to_string(),
                         AppState::Deleting => "Deleting old directories...".to_string(),
                         AppState::Extracting => "Extracting...".to_string(),
                         AppState::Copying => "Copying...".to_string(),
+                        AppState::Restoring => "Restoring user data...".to_string(),
                         AppState::Burning => "Burning image...".to_string(),
                         AppState::Complete => "COMPLETE".to_string(),
                         AppState::Error => "ERROR".to_string(),
