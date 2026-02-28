@@ -562,7 +562,8 @@ pub const SYSTEM_MAPPINGS: &[SystemMapping] = &[
 /// Boxart path and naming configuration
 pub struct BoxartConfig {
     /// Image filename pattern - use {game_name} as placeholder
-    /// Examples: "{game_name}.png", "{game_name}-image.png", "boxart-{game_name}.png"
+    /// Use ".png" extension for standard PNG output, or ".qoi" when convert_to_qoi is enabled
+    /// Examples: "{game_name}.png", "{game_name}.qoi"
     pub image_name_pattern: &'static str,
     /// Include ROM file extension in image name
     /// - false: "Game Name.gb" → "Game Name.png"
@@ -585,6 +586,16 @@ pub struct ScraperConfig {
     pub max_concurrent_downloads: usize,
     /// Preferred region for tie-breaking (e.g., "USA", "Europe", "Japan")
     pub preferred_region: Option<&'static str>,
+    /// Convert downloaded PNG boxart to QOI format
+    /// When true, images are decoded, resized to fit within max_image_dimensions,
+    /// and re-encoded as QOI before saving. The PNG is never written to disk.
+    /// When false, the original PNG is saved as-is.
+    /// NOTE: image_name_pattern in BoxartConfig should use ".qoi" extension when this is true
+    pub convert_to_qoi: bool,
+    /// Maximum image dimensions (width, height) for resized boxart
+    /// Images larger than this are shrunk to fit (aspect ratio preserved, never enlarged)
+    /// Only used when convert_to_qoi is true. Set to None to skip resizing.
+    pub max_image_dimensions: Option<(u32, u32)>,
 }
 
 pub const SCRAPER_CONFIG: ScraperConfig = ScraperConfig {
@@ -592,6 +603,8 @@ pub const SCRAPER_CONFIG: ScraperConfig = ScraperConfig {
     create_missing_dirs: true,
     max_concurrent_downloads: 8,
     preferred_region: Some("USA"),
+    convert_to_qoi: true,
+    max_image_dimensions: Some((640, 480)),
 };
 
 // ============================================================================

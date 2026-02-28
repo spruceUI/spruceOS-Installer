@@ -42,6 +42,7 @@
 **Boxart scraper:**
 - Fuzzy matching with Levenshtein distance for ROM name matching
 - Downloads from Libretro thumbnail database (60+ systems)
+- **Optional PNG→QOI conversion** with resize — images are decoded, resized, and re-encoded as QOI entirely in memory (PNG never touches the filesystem). Configurable via `convert_to_qoi` and `max_image_dimensions` in `SCRAPER_CONFIG`. Defaults to PNG when disabled.
 - **Arcade MAME XML integration** - Translates ROM codes to display names for accurate matching
 - **Embedded MAME database** (4,900+ arcade games) for ARCADE, NEOGEO, CPS1/2/3, FBNEO, MAME2003PLUS
 - Configurable paths, naming patterns, and folder structure
@@ -816,17 +817,20 @@ Controls how scraped images are named:
 
 ```rust
 pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
-    image_name_pattern: "{game_name}.png",     // Pattern with {game_name} placeholder
+    image_name_pattern: "{game_name}.qoi",     // Pattern with {game_name} placeholder
     include_extension_in_name: false,          // Whether to include ROM extension
 };
 ```
 
+> **Note:** SpruceOS defaults to `.qoi` because `convert_to_qoi` is enabled (see Scraper Behavior Settings below).
+> If `convert_to_qoi` is `false`, use `.png` extension instead.
+
 **Pattern examples:**
 ```rust
-image_name_pattern: "{game_name}.png",         // Standard: "Super Mario Bros.png"
+image_name_pattern: "{game_name}.png",         // Standard PNG: "Super Mario Bros.png"
+image_name_pattern: "{game_name}.qoi",         // QOI format: "Super Mario Bros.qoi"
 image_name_pattern: "{game_name}-image.png",   // EmulationStation style
 image_name_pattern: "{game_name}_boxart.png",  // Custom suffix
-image_name_pattern: "boxart-{game_name}.png",  // Custom prefix
 ```
 
 **Extension handling:**
@@ -859,6 +863,8 @@ pub const SCRAPER_CONFIG: ScraperConfig = ScraperConfig {
     create_missing_dirs: true,        // Auto-create boxart folders
     max_concurrent_downloads: 8,      // Number of simultaneous downloads
     preferred_region: Some("USA"),    // Region preference for tie-breaking
+    convert_to_qoi: true,            // Convert PNG→QOI with resize (SpruceOS)
+    max_image_dimensions: Some((640, 480)),  // Max boxart size (width, height)
 };
 ```
 
@@ -867,6 +873,8 @@ pub const SCRAPER_CONFIG: ScraperConfig = ScraperConfig {
 - `create_missing_dirs`: Set `false` if you want manual folder management
 - `max_concurrent_downloads`: Higher = faster, but may hit rate limits (4-16 recommended)
 - `preferred_region`: Options: `"USA"`, `"Europe"`, `"Japan"`, or `None` (no preference)
+- `convert_to_qoi`: When `true`, downloaded PNGs are decoded, resized, and re-encoded as QOI entirely in memory — the PNG never touches the filesystem. Set to `false` to save the original PNG directly. When enabled, use `.qoi` extension in `image_name_pattern`.
+- `max_image_dimensions`: Maximum bounding box `(width, height)` for resized images. Aspect ratio is preserved, images are only shrunk (never enlarged). Set to `None` to skip resizing. Only used when `convert_to_qoi` is `true`.
 
 ##### **D. Example: Complete Custom Configuration**
 
@@ -888,18 +896,20 @@ pub const SYSTEM_MAPPINGS: &[SystemMapping] = &[
     // ... more systems
 ];
 
-// Custom paths and naming
+// Custom paths and naming (standard PNG output)
 pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
     image_name_pattern: "{game_name}-box.png", // Custom suffix
     include_extension_in_name: true,           // Include ROM extension in image name
 };
 
-// Tuned behavior
+// Tuned behavior (PNG mode — no conversion)
 pub const SCRAPER_CONFIG: ScraperConfig = ScraperConfig {
-    skip_existing: false,           // Always re-download
-    create_missing_dirs: true,      // Auto-create folders
-    max_concurrent_downloads: 4,    // Conservative rate (slower but safer)
+    skip_existing: false,             // Always re-download
+    create_missing_dirs: true,        // Auto-create folders
+    max_concurrent_downloads: 4,      // Conservative rate (slower but safer)
     preferred_region: Some("Europe"), // European region preference
+    convert_to_qoi: false,           // Save original PNGs
+    max_image_dimensions: None,       // No resizing
 };
 ```
 

@@ -345,11 +345,10 @@ impl BoxArtScraper {
         best_candidates.into_iter().min_by_key(|s| s.len())
     }
 
-    /// Maximum dimensions for boxart images (fits all SpruceOS devices)
-    const MAX_WIDTH: u32 = 640;
-    const MAX_HEIGHT: u32 = 480;
-
-    /// Download boxart for a single ROM, converting PNG to resized QOI
+    /// Download boxart for a single ROM
+    /// When convert_to_qoi is enabled in config, the PNG is decoded, resized, and
+    /// re-encoded as QOI in memory — the PNG never touches the filesystem.
+    /// Otherwise the original PNG is saved directly.
     pub async fn download_boxart(
         client: &reqwest::Client,
         sys_name: &str,
@@ -387,15 +386,21 @@ impl BoxArtScraper {
                 .map_err(|_| "Failed to download from both primary and fallback URLs".to_string())?,
         };
 
-        // Decode PNG, resize, and encode as QOI — all in memory
-        let qoi_bytes = tokio::task::spawn_blocking(move || {
-            Self::png_to_qoi(&png_bytes)
-        })
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| format!("Image conversion failed: {}", e))?;
+        if crate::config::SCRAPER_CONFIG.convert_to_qoi {
+            // Decode PNG, resize, and encode as QOI — all in memory
+            let max_dims = crate::config::SCRAPER_CONFIG.max_image_dimensions;
+            let qoi_bytes = tokio::task::spawn_blocking(move || {
+                Self::png_to_qoi(&png_bytes, max_dims)
+            })
+            .await
+            .map_err(|e| e.to_string())?
+            .map_err(|e| format!("Image conversion failed: {}", e))?;
 
-        fs::write(dest_path, &qoi_bytes).await.map_err(|e| e.to_string())?;
+            fs::write(dest_path, &qoi_bytes).await.map_err(|e| e.to_string())?;
+        } else {
+            // Save original PNG directly
+            fs::write(dest_path, &png_bytes).await.map_err(|e| e.to_string())?;
+        }
 
         Ok(())
     }
@@ -412,20 +417,24 @@ impl BoxArtScraper {
         Ok(bytes.to_vec())
     }
 
-    /// Decode PNG bytes, resize to fit within max dimensions, encode as QOI
-    fn png_to_qoi(png_bytes: &[u8]) -> Result<Vec<u8>, String> {
+    /// Decode PNG bytes, optionally resize, and encode as QOI
+    fn png_to_qoi(png_bytes: &[u8], max_dims: Option<(u32, u32)>) -> Result<Vec<u8>, String> {
         let img = image::load_from_memory(png_bytes)
             .map_err(|e| e.to_string())?;
 
-        // Only shrink, never enlarge (matches on-device behavior)
-        let (w, h) = (img.width(), img.height());
-        let img = if w > Self::MAX_WIDTH || h > Self::MAX_HEIGHT {
-            img.resize(Self::MAX_WIDTH, Self::MAX_HEIGHT, image::imageops::FilterType::Lanczos3)
+        // Only shrink, never enlarge
+        let img = if let Some((max_w, max_h)) = max_dims {
+            let (w, h) = (img.width(), img.height());
+            if w > max_w || h > max_h {
+                img.resize(max_w, max_h, image::imageops::FilterType::Lanczos3)
+            } else {
+                img
+            }
         } else {
             img
         };
 
-        // Convert to RGBA (matches on-device QOI pixel format)
+        // Convert to RGBA (QOI pixel format)
         let img = image::DynamicImage::ImageRgba8(img.to_rgba8());
 
         let mut buf = Cursor::new(Vec::new());
