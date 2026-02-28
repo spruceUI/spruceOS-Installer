@@ -2,12 +2,13 @@
 // Licensed under CC BY-NC 4.0 (Creative Commons Attribution-NonCommercial 4.0 International)
 
 use std::collections::{HashMap, HashSet};
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use tokio::sync::mpsc;
 use tokio::fs;
-use reqwest;
 use regex::Regex;
+use image::ImageFormat;
 
 use crate::boxart_db;
 use crate::mame_db;
@@ -344,9 +345,13 @@ impl BoxArtScraper {
         best_candidates.into_iter().min_by_key(|s| s.len())
     }
 
-    /// Download boxart for a single ROM
+    /// Maximum dimensions for boxart images (fits all SpruceOS devices)
+    const MAX_WIDTH: u32 = 640;
+    const MAX_HEIGHT: u32 = 480;
+
+    /// Download boxart for a single ROM, converting PNG to resized QOI
     pub async fn download_boxart(
-        &self,
+        client: &reqwest::Client,
         sys_name: &str,
         image_name: &str,
         dest_path: &Path,
@@ -375,26 +380,28 @@ impl BoxArtScraper {
             }
         }
 
-        // Try primary URL first
-        if let Ok(()) = Self::download_file(&boxart_url, dest_path).await {
-            return Ok(());
-        }
+        // Try primary URL first, then fallback
+        let png_bytes = match Self::download_bytes(client, &boxart_url).await {
+            Ok(bytes) => bytes,
+            Err(_) => Self::download_bytes(client, &fallback_url).await
+                .map_err(|_| "Failed to download from both primary and fallback URLs".to_string())?,
+        };
 
-        // Try fallback URL
-        if let Ok(()) = Self::download_file(&fallback_url, dest_path).await {
-            return Ok(());
-        }
+        // Decode PNG, resize, and encode as QOI — all in memory
+        let qoi_bytes = tokio::task::spawn_blocking(move || {
+            Self::png_to_qoi(&png_bytes)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("Image conversion failed: {}", e))?;
 
-        Err(format!("Failed to download from both primary and fallback URLs"))
+        fs::write(dest_path, &qoi_bytes).await.map_err(|e| e.to_string())?;
+
+        Ok(())
     }
 
-    /// Download a file from a URL to a destination path
-    async fn download_file(url: &str, dest_path: &Path) -> Result<(), String> {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .map_err(|e| e.to_string())?;
-
+    /// Download raw bytes from a URL
+    async fn download_bytes(client: &reqwest::Client, url: &str) -> Result<Vec<u8>, String> {
         let response = client.get(url).send().await.map_err(|e| e.to_string())?;
 
         if !response.status().is_success() {
@@ -402,9 +409,30 @@ impl BoxArtScraper {
         }
 
         let bytes = response.bytes().await.map_err(|e| e.to_string())?;
-        fs::write(dest_path, &bytes).await.map_err(|e| e.to_string())?;
+        Ok(bytes.to_vec())
+    }
 
-        Ok(())
+    /// Decode PNG bytes, resize to fit within max dimensions, encode as QOI
+    fn png_to_qoi(png_bytes: &[u8]) -> Result<Vec<u8>, String> {
+        let img = image::load_from_memory(png_bytes)
+            .map_err(|e| e.to_string())?;
+
+        // Only shrink, never enlarge (matches on-device behavior)
+        let (w, h) = (img.width(), img.height());
+        let img = if w > Self::MAX_WIDTH || h > Self::MAX_HEIGHT {
+            img.resize(Self::MAX_WIDTH, Self::MAX_HEIGHT, image::imageops::FilterType::Lanczos3)
+        } else {
+            img
+        };
+
+        // Convert to RGBA (matches on-device QOI pixel format)
+        let img = image::DynamicImage::ImageRgba8(img.to_rgba8());
+
+        let mut buf = Cursor::new(Vec::new());
+        img.write_to(&mut buf, ImageFormat::Qoi)
+            .map_err(|e| e.to_string())?;
+
+        Ok(buf.into_inner())
     }
 
     /// Scrape boxart for only the selected subfolders
@@ -431,6 +459,12 @@ impl BoxArtScraper {
         stats.total = tasks.len();
         let _ = progress_tx.send(ScrapeProgress::Started { total: stats.total });
 
+        let client = Arc::new(
+            reqwest::Client::builder()
+                .timeout(std::time::Duration::from_secs(30))
+                .build()
+                .map_err(|e| e.to_string())?
+        );
         let semaphore = Arc::new(tokio::sync::Semaphore::new(
             crate::config::SCRAPER_CONFIG.max_concurrent_downloads
         ));
@@ -440,13 +474,13 @@ impl BoxArtScraper {
             let permit = semaphore.clone().acquire_owned().await.map_err(|e| e.to_string())?;
             let image_name = self.find_image_name(&sys_name, &rom_name);
             let progress_tx = progress_tx.clone();
+            let client = client.clone();
             let dest_path = dest_path.clone();
             let sys_name = sys_name.clone();
 
             let handle = tokio::spawn(async move {
                 let result = if let Some(img_name) = image_name {
-                    let scraper = BoxArtScraper::new();
-                    scraper.download_boxart(&sys_name, &img_name, &dest_path).await
+                    BoxArtScraper::download_boxart(&client, &sys_name, &img_name, &dest_path).await
                 } else {
                     Err("No matching image found".to_string())
                 };
@@ -496,7 +530,7 @@ impl BoxArtScraper {
         let mut tasks = Vec::new();
 
         // Extensions to skip (non-ROM files that may appear in ROM folders)
-        let skip_extensions: &[&str] = &[".txt", ".xml", ".json", ".cfg", ".log", ".png", ".jpg", ".bmp", ".db", ".ini"];
+        let skip_extensions: &[&str] = &[".txt", ".xml", ".json", ".cfg", ".log", ".png", ".jpg", ".bmp", ".qoi", ".db", ".ini"];
 
         let mut dirs_to_scan = vec![sys_path.to_path_buf()];
 
@@ -576,116 +610,6 @@ impl BoxArtScraper {
         Ok(tasks)
     }
 
-}
-
-// We need to add regex dependency
-// Since we're avoiding adding new dependencies, let's implement a simple regex alternative
-mod regex {
-    pub struct Regex {
-        pattern: String,
-    }
-
-    impl Regex {
-        pub fn new(pattern: &str) -> Result<Self, String> {
-            Ok(Regex {
-                pattern: pattern.to_string(),
-            })
-        }
-
-        pub fn replace_all<'a>(&self, text: &'a str, replacement: &str) -> std::borrow::Cow<'a, str> {
-            // Simple implementation for our specific patterns
-            if self.pattern == r"\(.*?\)" {
-                // Remove content in parentheses
-                let mut result = String::new();
-                let mut depth: u32 = 0;
-                for c in text.chars() {
-                    match c {
-                        '(' => depth += 1,
-                        ')' => depth = depth.saturating_sub(1),
-                        _ => if depth == 0 { result.push(c); }
-                    }
-                }
-                std::borrow::Cow::Owned(result)
-            } else if self.pattern == r"[\s\-_,]+" {
-                // Replace multiple whitespace/symbols with single space
-                let mut result = String::new();
-                let mut prev_was_space = false;
-                for c in text.chars() {
-                    if c.is_whitespace() || c == '-' || c == '_' || c == ',' {
-                        if !prev_was_space {
-                            result.push_str(replacement);
-                            prev_was_space = true;
-                        }
-                    } else {
-                        result.push(c);
-                        prev_was_space = false;
-                    }
-                }
-                std::borrow::Cow::Owned(result)
-            } else if self.pattern == r"[^\w\s]+" {
-                // Remove non-word, non-space characters
-                let result: String = text.chars()
-                    .map(|c| if c.is_alphanumeric() || c.is_whitespace() { c } else { ' ' })
-                    .collect();
-                std::borrow::Cow::Owned(result)
-            } else {
-                std::borrow::Cow::Borrowed(text)
-            }
-        }
-
-        pub fn captures_iter<'r, 't>(&'r self, text: &'t str) -> CapturesIter<'t> {
-            CapturesIter {
-                text,
-                position: 0,
-            }
-        }
-    }
-
-    pub struct CapturesIter<'t> {
-        text: &'t str,
-        position: usize,
-    }
-
-    impl<'t> Iterator for CapturesIter<'t> {
-        type Item = Captures<'t>;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            // Simple implementation to find text in parentheses
-            let remaining = &self.text[self.position..];
-            if let Some(start) = remaining.find('(') {
-                if let Some(end) = remaining[start..].find(')') {
-                    let content = &remaining[start + 1..start + end];
-                    self.position += start + end + 1;
-                    return Some(Captures {
-                        matched: content,
-                    });
-                }
-            }
-            None
-        }
-    }
-
-    pub struct Captures<'t> {
-        matched: &'t str,
-    }
-
-    impl<'t> Captures<'t> {
-        pub fn get(&self, _index: usize) -> Option<Match<'t>> {
-            Some(Match {
-                text: self.matched,
-            })
-        }
-    }
-
-    pub struct Match<'t> {
-        text: &'t str,
-    }
-
-    impl<'t> Match<'t> {
-        pub fn as_str(&self) -> &'t str {
-            self.text
-        }
-    }
 }
 
 #[cfg(test)]

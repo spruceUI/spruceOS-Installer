@@ -571,7 +571,7 @@ pub struct BoxartConfig {
 }
 
 pub const BOXART_CONFIG: BoxartConfig = BoxartConfig {
-    image_name_pattern: "{game_name}.png",
+    image_name_pattern: "{game_name}.qoi",
     include_extension_in_name: false,
 };
 

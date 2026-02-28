@@ -8,7 +8,7 @@ license = "CC-BY-NC-4.0"
 
 [features]
 default = []
-icon = ["image"]
+icon = []
 
 [dependencies]
 eframe = "0.33"
@@ -24,7 +24,7 @@ futures-util = "0.3"
 tokio-util = "0.7"
 dirs = "5"
 tempfile = "3"
-image = { version = "0.25", optional = true, default-features = false, features = ["png"] }
+image = { version = "0.25", default-features = false, features = ["png", "qoi"] }
 lazy_static = "1.4"
 libc = "0.2"
 sha2 = "0.10"
