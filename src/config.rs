@@ -296,7 +296,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
         name: "Stable",
         url: "spruceUI/spruceOS",
-        info: "Stable releases of spruceOS.\nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
+        info: "Stable releases of spruceOS.\nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip\nTrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick, TrimUI Brick Pro\nAnbernic RG-XX Series\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
         display_name: Some("spruceOS Stable"),  // Display name for popups
         supports_update_mode: true,  // Archive-based (.7z)
         update_directories: SPRUCE_UPDATE_DELETE_PATHS,
@@ -307,7 +307,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
         name: "Nightlies",
         url: "spruceUI/spruceOSNightlies",
-        info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip, TrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick",
+        info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Flip\nTrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick, TrimUI Brick Pro\nAnbernic RG-XX Series",
         display_name: Some("spruceOS Nightly"),  // Display name for popups
         supports_update_mode: true,  // Supports archives
         update_directories: SPRUCE_UPDATE_DELETE_PATHS,
