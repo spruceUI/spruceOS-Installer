@@ -246,7 +246,6 @@ pub async fn burn_image(
         let decompressed_size = tokio::task::spawn_blocking({
             let image_path = image_path.to_path_buf();
             move || -> Result<u64, String> {
-
                 let file = std::fs::File::open(&image_path)
                     .map_err(|e| format!("Failed to open image for size check: {}", e))?;
                 let mut decoder = GzDecoder::new(file);
@@ -366,7 +365,6 @@ async fn burn_image_windows(
             use windows::Win32::Storage::FileSystem::*;
             use windows::Win32::System::IO::*;
             use windows::Win32::System::Ioctl::*;
-
 
             // Import IOCTL for getting device number
             const IOCTL_STORAGE_GET_DEVICE_NUMBER: u32 = 0x002D1080;
@@ -1045,8 +1043,6 @@ async fn verify_image(
         let cancel_token = cancel_token.clone();
 
         move || -> Result<String, String> {
-
-
             let mut image_reader = open_image_reader(&image_path)?;
 
             let mut hasher = Sha256::new();
@@ -1083,9 +1079,6 @@ async fn verify_image(
         let _cancel_token = cancel_token.clone();
 
         move || -> Result<String, String> {
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
-
-
             #[cfg(target_os = "windows")]
             let mut _device = {
                 use windows::Win32::Foundation::*;
