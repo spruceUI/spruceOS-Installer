@@ -1,6 +1,6 @@
 [package]
 name = "spruceos-installer"
-version = "1.5.0"
+version = "1.6.0"
 edition = "2021"
 description = "SpruceOS SD Card Installer"
 authors = ["SpruceOS Team (https://github.com/spruceUI)", "CMTag (https://github.com/CMTag)",  "NextUI Team (https://github.com/LoveRetro)", "Helaas (https://github.com/Helaas)"]
@@ -29,6 +29,7 @@ lazy_static = "1.4"
 libc = "0.2"
 sha2 = "0.10"
 flate2 = "1.0"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 arboard = "3.4"
 regex = "1"
 which = "6.0"

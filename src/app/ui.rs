@@ -159,13 +159,9 @@ impl eframe::App for InstallerApp {
                             }
 
                             // Check if selected asset is a raw image
-                            let is_raw_image = if let Some(idx) = auto_idx {
-                                let asset_name = &self.available_assets[idx].name;
-                                asset_name.ends_with(".img.gz") ||
-                                asset_name.ends_with(".img")
-                            } else {
-                                false
-                            };
+                            let is_raw_image = auto_idx.is_some_and(|idx| {
+                                Self::is_raw_image_asset(&self.available_assets[idx].name)
+                            });
 
                             // If update mode and NOT a raw image, show preview modal; otherwise go to confirmation
                             if self.update_mode && !is_raw_image {
@@ -472,13 +468,9 @@ impl eframe::App for InstallerApp {
                                             ui.add_enabled_ui(can_continue, |ui| {
                                                 if ui.button("Continue").clicked() {
                                                     // Check if selected asset is a raw image
-                                                    let is_raw_image = if let Some(idx) = self.selected_asset_idx {
-                                                        let asset_name = &self.available_assets[idx].name;
-                                                        asset_name.ends_with(".img.gz") ||
-                                                        asset_name.ends_with(".img")
-                                                    } else {
-                                                        false
-                                                    };
+                                                    let is_raw_image = self.selected_asset_idx.is_some_and(|idx| {
+                                                        Self::is_raw_image_asset(&self.available_assets[idx].name)
+                                                    });
 
                                                     // If update mode and NOT a raw image, show preview; otherwise go to confirmation
                                                     if self.update_mode && !is_raw_image {

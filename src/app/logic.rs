@@ -106,12 +106,23 @@ impl InstallerApp {
             .collect()
     }
 
+    /// Whether an asset is a raw disk image to burn, rather than an archive
+    /// whose contents get copied onto a formatted card.
+    ///
+    /// `.img.zip` is a raw image inside a zip container (BaseOS ships these) and
+    /// must be burned, so it is checked before the plain `.zip` archive case.
+    pub(super) fn is_raw_image_asset(name: &str) -> bool {
+        name.ends_with(".img.gz") ||
+        name.ends_with(".img.zip") ||
+        name.ends_with(".img")
+    }
+
     /// Strip all known extensions from an asset name to get the base name
     fn strip_extensions(name: &str) -> String {
         let mut base = name.to_string();
 
         // Remove known extensions in order of specificity
-        for ext in &[".img.gz", ".tar.gz", ".7z", ".zip", ".img"] {
+        for ext in &[".img.gz", ".img.zip", ".tar.gz", ".7z", ".zip", ".img"] {
             if base.ends_with(ext) {
                 base = base.strip_suffix(ext).unwrap_or(&base).to_string();
                 break; // Only strip one extension
@@ -136,8 +147,10 @@ impl InstallerApp {
 
         if base_names.len() == 1 {
             // Same base name, different extensions - pick by priority
-            // Priority: .7z > .zip > .img.gz > .img
-            const PRIORITY: &[&str] = &[".7z", ".zip", ".img.gz", ".img"];
+            // Priority: .7z > .img.zip > .zip > .img.gz > .img
+            // .img.zip is listed before .zip so the plain-archive entry does not
+            // shadow it — every .img.zip name also ends with .zip.
+            const PRIORITY: &[&str] = &[".7z", ".img.zip", ".zip", ".img.gz", ".img"];
 
             for ext in PRIORITY {
                 if let Some((idx, _)) = assets.iter()
@@ -399,8 +412,7 @@ impl InstallerApp {
             log(&format!("Disk space check passed: {} MB available", available_space / 1_048_576));
 
             // Detect installation mode: raw image vs archive
-            let is_raw_image = asset.name.ends_with(".img.gz") ||
-                               asset.name.ends_with(".img");
+            let is_raw_image = Self::is_raw_image_asset(&asset.name);
 
             if is_raw_image {
                 crate::debug::log("Detected RAW IMAGE mode - will burn image to device");
