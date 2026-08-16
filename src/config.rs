@@ -292,6 +292,26 @@ pub const SPRUCE_UPDATE_DELETE_PATHS: &[&str] = &[
     "README.md",
 ];
 
+/// Device name mappings for BaseOS release assets.
+///
+/// Assets are named `baseos-<device>-<version>.img.zip`. Matching is a plain
+/// substring test against the filename and the FIRST match wins, so more
+/// specific patterns must come first — `-rg34xx` would otherwise swallow
+/// `-rg34xxsp`. The leading dash keeps patterns anchored to the device field.
+pub const BASEOS_DEVICE_MAPPINGS: &[AssetDisplayMapping] = &[
+    AssetDisplayMapping { pattern: "-rg35xxplus", display_name: "RG35XX Plus", devices: "Anbernic RG35XX Plus" },
+    AssetDisplayMapping { pattern: "-rg35xxpro",  display_name: "RG35XX Pro",  devices: "Anbernic RG35XX Pro" },
+    AssetDisplayMapping { pattern: "-rg35xxsp",   display_name: "RG35XX SP",   devices: "Anbernic RG35XX SP" },
+    AssetDisplayMapping { pattern: "-rg35xxh",    display_name: "RG35XX H",    devices: "Anbernic RG35XX H" },
+    AssetDisplayMapping { pattern: "-rg34xxsp",   display_name: "RG34XX SP",   devices: "Anbernic RG34XX SP" },
+    AssetDisplayMapping { pattern: "-rg34xx",     display_name: "RG34XX",      devices: "Anbernic RG34XX" },
+    AssetDisplayMapping { pattern: "-rg40xxh",    display_name: "RG40XX H",    devices: "Anbernic RG40XX H" },
+    AssetDisplayMapping { pattern: "-rg40xxv",    display_name: "RG40XX V",    devices: "Anbernic RG40XX V" },
+    AssetDisplayMapping { pattern: "-rgcubexx",   display_name: "RG CubeXX",   devices: "Anbernic RG CubeXX" },
+    AssetDisplayMapping { pattern: "-rg28xx",     display_name: "RG28XX",      devices: "Anbernic RG28XX" },
+    AssetDisplayMapping { pattern: "-rgsp",       display_name: "RG SP",       devices: "Anbernic RG SP" },
+];
+
 pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
         name: "Stable",
@@ -316,17 +336,6 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         supports_preserve_mode: true,
     },
     RepoOption {
-        name: "SprigUI",
-        url: "spruceUI/sprigUI",
-        info: "SpruceOS for the Miyoo Mini Flip.",
-        display_name: None,  // Falls back to "SprigUI"
-        supports_update_mode: true,  // Archive-based (.7z)
-        update_directories: &["Retroarch", "spruce"],
-        allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
-        asset_display_mappings: None,
-        supports_preserve_mode: false,
-    },
-    RepoOption {
         name: "TwigUI",
         url: "spruceUI/twigUI",
         info: "SpruceOS for the GKD Pixel 2.",
@@ -335,6 +344,17 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: Some(&[".img.gz"]),  // Only show .img.gz files
         asset_display_mappings: None,
+        supports_preserve_mode: false,
+    },
+    RepoOption {
+        name: "BaseOS",
+        url: "pvaibhav/BaseOS",
+        info: "A minimal base OS for Anbernic RG XX devices. 3 second boot time.\nA third-party project by pvaibhav - not a spruceOS release.\nRaw disk image; erases the entire card.\n[Project page](https://github.com/pvaibhav/BaseOS)",
+        display_name: Some("BaseOS"),
+        supports_update_mode: false,  // Raw disk images always do a full burn
+        update_directories: &[],      // Not used for raw images
+        allowed_extensions: Some(&[".img.zip"]),  // Excludes .bosupd update packages
+        asset_display_mappings: Some(BASEOS_DEVICE_MAPPINGS),
         supports_preserve_mode: false,
     },
 ];
