@@ -2,12 +2,16 @@
 // Licensed under CC BY-NC 4.0 (Creative Commons Attribution-NonCommercial 4.0 International)
 
 use sha2::{Sha256, Digest};
+use std::io::Read;
 use std::path::Path;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
 use flate2::read::GzDecoder;
 
 const CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4MB chunks
+
+/// Chunk size used when pumping bytes out of a zip entry
+const ZIP_CHUNK_SIZE: usize = 1024 * 1024; // 1MB
 
 #[derive(Debug, Clone)]
 pub enum BurnProgress {
@@ -21,6 +25,171 @@ pub enum BurnProgress {
     Error(String),
 }
 
+/// How a downloaded raw image is compressed.
+///
+/// BaseOS publishes `.img.zip`; other projects publish `.img.gz` or a bare
+/// `.img`. All three are read back as a plain stream of raw image bytes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ImageCompression {
+    None,
+    Gzip,
+    Zip,
+}
+
+fn detect_compression(image_path: &Path) -> ImageCompression {
+    let name = image_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+
+    if name.ends_with(".zip") {
+        ImageCompression::Zip
+    } else if name.ends_with(".gz") {
+        ImageCompression::Gzip
+    } else {
+        ImageCompression::None
+    }
+}
+
+/// Streams the first entry of a zip archive as a plain `Read`.
+///
+/// `ZipArchive::by_index` borrows the archive, so the resulting reader cannot
+/// escape into the `Box<dyn Read>` the burn paths expect. A worker thread owns
+/// the archive instead and hands chunks over a bounded channel; the bound also
+/// caps how much decompressed data is buffered ahead of the writer.
+struct ZipEntryReader {
+    rx: std::sync::mpsc::Receiver<Result<Vec<u8>, String>>,
+    current: Vec<u8>,
+    pos: usize,
+    finished: bool,
+}
+
+impl ZipEntryReader {
+    fn spawn(image_path: &Path) -> Result<Self, String> {
+        // Validate the archive up front so a bad file fails here rather than
+        // partway through writing to the device.
+        let entry_name = {
+            let file = std::fs::File::open(image_path)
+                .map_err(|e| format!("Failed to open zip image: {}", e))?;
+            let mut archive = zip::ZipArchive::new(file)
+                .map_err(|e| format!("Failed to read zip image: {}", e))?;
+            if archive.is_empty() {
+                return Err("Zip image contains no files".to_string());
+            }
+            let entry = archive
+                .by_index(0)
+                .map_err(|e| format!("Failed to open first zip entry: {}", e))?;
+            entry.name().to_string()
+        };
+
+        crate::debug::log(&format!("Zip entry: {}", entry_name));
+
+        let path = image_path.to_path_buf();
+        let (tx, rx) = std::sync::mpsc::sync_channel::<Result<Vec<u8>, String>>(4);
+
+        std::thread::spawn(move || {
+            let file = match std::fs::File::open(&path) {
+                Ok(f) => f,
+                Err(e) => {
+                    let _ = tx.send(Err(format!("Failed to open zip image: {}", e)));
+                    return;
+                }
+            };
+            let mut archive = match zip::ZipArchive::new(file) {
+                Ok(a) => a,
+                Err(e) => {
+                    let _ = tx.send(Err(format!("Failed to read zip image: {}", e)));
+                    return;
+                }
+            };
+            let mut entry = match archive.by_index(0) {
+                Ok(e) => e,
+                Err(e) => {
+                    let _ = tx.send(Err(format!("Failed to open first zip entry: {}", e)));
+                    return;
+                }
+            };
+
+            let mut buffer = vec![0u8; ZIP_CHUNK_SIZE];
+            loop {
+                match entry.read(&mut buffer) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        // A send error means the reader was dropped (cancelled burn)
+                        if tx.send(Ok(buffer[..n].to_vec())).is_err() {
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("Failed to decompress zip image: {}", e)));
+                        return;
+                    }
+                }
+            }
+        });
+
+        Ok(Self {
+            rx,
+            current: Vec::new(),
+            pos: 0,
+            finished: false,
+        })
+    }
+}
+
+impl Read for ZipEntryReader {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        while self.pos >= self.current.len() {
+            if self.finished {
+                return Ok(0);
+            }
+            match self.rx.recv() {
+                Ok(Ok(chunk)) => {
+                    self.current = chunk;
+                    self.pos = 0;
+                }
+                Ok(Err(e)) => {
+                    self.finished = true;
+                    return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e));
+                }
+                // Sender dropped without an error: the entry was fully read
+                Err(_) => {
+                    self.finished = true;
+                    return Ok(0);
+                }
+            }
+        }
+
+        let n = std::cmp::min(self.current.len() - self.pos, out.len());
+        out[..n].copy_from_slice(&self.current[self.pos..self.pos + n]);
+        self.pos += n;
+        Ok(n)
+    }
+}
+
+/// Opens an image as a stream of raw bytes, decompressing `.gz` and `.zip`
+/// on the fly so the burn paths always see a plain image.
+fn open_image_reader(image_path: &Path) -> Result<Box<dyn Read>, String> {
+    match detect_compression(image_path) {
+        ImageCompression::Zip => {
+            crate::debug::log("Detected .zip image, decompressing on-the-fly during burn");
+            Ok(Box::new(ZipEntryReader::spawn(image_path)?))
+        }
+        ImageCompression::Gzip => {
+            crate::debug::log("Detected .gz image, decompressing on-the-fly during burn");
+            let file = std::fs::File::open(image_path)
+                .map_err(|e| format!("Failed to open image file: {}", e))?;
+            Ok(Box::new(GzDecoder::new(file)))
+        }
+        ImageCompression::None => {
+            let file = std::fs::File::open(image_path)
+                .map_err(|e| format!("Failed to open image file: {}", e))?;
+            Ok(Box::new(file))
+        }
+    }
+}
+
 /// Burns a raw disk image to a device and verifies the write
 pub async fn burn_image(
     image_path: &Path,
@@ -32,19 +201,44 @@ pub async fn burn_image(
     crate::debug::log(&format!("Image: {:?}", image_path));
     crate::debug::log(&format!("Device: {}", device_path));
 
-    // Get image size - for .gz files, we need to determine decompressed size
+    // Get image size - for compressed files, we need the decompressed size
     let compressed_size = tokio::fs::metadata(image_path)
         .await
         .map_err(|e| format!("Failed to get image size: {}", e))?
         .len();
 
-    // Check if file is gzipped
-    let is_gzipped = image_path.extension()
-        .and_then(|s| s.to_str())
-        .map(|s| s.eq_ignore_ascii_case("gz"))
-        .unwrap_or(false);
+    let compression = detect_compression(image_path);
 
-    let image_size = if is_gzipped {
+    let image_size = if compression == ImageCompression::Zip {
+        crate::debug::log(&format!("Compressed size: {} bytes ({:.2} GB)", compressed_size, compressed_size as f64 / 1_073_741_824.0));
+
+        // Zip records the uncompressed size in its headers, so unlike .gz this
+        // needs no pre-scan of the whole file.
+        let decompressed_size = tokio::task::spawn_blocking({
+            let image_path = image_path.to_path_buf();
+            move || -> Result<u64, String> {
+                let file = std::fs::File::open(&image_path)
+                    .map_err(|e| format!("Failed to open image for size check: {}", e))?;
+                let mut archive = zip::ZipArchive::new(file)
+                    .map_err(|e| format!("Failed to read zip image: {}", e))?;
+                if archive.is_empty() {
+                    return Err("Zip image contains no files".to_string());
+                }
+                let entry = archive
+                    .by_index(0)
+                    .map_err(|e| format!("Failed to open first zip entry: {}", e))?;
+                Ok(entry.size())
+            }
+        }).await
+        .map_err(|e| format!("Size lookup task failed: {}", e))??;
+
+        if decompressed_size == 0 {
+            return Err("Zip image reports an uncompressed size of zero".to_string());
+        }
+
+        crate::debug::log(&format!("Decompressed size: {} bytes ({:.2} GB)", decompressed_size, decompressed_size as f64 / 1_073_741_824.0));
+        decompressed_size
+    } else if compression == ImageCompression::Gzip {
         crate::debug::log(&format!("Compressed size: {} bytes ({:.2} GB)", compressed_size, compressed_size as f64 / 1_073_741_824.0));
         crate::debug::log("Pre-scanning .gz file to determine decompressed size...");
 
@@ -52,7 +246,7 @@ pub async fn burn_image(
         let decompressed_size = tokio::task::spawn_blocking({
             let image_path = image_path.to_path_buf();
             move || -> Result<u64, String> {
-                use std::io::Read;
+
                 let file = std::fs::File::open(&image_path)
                     .map_err(|e| format!("Failed to open image for size check: {}", e))?;
                 let mut decoder = GzDecoder::new(file);
@@ -172,7 +366,7 @@ async fn burn_image_windows(
             use windows::Win32::Storage::FileSystem::*;
             use windows::Win32::System::IO::*;
             use windows::Win32::System::Ioctl::*;
-            use std::io::Read;
+
 
             // Import IOCTL for getting device number
             const IOCTL_STORAGE_GET_DEVICE_NUMBER: u32 = 0x002D1080;
@@ -392,25 +586,12 @@ async fn burn_image_windows(
 
             crate::debug::log("File pointer reset, beginning image write...");
 
-            // Check if file is gzipped and create appropriate reader
-            let is_gzipped = image_path.extension()
-                .and_then(|s| s.to_str())
-                .map(|s| s.eq_ignore_ascii_case("gz"))
-                .unwrap_or(false);
-
-            let file = std::fs::File::open(&image_path)
+            let mut image_reader = open_image_reader(&image_path)
                 .map_err(|e| {
                     unsafe { let _ = CloseHandle(handle); }
                     cleanup_volumes(&volume_handles);
-                    format!("Failed to open image file: {}", e)
+                    e
                 })?;
-
-            let mut image_reader: Box<dyn Read> = if is_gzipped {
-                crate::debug::log("Detected .gz file, decompressing on-the-fly during burn");
-                Box::new(GzDecoder::new(file))
-            } else {
-                Box::new(file)
-            };
 
             // Windows requires 512-byte sector-aligned writes for physical drives (SECTOR_SIZE already defined above)
             // Allocate buffers: read buffer for decompression, sector buffer for aligned writes
@@ -593,7 +774,7 @@ async fn burn_image_linux(
     cancel_token: &CancellationToken,
 ) -> Result<u64, String> {
     use std::os::unix::fs::OpenOptionsExt;
-    use std::io::{Read, Write};
+    use std::io::Write;
 
     crate::debug::log(&format!("Opening device: {}", device_path));
 
@@ -611,21 +792,7 @@ async fn burn_image_linux(
                 .open(&device_path)
                 .map_err(|e| format!("Failed to open device {}: {}. Are you running with sudo/root?", device_path, e))?;
 
-            // Check if file is gzipped and create appropriate reader
-            let is_gzipped = image_path.extension()
-                .and_then(|s| s.to_str())
-                .map(|s| s.eq_ignore_ascii_case("gz"))
-                .unwrap_or(false);
-
-            let file = std::fs::File::open(&image_path)
-                .map_err(|e| format!("Failed to open image file: {}", e))?;
-
-            let mut image_reader: Box<dyn Read> = if is_gzipped {
-                crate::debug::log("Detected .gz file, decompressing on-the-fly during burn");
-                Box::new(GzDecoder::new(file))
-            } else {
-                Box::new(file)
-            };
+            let mut image_reader = open_image_reader(&image_path)?;
 
             let mut buffer = vec![0u8; CHUNK_SIZE];
             let mut total_written = 0u64;
@@ -714,7 +881,7 @@ async fn burn_image_macos(
     progress_tx: &UnboundedSender<BurnProgress>,
     cancel_token: &CancellationToken,
 ) -> Result<u64, String> {
-    use std::io::{Read, Write};
+    use std::io::Write;
 
     // Use rdisk for faster writes (raw disk)
     let raw_device_path = device_path.replace("/dev/disk", "/dev/rdisk");
@@ -777,21 +944,7 @@ async fn burn_image_macos(
 
             crate::debug::log("Ready to write image");
 
-            // Check if file is gzipped and create appropriate reader
-            let is_gzipped = image_path.extension()
-                .and_then(|s| s.to_str())
-                .map(|s| s.eq_ignore_ascii_case("gz"))
-                .unwrap_or(false);
-
-            let file = std::fs::File::open(&image_path)
-                .map_err(|e| format!("Failed to open image file: {}", e))?;
-
-            let mut image_reader: Box<dyn Read> = if is_gzipped {
-                crate::debug::log("Detected .gz file, decompressing on-the-fly during burn");
-                Box::new(GzDecoder::new(file))
-            } else {
-                Box::new(file)
-            };
+            let mut image_reader = open_image_reader(&image_path)?;
 
             // macOS raw devices with F_NOCACHE require sector-aligned writes
             // Use similar buffering approach as Windows implementation
@@ -886,29 +1039,15 @@ async fn verify_image(
 ) -> Result<(), String> {
     crate::debug::log("Computing image hash...");
 
-    // Compute hash of original image (decompress if .gz)
+    // Compute hash of original image (decompressing .gz/.zip as needed)
     let image_hash = tokio::task::spawn_blocking({
         let image_path = image_path.to_path_buf();
         let cancel_token = cancel_token.clone();
 
         move || -> Result<String, String> {
-            use std::io::Read;
 
-            // Check if file is gzipped and create appropriate reader
-            let is_gzipped = image_path.extension()
-                .and_then(|s| s.to_str())
-                .map(|s| s.eq_ignore_ascii_case("gz"))
-                .unwrap_or(false);
 
-            let file = std::fs::File::open(&image_path)
-                .map_err(|e| format!("Failed to open image for verification: {}", e))?;
-
-            let mut image_reader: Box<dyn Read> = if is_gzipped {
-                crate::debug::log("Decompressing .gz file for hash verification");
-                Box::new(GzDecoder::new(file))
-            } else {
-                Box::new(file)
-            };
+            let mut image_reader = open_image_reader(&image_path)?;
 
             let mut hasher = Sha256::new();
             let mut buffer = vec![0u8; CHUNK_SIZE];
@@ -945,7 +1084,7 @@ async fn verify_image(
 
         move || -> Result<String, String> {
             #[cfg(any(target_os = "linux", target_os = "macos"))]
-            use std::io::Read;
+
 
             #[cfg(target_os = "windows")]
             let mut _device = {

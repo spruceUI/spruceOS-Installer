@@ -1,8 +1,10 @@
 [package]
-name = "spruceos-installer"
+name = "baseos-installer"
 version = "1.5.0"
 edition = "2021"
-description = "SpruceOS SD Card Installer"
+description = "BaseOS SD Card Installer"
+# Derived from the spruceOS installer; upstream authors retained for the
+# CC-BY-NC attribution requirement.
 authors = ["SpruceOS Team (https://github.com/spruceUI)", "CMTag (https://github.com/CMTag)",  "NextUI Team (https://github.com/LoveRetro)", "Helaas (https://github.com/Helaas)"]
 license = "CC-BY-NC-4.0"
 
@@ -29,6 +31,7 @@ lazy_static = "1.4"
 libc = "0.2"
 sha2 = "0.10"
 flate2 = "1.0"
+zip = { version = "2", default-features = false, features = ["deflate"] }
 arboard = "3.4"
 regex = "1"
 which = "6.0"

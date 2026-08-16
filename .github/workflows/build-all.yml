@@ -23,23 +23,23 @@ jobs:
             ## Downloads
 
             ### Windows
-            - **spruceos-installer-windows.exe**
+            - **baseos-installer-windows.exe**
 
             ### Linux
-            - **Linux x64:** `spruceos-installer-linux-x64.tar.gz`
-            - **Linux ARM64:** `spruceos-installer-linux-arm64.tar.gz`
-            - **Linux i686 (32-bit):** `spruceos-installer-linux-i686.tar.gz`
-            - **Linux ARMv7:** `spruceos-installer-linux-armv7.tar.gz`
+            - **Linux x64:** `baseos-installer-linux-x64.tar.gz`
+            - **Linux ARM64:** `baseos-installer-linux-arm64.tar.gz`
+            - **Linux i686 (32-bit):** `baseos-installer-linux-i686.tar.gz`
+            - **Linux ARMv7:** `baseos-installer-linux-armv7.tar.gz`
 
             ### macOS
-            - **SpruceOS-Installer-macOS-Universal.zip** (Apple Silicon + Intel)
+            - **BaseOS-Installer-macOS-Universal.zip** (Apple Silicon + Intel)
 
             ---
 
             ## Installation Instructions
 
             ### Windows
-            1. Download `spruceos-installer-windows.exe`
+            1. Download `baseos-installer-windows.exe`
             2. Run the executable
             3. If Windows SmartScreen appears, click "More info" → "Run anyway" (app is not code-signed)
             4. The installer will automatically request administrator privileges when needed
@@ -48,8 +48,8 @@ jobs:
 
             ### Linux
             1. Download the appropriate binary for your architecture
-            2. Extract: `tar -xzf spruceos-installer-linux-*.tar.gz`
-            3. Run: `./spruceos-installer-linux-*`
+            2. Extract: `tar -xzf baseos-installer-linux-*.tar.gz`
+            3. Run: `./baseos-installer-linux-*`
             4. The installer will automatically request privileges
 
             ### macOS

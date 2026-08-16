@@ -159,13 +159,9 @@ impl eframe::App for InstallerApp {
                             }
 
                             // Check if selected asset is a raw image
-                            let is_raw_image = if let Some(idx) = auto_idx {
-                                let asset_name = &self.available_assets[idx].name;
-                                asset_name.ends_with(".img.gz") ||
-                                asset_name.ends_with(".img")
-                            } else {
-                                false
-                            };
+                            let is_raw_image = auto_idx.is_some_and(|idx| {
+                                Self::is_raw_image_asset(&self.available_assets[idx].name)
+                            });
 
                             // If update mode and NOT a raw image, show preview modal; otherwise go to confirmation
                             if self.update_mode && !is_raw_image {
@@ -472,13 +468,9 @@ impl eframe::App for InstallerApp {
                                             ui.add_enabled_ui(can_continue, |ui| {
                                                 if ui.button("Continue").clicked() {
                                                     // Check if selected asset is a raw image
-                                                    let is_raw_image = if let Some(idx) = self.selected_asset_idx {
-                                                        let asset_name = &self.available_assets[idx].name;
-                                                        asset_name.ends_with(".img.gz") ||
-                                                        asset_name.ends_with(".img")
-                                                    } else {
-                                                        false
-                                                    };
+                                                    let is_raw_image = self.selected_asset_idx.is_some_and(|idx| {
+                                                        Self::is_raw_image_asset(&self.available_assets[idx].name)
+                                                    });
 
                                                     // If update mode and NOT a raw image, show preview; otherwise go to confirmation
                                                     if self.update_mode && !is_raw_image {
@@ -515,7 +507,7 @@ impl eframe::App for InstallerApp {
 
                                 if self.preserve_data {
                                     ui.colored_label(
-                                        egui::Color32::from_rgb(104, 157, 106),
+                                        egui::Color32::from_rgb(235, 235, 235),
                                         "The following user data will be preserved:"
                                     );
                                     ui.add_space(4.0);
@@ -532,7 +524,7 @@ impl eframe::App for InstallerApp {
                                     ui.label("Emulator configs, RetroArch settings, and other user");
                                     ui.label("customizations within deleted directories will be lost.");
                                     ui.colored_label(
-                                        egui::Color32::from_rgb(104, 157, 106),
+                                        egui::Color32::from_rgb(235, 235, 235),
                                         "Roms, BIOS, and Saves will still be kept."
                                     );
                                 }
@@ -624,7 +616,7 @@ impl eframe::App for InstallerApp {
                             }
                             AppState::Complete => {
                                 ui.add_space(12.0);
-                                ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "SUCCESS");
+                                ui.colored_label(egui::Color32::from_rgb(235, 235, 235), "SUCCESS");
                                 ui.add_space(12.0);
                                 let repo = &REPO_OPTIONS[self.selected_repo_idx];
                                 // Fallback chain: manifest display_name → config.rs display_name → repo name
@@ -690,7 +682,7 @@ impl eframe::App for InstallerApp {
                                 ui.add_space(12.0);
                                 ui.label("SD card ejected!");
                                 ui.add_space(8.0);
-                                ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "You may now safely remove it.");
+                                ui.colored_label(egui::Color32::from_rgb(235, 235, 235), "You may now safely remove it.");
                                 ui.add_space(15.0);
                                 if ui.button("OK").clicked() {
                                     self.state = AppState::Idle;
@@ -814,7 +806,7 @@ impl eframe::App for InstallerApp {
                         if let Some(ref stats) = self.scraper_stats {
                             ui.separator();
                             ui.add_space(8.0);
-                            ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "Scraping complete!");
+                            ui.colored_label(egui::Color32::from_rgb(235, 235, 235), "Scraping complete!");
                             ui.add_space(8.0);
                             ui.label(format!("{} total", stats.total));
                             ui.label(format!("{} downloaded", stats.succeeded));
@@ -1301,7 +1293,7 @@ impl eframe::App for InstallerApp {
 
                                 let button = egui::Button::new(button_text)
                                     .min_size(egui::vec2(96.0, 48.0))
-                                    .fill(egui::Color32::from_rgb(104, 157, 106)); // Green
+                                    .fill(egui::Color32::from_rgb(95, 95, 95)); // Primary action
                                 if ui.add(button).clicked() {
                                     self.fetch_and_check_assets(ctx.clone());
                                 }
@@ -1311,7 +1303,7 @@ impl eframe::App for InstallerApp {
                                     ui.label(
                                         egui::RichText::new("(partial download detected)")
                                             .small()
-                                            .color(egui::Color32::from_rgb(214, 93, 14))
+                                            .color(egui::Color32::from_rgb(170, 170, 170))
                                     );
                                 }
                             });
@@ -1340,7 +1332,7 @@ impl eframe::App for InstallerApp {
                         if matches!(self.state, AppState::Downloading) && self.pause_token.is_some() {
                             let pause_button = egui::Button::new("Pause")
                                 .min_size(egui::vec2(96.0, 48.0))
-                                .fill(egui::Color32::from_rgb(214, 93, 14)); // Orange
+                                .fill(egui::Color32::from_rgb(70, 70, 70)); // Secondary action
                             if ui.add(pause_button).clicked() {
                                 self.pause_download();
                             }
@@ -1350,7 +1342,7 @@ impl eframe::App for InstallerApp {
                         // Cancel button
                         let cancel_button = egui::Button::new("Cancel")
                             .min_size(egui::vec2(96.0, 48.0))
-                            .fill(egui::Color32::from_rgb(251, 73, 52)); // Red
+                            .fill(egui::Color32::from_rgb(50, 50, 50)); // Destructive action
                         if ui.add(cancel_button).clicked() {
                             self.cancel_installation();
                         }
@@ -1362,7 +1354,7 @@ impl eframe::App for InstallerApp {
                     ui.add_space(8.0);
                     ui.vertical_centered(|ui| {
                         let repo_info = REPO_OPTIONS[self.selected_repo_idx].info;
-                        let text_color = egui::Color32::from_rgba_unmultiplied(251, 241, 199, 255);
+                        let text_color = egui::Color32::from_rgba_unmultiplied(230, 230, 230, 255);
 
                         // Split by \n and display each line
                         for line in repo_info.split('\n') {

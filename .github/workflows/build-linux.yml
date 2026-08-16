@@ -15,22 +15,22 @@ jobs:
         include:
           - arch: amd64
             target: x86_64-unknown-linux-gnu
-            artifact: spruceos-installer-linux-x64
+            artifact: baseos-installer-linux-x64
             build_cmd: cargo zigbuild --release --target x86_64-unknown-linux-gnu.2.17 --features icon
 
           - arch: arm64
             target: aarch64-unknown-linux-gnu
-            artifact: spruceos-installer-linux-arm64
+            artifact: baseos-installer-linux-arm64
             build_cmd: cargo zigbuild --release --target aarch64-unknown-linux-gnu.2.17 --features icon
 
           - arch: i686
             target: i686-unknown-linux-gnu
-            artifact: spruceos-installer-linux-i686
+            artifact: baseos-installer-linux-i686
             build_cmd: cargo zigbuild --release --target i686-unknown-linux-gnu.2.17 --features icon
 
           - arch: armv7
             target: armv7-unknown-linux-gnueabihf
-            artifact: spruceos-installer-linux-armv7
+            artifact: baseos-installer-linux-armv7
             build_cmd: cargo zigbuild --release --target armv7-unknown-linux-gnueabihf.2.17 --features icon
 
     steps:
@@ -71,7 +71,7 @@ jobs:
           # Strip the optional ".2.xx" suffix to find the actual target dir name
           TARGET_DIR="${{ matrix.target }}"
           TARGET_DIR="${TARGET_DIR%%.*}"
-          cp "target/${TARGET_DIR}/release/spruceos-installer" "${{ matrix.artifact }}"
+          cp "target/${TARGET_DIR}/release/baseos-installer" "${{ matrix.artifact }}"
           chmod +x "${{ matrix.artifact }}"
           tar -czf "${{ matrix.artifact }}.tar.gz" "${{ matrix.artifact }}"
 

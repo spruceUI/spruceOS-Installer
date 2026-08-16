@@ -3,11 +3,11 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>SpruceOSInstaller</string>
+    <string>BaseOSInstaller</string>
     <key>CFBundleDisplayName</key>
-    <string>SpruceOS Installer</string>
+    <string>BaseOS Installer</string>
     <key>CFBundleIdentifier</key>
-    <string>com.spruceos.installer</string>
+    <string>com.baseos.installer</string>
     <key>CFBundleVersion</key>
     <string>1.5.0</string>
     <key>CFBundleShortVersionString</key>
@@ -15,7 +15,7 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>spruceos-installer</string>
+    <string>baseos-installer</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>LSMinimumSystemVersion</key>

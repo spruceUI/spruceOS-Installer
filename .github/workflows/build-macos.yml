@@ -50,12 +50,12 @@ jobs:
           cat > launch-installer.command << 'EOF'
           #!/bin/bash
           SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-          APP_PATH="$SCRIPT_DIR/SpruceOSInstaller.app"
-          echo "SpruceOS Installer Launcher"
+          APP_PATH="$SCRIPT_DIR/BaseOSInstaller.app"
+          echo "BaseOS Installer Launcher"
           echo "============================"
           echo "Removing quarantine attribute..."
           xattr -d com.apple.quarantine "$APP_PATH" 2>/dev/null
-          echo "Launching SpruceOS Installer..."
+          echo "Launching BaseOS Installer..."
           open "$APP_PATH"
           EOF
           chmod +x launch-installer.command
@@ -63,46 +63,46 @@ jobs:
       - name: Create Universal App Bundle
         run: |
           # Create universal binary using lipo
-          lipo -create -output spruceos-installer-universal \
-            target/aarch64-apple-darwin/release/spruceos-installer \
-            target/x86_64-apple-darwin/release/spruceos-installer
+          lipo -create -output baseos-installer-universal \
+            target/aarch64-apple-darwin/release/baseos-installer \
+            target/x86_64-apple-darwin/release/baseos-installer
 
           # Verify the universal binary contains both architectures
           echo "Universal binary architectures:"
-          lipo -info spruceos-installer-universal
+          lipo -info baseos-installer-universal
 
           # Create .app bundle structure (no spaces in name)
-          mkdir -p "SpruceOSInstaller.app/Contents/MacOS"
-          mkdir -p "SpruceOSInstaller.app/Contents/Resources"
+          mkdir -p "BaseOSInstaller.app/Contents/MacOS"
+          mkdir -p "BaseOSInstaller.app/Contents/Resources"
 
           # Copy universal binary
-          cp spruceos-installer-universal "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
-          chmod +x "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
+          cp baseos-installer-universal "BaseOSInstaller.app/Contents/MacOS/baseos-installer"
+          chmod +x "BaseOSInstaller.app/Contents/MacOS/baseos-installer"
 
           # Copy Info.plist and icon
-          cp "assets/Mac/Info.plist" "SpruceOSInstaller.app/Contents/"
-          cp "AppIcon.icns" "SpruceOSInstaller.app/Contents/Resources/"
+          cp "assets/Mac/Info.plist" "BaseOSInstaller.app/Contents/"
+          cp "AppIcon.icns" "BaseOSInstaller.app/Contents/Resources/"
 
           # Copy 7zz binary to Resources so it inherits app's unquarantine status
-          cp "assets/Mac/7zz" "SpruceOSInstaller.app/Contents/Resources/7zz"
-          chmod +x "SpruceOSInstaller.app/Contents/Resources/7zz"
+          cp "assets/Mac/7zz" "BaseOSInstaller.app/Contents/Resources/7zz"
+          chmod +x "BaseOSInstaller.app/Contents/Resources/7zz"
 
           # Remove quarantine attribute to prevent macOS Gatekeeper issues
-          xattr -cr "SpruceOSInstaller.app"
+          xattr -cr "BaseOSInstaller.app"
 
           # Create zip for distribution with both app and launcher
-          zip -r "SpruceOS-Installer-macOS-Universal.zip" "SpruceOSInstaller.app" "launch-installer.command"
+          zip -r "BaseOS-Installer-macOS-Universal.zip" "BaseOSInstaller.app" "launch-installer.command"
 
       - name: Upload Universal artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SpruceOS-Installer-macOS-Universal
-          path: SpruceOS-Installer-macOS-Universal.zip
+          name: BaseOS-Installer-macOS-Universal
+          path: BaseOS-Installer-macOS-Universal.zip
 
       - name: Upload to Beta Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: beta-${{ github.ref_name }}
-          files: SpruceOS-Installer-macOS-Universal.zip
+          files: BaseOS-Installer-macOS-Universal.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

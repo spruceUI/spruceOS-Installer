@@ -24,18 +24,18 @@ jobs:
 
       - name: Rename binary
         shell: bash
-        run: cp "target/x86_64-pc-windows-msvc/release/spruceos-installer.exe" "spruceos-installer-windows.exe"
+        run: cp "target/x86_64-pc-windows-msvc/release/baseos-installer.exe" "baseos-installer-windows.exe"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: spruceos-installer-windows.exe
-          path: spruceos-installer-windows.exe
+          name: baseos-installer-windows.exe
+          path: baseos-installer-windows.exe
 
       - name: Upload to Beta Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: beta-${{ github.ref_name }}
-          files: spruceos-installer-windows.exe
+          files: baseos-installer-windows.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

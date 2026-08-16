@@ -52,11 +52,14 @@ use std::sync::Arc;
 
 /// The name of your OS (displayed in window title and UI)
 /// Examples: "SpruceOS", "Onion", "MinUI"
-pub const APP_NAME: &str = "SpruceOS";
+pub const APP_NAME: &str = "BaseOS";
 
 /// Volume label applied to formatted SD cards (max 11 characters, uppercase)
 /// This is what the SD card will be named in file explorers
-pub const VOLUME_LABEL: &str = "SPRUCEOS";
+///
+/// NOTE: BaseOS ships raw disk images, so the installer never formats a card
+/// itself — this label is unused in practice and kept only for completeness.
+pub const VOLUME_LABEL: &str = "BASEOS";
 
 // ----------------------------------------------------------------------------
 // INTERNAL IDENTIFIERS (auto-generated from APP_NAME)
@@ -64,7 +67,7 @@ pub const VOLUME_LABEL: &str = "SPRUCEOS";
 // ----------------------------------------------------------------------------
 
 /// Window title (displayed in title bar)
-pub const WINDOW_TITLE: &str = "SpruceOS Installer";
+pub const WINDOW_TITLE: &str = "BaseOS Installer";
 
 /// User-Agent string for HTTP requests to GitHub
 pub const USER_AGENT: &str = env!("CARGO_PKG_NAME");
@@ -154,188 +157,37 @@ pub struct RepoOption {
     pub supports_preserve_mode: bool,  // Show "Preserve user data" checkbox in update mode
 }
 
-// ----------------------------------------------------------------------------
-// SELECTIVE DELETE PATHS FOR UPDATE MODE
-// ----------------------------------------------------------------------------
-// Mirrors the on-device App/-Updater/delete_files.sh behavior.
-// Only specific subdirectories/files are deleted — NOT entire top-level dirs.
-// This preserves user customizations (custom apps, custom emu folders,
-// user-added RetroArch assets, etc.) that would be lost by wholesale deletion.
-// ----------------------------------------------------------------------------
-
-pub const SPRUCE_UPDATE_DELETE_PATHS: &[&str] = &[
-    // App: specific subdirs only
-    // (preserves BootLogo, fn_editor, PortMaster, RandomGame, user-added apps)
-    "App/-FirmwareUpdate-",
-    "App/-OTA",
-    "App/-Updater",
-    "App/Credits",
-    "App/FileManagement",
-    "App/GameNursery",
-    "App/MiyooGamelist",
-    "App/PixelReader",
-    "App/PyUI",
-    "App/RetroArch",
-    "App/spruceBackup",
-    "App/spruceRestore",
-    "App/ThemeGarden",
-    "App/USBStorageMode",
-    // Emu: specific system folders only
-    // (preserves custom-named folders the user created)
-    "Emu/A30PORTS",
-    "Emu/AMIGA",
-    "Emu/ARCADE",
-    "Emu/ARDUBOY",
-    "Emu/ATARI",
-    "Emu/ATARIST",
-    "Emu/CHAI",
-    "Emu/COLECO",
-    "Emu/COMMODORE",
-    "Emu/CPC",
-    "Emu/CPS1",
-    "Emu/CPS2",
-    "Emu/CPS3",
-    "Emu/-CUSTOM-SYSTEM-",
-    "Emu/DC",
-    "Emu/DOOM",
-    "Emu/DOS",
-    "Emu/EASYRPG",
-    "Emu/EIGHTHUNDRED",
-    "Emu/.emu_setup",
-    "Emu/FAIRCHILD",
-    "Emu/FAKE08",
-    "Emu/FBNEO",
-    "Emu/FC",
-    "Emu/FDS",
-    "Emu/FIFTYTWOHUNDRED",
-    "Emu/GAMETANK",
-    "Emu/GB",
-    "Emu/GBA",
-    "Emu/GBC",
-    "Emu/GG",
-    "Emu/GW",
-    "Emu/INTELLIVISION",
-    "Emu/LYNX",
-    "Emu/MAME2003PLUS",
-    "Emu/MD",
-    "Emu/MEDIA",
-    "Emu/MEGADUCK",
-    "Emu/MS",
-    "Emu/MSU1",
-    "Emu/MSUMD",
-    "Emu/MSX",
-    "Emu/N64",
-    "Emu/NAOMI",
-    "Emu/NDS",
-    "Emu/NEOCD",
-    "Emu/NEOGEO",
-    "Emu/NGP",
-    "Emu/NGPC",
-    "Emu/ODYSSEY",
-    "Emu/OPENBOR",
-    "Emu/PC98",
-    "Emu/PCE",
-    "Emu/PCECD",
-    "Emu/PICO8",
-    "Emu/POKE",
-    "Emu/PORTS",
-    "Emu/PS",
-    "Emu/PSP",
-    "Emu/QUAKE",
-    "Emu/SATELLAVIEW",
-    "Emu/SATURN",
-    "Emu/SCUMMVM",
-    "Emu/SEGACD",
-    "Emu/SEGASGONE",
-    "Emu/SEVENTYEIGHTHUNDRED",
-    "Emu/SFC",
-    "Emu/SGB",
-    "Emu/SGFX",
-    "Emu/SUFAMI",
-    "Emu/SUPERVISION",
-    "Emu/THIRTYTWOX",
-    "Emu/TIC",
-    "Emu/VB",
-    "Emu/VECTREX",
-    "Emu/VIC20",
-    "Emu/VIDEOPAC",
-    "Emu/WOLF",
-    "Emu/WS",
-    "Emu/WSC",
-    "Emu/X68000",
-    "Emu/ZXS",
-    // spruce: specific subdirs only
-    // (preserves bin, bin64, a30, brick, flip, miyoomini — needed for PyUI)
-    "spruce/archives",
-    "spruce/etc",
-    "spruce/FIRMWARE_UPDATE",
-    "spruce/flags",
-    "spruce/imgs",
-    "spruce/scripts",
-    "spruce/www",
-    "spruce/spruce",
-    // SD card root: specific items
-    // (RetroArch is NOT deleted — preserves user-added overlays/shaders/cheats)
-    ".github",
-    ".tmp_update",
-    "Icons",
-    "miyoo",
-    "miyoo355",
-    "trimui",
-    ".gitattributes",
-    ".gitignore",
-    "autorun.inf",
-    "create_spruce_release.bat",
-    "create_spruce_release.sh",
-    "LICENSE",
-    "Pico8.Native.INFO.txt",
-    "README.md",
+/// Device name mappings for BaseOS release assets.
+///
+/// Assets are named `baseos-<device>-<version>.img.zip`. Matching is a plain
+/// substring test against the filename and the FIRST match wins, so more
+/// specific patterns must come first — `-rg34xx` would otherwise swallow
+/// `-rg34xxsp`. The leading dash keeps patterns anchored to the device field.
+pub const BASEOS_DEVICE_MAPPINGS: &[AssetDisplayMapping] = &[
+    AssetDisplayMapping { pattern: "-rg35xxplus", display_name: "RG35XX Plus", devices: "Anbernic RG35XX Plus" },
+    AssetDisplayMapping { pattern: "-rg35xxpro",  display_name: "RG35XX Pro",  devices: "Anbernic RG35XX Pro" },
+    AssetDisplayMapping { pattern: "-rg35xxsp",   display_name: "RG35XX SP",   devices: "Anbernic RG35XX SP" },
+    AssetDisplayMapping { pattern: "-rg35xxh",    display_name: "RG35XX H",    devices: "Anbernic RG35XX H" },
+    AssetDisplayMapping { pattern: "-rg34xxsp",   display_name: "RG34XX SP",   devices: "Anbernic RG34XX SP" },
+    AssetDisplayMapping { pattern: "-rg34xx",     display_name: "RG34XX",      devices: "Anbernic RG34XX" },
+    AssetDisplayMapping { pattern: "-rg40xxh",    display_name: "RG40XX H",    devices: "Anbernic RG40XX H" },
+    AssetDisplayMapping { pattern: "-rg40xxv",    display_name: "RG40XX V",    devices: "Anbernic RG40XX V" },
+    AssetDisplayMapping { pattern: "-rgcubexx",   display_name: "RG CubeXX",   devices: "Anbernic RG CubeXX" },
+    AssetDisplayMapping { pattern: "-rg28xx",     display_name: "RG28XX",      devices: "Anbernic RG28XX" },
+    AssetDisplayMapping { pattern: "-rgsp",       display_name: "RG SP",       devices: "Anbernic RG SP" },
 ];
 
 pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
-        name: "Stable",
-        url: "spruceUI/spruceOS",
-        info: "Stable releases of spruceOS.\nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Series\nTrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick, TrimUI Brick Pro\nAnbernic RG-XX Series\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
-        display_name: Some("spruceOS Stable"),  // Display name for popups
-        supports_update_mode: true,  // Archive-based (.7z)
-        update_directories: SPRUCE_UPDATE_DELETE_PATHS,
-        allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
-        asset_display_mappings: None,
-        supports_preserve_mode: true,
-    },
-    RepoOption {
-        name: "Nightlies",
-        url: "spruceUI/spruceOSNightlies",
-        info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Series\nTrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick, TrimUI Brick Pro\nAnbernic RG-XX Series",
-        display_name: Some("spruceOS Nightly"),  // Display name for popups
-        supports_update_mode: true,  // Supports archives
-        update_directories: SPRUCE_UPDATE_DELETE_PATHS,
-        allowed_extensions: None,  // Show all assets
-        asset_display_mappings: None,
-        supports_preserve_mode: true,
-    },
-    RepoOption {
-        name: "SprigUI",
-        url: "spruceUI/sprigUI",
-        info: "SpruceOS for the Miyoo Mini Flip.",
-        display_name: None,  // Falls back to "SprigUI"
-        supports_update_mode: true,  // Archive-based (.7z)
-        update_directories: &["Retroarch", "spruce"],
-        allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
-        asset_display_mappings: None,
-        supports_preserve_mode: false,
-    },
-    RepoOption {
-        name: "TwigUI",
-        url: "spruceUI/twigUI",
-        info: "SpruceOS for the GKD Pixel 2.",
-        display_name: None,  // Falls back to "TwigUI"
-        supports_update_mode: false,  // Raw disk images only (.img.gz)
-        update_directories: &["Retroarch", "spruce"],
-        allowed_extensions: Some(&[".img.gz"]),  // Only show .img.gz files
-        asset_display_mappings: None,
-        supports_preserve_mode: false,
+        name: "BaseOS",
+        url: "pvaibhav/BaseOS",
+        info: "A minimal base OS for Anbernic RG XX devices. 3 second boot time.\nRaw disk image — this erases the entire SD card.\n[Project page](https://github.com/pvaibhav/BaseOS)",
+        display_name: Some("BaseOS"),
+        supports_update_mode: false,   // Raw disk images always do a full burn
+        update_directories: &[],       // Not used for raw images
+        allowed_extensions: Some(&[".img.zip"]),  // Excludes .bosupd update packages
+        asset_display_mappings: Some(BASEOS_DEVICE_MAPPINGS),
+        supports_preserve_mode: false, // No preserve for raw images
     },
 ];
 
@@ -611,16 +463,16 @@ pub const SCRAPER_CONFIG: ScraperConfig = ScraperConfig {
 // THEME SETUP (internal use)
 // ============================================================================
 
+/// Initial visuals applied before the first frame.
+///
+/// The authoritative palette lives in `InstallerApp::get_theme_config`
+/// (src/app/theme.rs); this only avoids a flash of egui's default colors at
+/// startup. BaseOS is greyscale in both light and dark system themes.
 pub fn setup_theme(ctx: &egui::Context) {
-    use egui_thematic::ThemeConfig;
-
-    let is_dark = ctx.style().visuals.dark_mode;
-    let theme = if is_dark {
-        ThemeConfig::gruvbox_dark_preset()
-    } else {
-        // TODO: not sure what light preset would fit spruceos branding,
-        // pick one from theme editor
-        ThemeConfig::gruvbox_dark_preset()
-    };
-    ctx.set_visuals(theme.to_visuals());
+    let mut visuals = egui::Visuals::dark();
+    visuals.window_fill = egui::Color32::from_rgb(36, 36, 36);
+    visuals.panel_fill = egui::Color32::from_rgb(36, 36, 36);
+    visuals.extreme_bg_color = egui::Color32::from_rgb(24, 24, 24);
+    visuals.override_text_color = Some(egui::Color32::from_rgb(230, 230, 230));
+    ctx.set_visuals(visuals);
 }
