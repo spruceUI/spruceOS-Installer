@@ -237,6 +237,20 @@ pub const UPDATE_PRESERVE_PATHS: &[&str] = &[
 ];
 
 // ----------------------------------------------------------------------------
+// OPTIONAL FEATURES
+// ----------------------------------------------------------------------------
+
+/// Show the boxart scraper button (🖼) in the toolbar.
+///
+/// The scraper downloads Libretro thumbnails into per-system `Imgs` folders
+/// under `Roms/`, which is the spruceOS layout. BaseOS ships raw disk images
+/// and does not use that layout, so the button is hidden here.
+///
+/// The scraper itself is left intact — flip this to `true` to bring the button
+/// back without touching any other code.
+pub const SHOW_BOXART_SCRAPER: bool = false;
+
+// ----------------------------------------------------------------------------
 // WINDOW SETTINGS
 // ----------------------------------------------------------------------------
 

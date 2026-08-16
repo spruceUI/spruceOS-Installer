@@ -20,7 +20,7 @@
 // ============================================================================
 
 use super::{InstallerApp, AppState};
-use crate::config::REPO_OPTIONS;
+use crate::config::{REPO_OPTIONS, SHOW_BOXART_SCRAPER};
 use crate::eject::eject_drive;
 use eframe::egui;
 use egui_thematic::render_theme_panel;
@@ -1012,43 +1012,46 @@ impl eframe::App for InstallerApp {
                             }
 
                             // Scrape Boxart button - only enabled when drive is selected and state is Idle or Complete
-                            let can_scrape = self.selected_drive_idx.is_some() &&
-                                           matches!(self.state, AppState::Idle | AppState::Complete);
-                            ui.add_enabled_ui(can_scrape, |ui| {
-                                if ui.button(egui::RichText::new("🖼").size(24.0)).on_hover_text("Scrape Boxart").clicked() {
-                                    // Set default Roms path based on selected drive
-                                    if let Some(idx) = self.selected_drive_idx {
-                                        if let Some(drive) = self.drives.get(idx) {
-                                            if let Some(mount_path) = &drive.mount_path {
-                                                #[cfg(target_os = "windows")]
-                                                let roms_path = format!("{}Roms", mount_path.display());
-                                                #[cfg(not(target_os = "windows"))]
-                                                let roms_path = mount_path.join("Roms").display().to_string();
-                                                self.scraper_roms_path = roms_path.clone();
+                            // Hidden on BaseOS; see SHOW_BOXART_SCRAPER in src/config.rs
+                            if SHOW_BOXART_SCRAPER {
+                                let can_scrape = self.selected_drive_idx.is_some() &&
+                                               matches!(self.state, AppState::Idle | AppState::Complete);
+                                ui.add_enabled_ui(can_scrape, |ui| {
+                                    if ui.button(egui::RichText::new("🖼").size(24.0)).on_hover_text("Scrape Boxart").clicked() {
+                                        // Set default Roms path based on selected drive
+                                        if let Some(idx) = self.selected_drive_idx {
+                                            if let Some(drive) = self.drives.get(idx) {
+                                                if let Some(mount_path) = &drive.mount_path {
+                                                    #[cfg(target_os = "windows")]
+                                                    let roms_path = format!("{}Roms", mount_path.display());
+                                                    #[cfg(not(target_os = "windows"))]
+                                                    let roms_path = mount_path.join("Roms").display().to_string();
+                                                    self.scraper_roms_path = roms_path.clone();
 
-                                                // Scan for valid subfolders
-                                                let mut folders = Vec::new();
-                                                if let Ok(entries) = std::fs::read_dir(&roms_path) {
-                                                    for entry in entries.flatten() {
-                                                        let path = entry.path();
-                                                        if path.is_dir() {
-                                                            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                                                                if crate::boxart_scraper::BoxArtScraper::get_ra_alias(name).is_some() {
-                                                                    folders.push((name.to_string(), true));
+                                                    // Scan for valid subfolders
+                                                    let mut folders = Vec::new();
+                                                    if let Ok(entries) = std::fs::read_dir(&roms_path) {
+                                                        for entry in entries.flatten() {
+                                                            let path = entry.path();
+                                                            if path.is_dir() {
+                                                                if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                                                                    if crate::boxart_scraper::BoxArtScraper::get_ra_alias(name).is_some() {
+                                                                        folders.push((name.to_string(), true));
+                                                                    }
                                                                 }
                                                             }
                                                         }
                                                     }
+                                                    folders.sort_by(|a, b| a.0.cmp(&b.0));
+                                                    self.scraper_folders = folders;
                                                 }
-                                                folders.sort_by(|a, b| a.0.cmp(&b.0));
-                                                self.scraper_folders = folders;
                                             }
                                         }
+                                        self.show_scraper_window = true;
+                                        self.scraper_stats = None;
                                     }
-                                    self.show_scraper_window = true;
-                                    self.scraper_stats = None;
-                                }
-                            });
+                                });
+                            }
                             },
                     );
                 });
