@@ -107,6 +107,11 @@ pub struct AssetDisplayMapping {
 /// - `allowed_extensions`: Optional filter to only show assets with these extensions
 ///                         Use this to filter out update packages or show only specific formats
 ///                         Set to None to show all assets
+/// - `excluded_patterns`: Optional substrings that disqualify an asset even when its
+///                       extension is allowed. Update/OTA packages share the `.7z`
+///                       extension with the full install archive, so an extension
+///                       filter alone cannot separate them. Matching is a plain
+///                       case-sensitive substring test against the filename.
 /// - `asset_display_mappings`: Optional mappings to show user-friendly device names
 ///                             instead of technical filenames in the selection UI
 /// - `supports_preserve_mode`: Whether to show "Preserve user data" checkbox in update mode
@@ -123,6 +128,7 @@ pub struct AssetDisplayMapping {
 ///     supports_update_mode: true,  // Archives can be updated
 ///     update_directories: &["Retroarch", "spruce"],
 ///     allowed_extensions: Some(&[".7z", ".zip"]),  // Only show archives
+///     excluded_patterns: Some(&["OTA"]),  // Hide OTA update packages
 ///     asset_display_mappings: None,
 ///     supports_preserve_mode: true,  // Show preserve user data checkbox
 /// }
@@ -138,6 +144,7 @@ pub struct AssetDisplayMapping {
 ///     supports_update_mode: false,  // Raw images always do full burns
 ///     update_directories: &[],  // Not used for raw images
 ///     allowed_extensions: Some(&[".img.gz", ".img"]),  // Only raw images
+///     excluded_patterns: None,  // Nothing to hide
 ///     asset_display_mappings: None,
 ///     supports_preserve_mode: false,  // No preserve for raw images
 /// }
@@ -150,6 +157,7 @@ pub struct RepoOption {
     pub supports_update_mode: bool,
     pub update_directories: &'static [&'static str],
     pub allowed_extensions: Option<&'static [&'static str]>,
+    pub excluded_patterns: Option<&'static [&'static str]>,
     pub asset_display_mappings: Option<&'static [AssetDisplayMapping]>,
     pub supports_preserve_mode: bool,  // Show "Preserve user data" checkbox in update mode
 }
@@ -321,6 +329,11 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         supports_update_mode: true,  // Archive-based (.7z)
         update_directories: SPRUCE_UPDATE_DELETE_PATHS,
         allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
+        // The incremental OTA package is a .7z too, so the extension filter
+        // cannot separate it from the full archive. Deliberately not anchored
+        // to the "spruce" prefix: if the archive naming ever changes, a
+        // prefixed pattern stops matching while still looking correct.
+        excluded_patterns: Some(&["OTA"]),
         asset_display_mappings: None,
         supports_preserve_mode: true,
     },
@@ -331,7 +344,8 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         display_name: Some("spruceOS Nightly"),  // Display name for popups
         supports_update_mode: true,  // Supports archives
         update_directories: SPRUCE_UPDATE_DELETE_PATHS,
-        allowed_extensions: None,  // Show all assets
+        allowed_extensions: Some(&[".7z"]),  // Match Stable; None listed everything
+        excluded_patterns: Some(&["OTA"]),
         asset_display_mappings: None,
         supports_preserve_mode: true,
     },
@@ -343,6 +357,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         supports_update_mode: false,  // Raw disk images only (.img.gz)
         update_directories: &["Retroarch", "spruce"],
         allowed_extensions: Some(&[".img.gz"]),  // Only show .img.gz files
+        excluded_patterns: None,
         asset_display_mappings: None,
         supports_preserve_mode: false,
     },
@@ -354,6 +369,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         supports_update_mode: false,  // Raw disk images always do a full burn
         update_directories: &[],      // Not used for raw images
         allowed_extensions: Some(&[".img.zip"]),  // Excludes .bosupd update packages
+        excluded_patterns: None,  // .bosupd already fails the extension filter
         asset_display_mappings: Some(BASEOS_DEVICE_MAPPINGS),
         supports_preserve_mode: false,
     },

@@ -68,10 +68,6 @@ impl eframe::App for InstallerApp {
             if let Ok(result) = rx.try_recv() {
                 match result {
                     Ok(release) => {
-                        // Get allowed extensions from current repo option
-                        let repo_option = &REPO_OPTIONS[self.selected_repo_idx];
-                        let allowed_extensions = repo_option.allowed_extensions;
-
                         // Check for manifest.json in release
                         let ctx_clone = ctx.clone();
                         let release_clone = release.clone();
@@ -86,7 +82,7 @@ impl eframe::App for InstallerApp {
 
                         // Store the release and set up for manifest check
                         self.manifest_rx = Some(manifest_rx);
-                        self.pending_release = Some((release, allowed_extensions));
+                        self.pending_release = Some((release, self.selected_repo_idx));
                         self.state = AppState::FetchingAssets; // Keep in fetching state
                         self.release_rx = None;
                     }
@@ -104,7 +100,12 @@ impl eframe::App for InstallerApp {
         if let Some(rx) = &mut self.manifest_rx {
             if let Ok(manifest_opt) = rx.try_recv() {
                 // Get the pending release
-                if let Some((release, allowed_extensions)) = self.pending_release.take() {
+                if let Some((release, repo_idx)) = self.pending_release.take() {
+                    // Read the filters from the repo that was fetched, not whichever
+                    // tab is selected now - the user can switch tabs mid-fetch.
+                    let allowed_extensions = REPO_OPTIONS[repo_idx].allowed_extensions;
+                    let excluded_patterns = REPO_OPTIONS[repo_idx].excluded_patterns;
+
                     // Determine which assets to use
                     let mut assets = if let Some(manifest) = manifest_opt {
                         self.log("Using external assets from manifest.json");
@@ -123,12 +124,12 @@ impl eframe::App for InstallerApp {
                             .collect();
 
                         // Still apply extension filtering to manifest assets
-                        Self::filter_assets(manifest_assets, allowed_extensions)
+                        Self::filter_assets(manifest_assets, allowed_extensions, excluded_patterns)
                     } else {
                         // No manifest found, use GitHub assets
                         crate::debug::log("No manifest found, using GitHub release assets");
                         self.manifest_display_name = None;  // Clear any previous manifest display name
-                        Self::filter_assets(release.assets.clone(), allowed_extensions)
+                        Self::filter_assets(release.assets.clone(), allowed_extensions, excluded_patterns)
                     };
 
                     // Continue with existing asset processing logic

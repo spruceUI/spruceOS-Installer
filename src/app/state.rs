@@ -84,7 +84,10 @@ pub struct InstallerApp {
 
     // Manifest support for external asset hosting
     pub(super) manifest_rx: Option<mpsc::UnboundedReceiver<Option<crate::manifest::Manifest>>>,
-    pub(super) pending_release: Option<(Release, Option<&'static [&'static str]>)>,
+    // The repo INDEX, not its filters: several filters are now read from the
+    // RepoOption and two of them share a type, which makes a tuple of them easy
+    // to transpose by accident.
+    pub(super) pending_release: Option<(Release, usize)>,
     pub(super) manifest_display_name: Option<String>,  // Repository display name from manifest.json
 
     // Theme editor

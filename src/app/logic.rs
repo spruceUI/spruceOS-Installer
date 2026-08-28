@@ -83,8 +83,12 @@ impl InstallerApp {
         }
     }
 
-    /// Filter out source code archives and apply extension filtering from asset list
-    pub(super) fn filter_assets(assets: Vec<Asset>, allowed_extensions: Option<&[&str]>) -> Vec<Asset> {
+    /// Filter out source code archives, excluded patterns, and non-matching extensions
+    pub(super) fn filter_assets(
+        assets: Vec<Asset>,
+        allowed_extensions: Option<&[&str]>,
+        excluded_patterns: Option<&[&str]>,
+    ) -> Vec<Asset> {
         assets.into_iter()
             .filter(|a| {
                 // Filter out source code archives
@@ -92,6 +96,15 @@ impl InstallerApp {
                    a.name == "source.zip" ||
                    a.name == "source.tar.gz" {
                     return false;
+                }
+
+                // Drop assets the repo has explicitly excluded. This runs before
+                // the extension filter because the packages it targets (OTA/update
+                // diffs) share an extension with the real install archive.
+                if let Some(patterns) = excluded_patterns {
+                    if patterns.iter().any(|p| a.name.contains(p)) {
+                        return false;
+                    }
                 }
 
                 // Apply extension filter if provided
