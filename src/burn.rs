@@ -9,8 +9,8 @@ use flate2::read::GzDecoder;
 
 const CHUNK_SIZE: usize = 4 * 1024 * 1024; // 4MB chunks
 
-/// Chunk size used when pumping bytes out of a zip entry
-const ZIP_CHUNK_SIZE: usize = 1024 * 1024; // 1MB
+/// Chunk size used when pumping bytes out of an archive entry
+const ARCHIVE_CHUNK_SIZE: usize = 1024 * 1024; // 1MB
 
 #[derive(Debug, Clone)]
 pub enum BurnProgress {
@@ -26,8 +26,9 @@ pub enum BurnProgress {
 
 /// How a downloaded raw image is compressed.
 ///
-/// BaseOS publishes `.img.zip`; TwigUI publishes `.img.gz`. All forms are read
-/// back as a plain stream of raw image bytes.
+/// BaseOS publishes `.img.zip`; TwigUI publishes `.img.gz`; dArkMoss publishes
+/// `.img.7z`, usually split across volumes. All forms are read back as a plain
+/// stream of raw image bytes.
 ///
 /// NOTE: `Read` is written fully qualified throughout this section on purpose.
 /// Several functions below have their own `use std::io::Read;`, one of which is
@@ -39,6 +40,7 @@ enum ImageCompression {
     None,
     Gzip,
     Zip,
+    SevenZip,
 }
 
 fn detect_compression(image_path: &Path) -> ImageCompression {
@@ -48,104 +50,208 @@ fn detect_compression(image_path: &Path) -> ImageCompression {
         .unwrap_or_default()
         .to_ascii_lowercase();
 
-    if name.ends_with(".zip") {
+    // A multi-volume set is addressed by its first part, so look through any
+    // trailing .NNN to the extension that actually describes the format.
+    let format_name = crate::github::split_volume_suffix(&name)
+        .map_or(name.as_str(), |(base, _)| base);
+
+    if format_name.ends_with(".7z") {
+        ImageCompression::SevenZip
+    } else if format_name.ends_with(".zip") {
         ImageCompression::Zip
-    } else if name.ends_with(".gz") {
+    } else if format_name.ends_with(".gz") {
         ImageCompression::Gzip
     } else {
         ImageCompression::None
     }
 }
 
-/// Streams the first entry of a zip archive as a plain `Read`.
+/// Presents a set of `.7z.001`, `.002`, ... volumes as one continuous stream.
 ///
-/// `ZipArchive::by_index` borrows the archive, so the resulting reader cannot
-/// escape into the `Box<dyn Read>` the burn paths expect. A worker thread owns
-/// the archive instead and hands chunks over a bounded channel; the bound also
-/// caps how much decompressed data is buffered ahead of the writer.
-struct ZipEntryReader {
+/// 7-Zip splits an archive byte-for-byte across volumes with no per-volume
+/// header, so concatenating the parts yields a valid archive -- verified by
+/// `cat`ing a split set back together and extracting it. This does that
+/// concatenation lazily, which is the difference between reading the set in
+/// place and writing an 8 GB temp file to read it from.
+///
+/// A single-file archive is just the one-volume case.
+struct MultiVolumeReader {
+    files: Vec<std::fs::File>,
+    sizes: Vec<u64>,
+    total: u64,
+    pos: u64,
+}
+
+impl MultiVolumeReader {
+    fn open(paths: &[std::path::PathBuf]) -> Result<Self, String> {
+        let mut files = Vec::with_capacity(paths.len());
+        let mut sizes = Vec::with_capacity(paths.len());
+        let mut total = 0u64;
+
+        for path in paths {
+            let file = std::fs::File::open(path)
+                .map_err(|e| format!("Failed to open {:?}: {}", path, e))?;
+            let size = file
+                .metadata()
+                .map_err(|e| format!("Failed to size {:?}: {}", path, e))?
+                .len();
+            // An empty volume would make the seek arithmetic below spin.
+            if size == 0 {
+                return Err(format!("Archive volume is empty: {:?}", path));
+            }
+            total += size;
+            files.push(file);
+            sizes.push(size);
+        }
+
+        if files.is_empty() {
+            return Err("No archive volumes to read".to_string());
+        }
+
+        Ok(Self { files, sizes, total, pos: 0 })
+    }
+
+    fn total(&self) -> u64 {
+        self.total
+    }
+}
+
+impl std::io::Read for MultiVolumeReader {
+    fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
+        use std::io::{Read as _, Seek as _, SeekFrom};
+
+        if out.is_empty() || self.pos >= self.total {
+            return Ok(0);
+        }
+
+        // Find the volume holding the current position.
+        let mut vol_start = 0u64;
+        let mut idx = 0usize;
+        while idx < self.sizes.len() && self.pos >= vol_start + self.sizes[idx] {
+            vol_start += self.sizes[idx];
+            idx += 1;
+        }
+        if idx >= self.files.len() {
+            return Ok(0);
+        }
+
+        // Never read past the end of a volume in one go; the next call picks up
+        // at the start of the next one.
+        let offset_in_vol = self.pos - vol_start;
+        let remaining_in_vol = self.sizes[idx] - offset_in_vol;
+        let want = std::cmp::min(out.len() as u64, remaining_in_vol) as usize;
+
+        let file = &mut self.files[idx];
+        file.seek(SeekFrom::Start(offset_in_vol))?;
+        let read = file.read(&mut out[..want])?;
+        self.pos += read as u64;
+        Ok(read)
+    }
+}
+
+impl std::io::Seek for MultiVolumeReader {
+    fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+        use std::io::SeekFrom;
+
+        let target = match pos {
+            SeekFrom::Start(n) => n as i64,
+            SeekFrom::End(n) => self.total as i64 + n,
+            SeekFrom::Current(n) => self.pos as i64 + n,
+        };
+
+        if target < 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "seek to a negative position",
+            ));
+        }
+
+        // Seeking past the end is legal and reads there return 0, matching File.
+        self.pos = target as u64;
+        Ok(self.pos)
+    }
+}
+
+/// Every volume backing an image path, in order.
+///
+/// A path that is not a `.001` yields just itself. Enumeration stops at the
+/// first missing part; since a 7z keeps its header in the LAST volume, a set
+/// truncated that way fails header parsing rather than silently decompressing
+/// a partial image.
+fn volume_paths(image_path: &Path) -> Vec<std::path::PathBuf> {
+    let name = image_path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+
+    let Some((base, number)) = crate::github::split_volume_suffix(name) else {
+        return vec![image_path.to_path_buf()];
+    };
+    if number != 1 {
+        return vec![image_path.to_path_buf()];
+    }
+
+    let dir = image_path.parent().unwrap_or_else(|| Path::new("."));
+    let mut paths = Vec::new();
+    for n in 1..=999u32 {
+        let candidate = dir.join(format!("{}.{:03}", base, n));
+        if !candidate.exists() {
+            break;
+        }
+        paths.push(candidate);
+    }
+
+    if paths.is_empty() {
+        vec![image_path.to_path_buf()]
+    } else {
+        paths
+    }
+}
+
+/// Name and uncompressed size of the image inside a 7z archive.
+///
+/// The largest entry with data -- the raw `.img` in every archive we ship, and
+/// robust against a stray readme sitting alongside it. The size comes straight
+/// from the archive header, so unlike the `.gz` path this needs no pre-scan.
+fn seven_zip_image_entry(volume_paths: &[std::path::PathBuf]) -> Result<(String, u64), String> {
+    let mut reader = MultiVolumeReader::open(volume_paths)?;
+    let len = reader.total();
+    let password = sevenz_rust::Password::empty();
+
+    let archive = sevenz_rust::Archive::read(&mut reader, len, password.as_slice())
+        .map_err(|e| format!("Failed to read 7z archive header: {}", e))?;
+
+    let entry = archive
+        .files
+        .iter()
+        .filter(|f| f.has_stream && !f.is_directory && f.size > 0)
+        .max_by_key(|f| f.size)
+        .ok_or_else(|| "7z archive contains no files".to_string())?;
+
+    Ok((entry.name.clone(), entry.size))
+}
+
+/// A `Read` fed by a worker thread over a bounded channel.
+///
+/// Both archive readers below need this shape: the underlying library hands
+/// out entry data borrowed from the archive, or through a callback, and
+/// neither can escape into the `Box<dyn Read>` the burn paths expect. A worker
+/// thread owns the archive instead and pushes chunks across; the channel bound
+/// caps how much decompressed data buffers ahead of the writer.
+struct ChannelReader {
     rx: std::sync::mpsc::Receiver<Result<Vec<u8>, String>>,
     current: Vec<u8>,
     pos: usize,
     finished: bool,
 }
 
-impl ZipEntryReader {
-    fn spawn(image_path: &Path) -> Result<Self, String> {
-        // Validate the archive up front so a bad file fails here rather than
-        // partway through writing to the device.
-        let entry_name = {
-            let file = std::fs::File::open(image_path)
-                .map_err(|e| format!("Failed to open zip image: {}", e))?;
-            let mut archive = zip::ZipArchive::new(file)
-                .map_err(|e| format!("Failed to read zip image: {}", e))?;
-            if archive.is_empty() {
-                return Err("Zip image contains no files".to_string());
-            }
-            let entry = archive
-                .by_index(0)
-                .map_err(|e| format!("Failed to open first zip entry: {}", e))?;
-            entry.name().to_string()
-        };
-
-        crate::debug::log(&format!("Zip entry: {}", entry_name));
-
-        let path = image_path.to_path_buf();
-        let (tx, rx) = std::sync::mpsc::sync_channel::<Result<Vec<u8>, String>>(4);
-
-        std::thread::spawn(move || {
-            use std::io::Read;
-
-            let file = match std::fs::File::open(&path) {
-                Ok(f) => f,
-                Err(e) => {
-                    let _ = tx.send(Err(format!("Failed to open zip image: {}", e)));
-                    return;
-                }
-            };
-            let mut archive = match zip::ZipArchive::new(file) {
-                Ok(a) => a,
-                Err(e) => {
-                    let _ = tx.send(Err(format!("Failed to read zip image: {}", e)));
-                    return;
-                }
-            };
-            let mut entry = match archive.by_index(0) {
-                Ok(e) => e,
-                Err(e) => {
-                    let _ = tx.send(Err(format!("Failed to open first zip entry: {}", e)));
-                    return;
-                }
-            };
-
-            let mut buffer = vec![0u8; ZIP_CHUNK_SIZE];
-            loop {
-                match entry.read(&mut buffer) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        // A send error means the reader was dropped (cancelled burn)
-                        if tx.send(Ok(buffer[..n].to_vec())).is_err() {
-                            return;
-                        }
-                    }
-                    Err(e) => {
-                        let _ = tx.send(Err(format!("Failed to decompress zip image: {}", e)));
-                        return;
-                    }
-                }
-            }
-        });
-
-        Ok(Self {
-            rx,
-            current: Vec::new(),
-            pos: 0,
-            finished: false,
-        })
+impl ChannelReader {
+    fn new(rx: std::sync::mpsc::Receiver<Result<Vec<u8>, String>>) -> Self {
+        Self { rx, current: Vec::new(), pos: 0, finished: false }
     }
 }
 
-impl std::io::Read for ZipEntryReader {
+impl std::io::Read for ChannelReader {
     fn read(&mut self, out: &mut [u8]) -> std::io::Result<usize> {
         while self.pos >= self.current.len() {
             if self.finished {
@@ -175,13 +281,161 @@ impl std::io::Read for ZipEntryReader {
     }
 }
 
-/// Opens an image as a stream of raw bytes, decompressing `.gz` and `.zip`
-/// on the fly so the burn paths always see a plain image.
+/// Streams the first entry of a zip archive as a plain `Read`.
+fn spawn_zip_reader(image_path: &Path) -> Result<ChannelReader, String> {
+    // Validate the archive up front so a bad file fails here rather than
+    // partway through writing to the device.
+    let entry_name = {
+        let file = std::fs::File::open(image_path)
+            .map_err(|e| format!("Failed to open zip image: {}", e))?;
+        let mut archive = zip::ZipArchive::new(file)
+            .map_err(|e| format!("Failed to read zip image: {}", e))?;
+        if archive.is_empty() {
+            return Err("Zip image contains no files".to_string());
+        }
+        let entry = archive
+            .by_index(0)
+            .map_err(|e| format!("Failed to open first zip entry: {}", e))?;
+        entry.name().to_string()
+    };
+
+    crate::debug::log(&format!("Zip entry: {}", entry_name));
+
+    let path = image_path.to_path_buf();
+    let (tx, rx) = std::sync::mpsc::sync_channel::<Result<Vec<u8>, String>>(4);
+
+    std::thread::spawn(move || {
+        use std::io::Read;
+
+        let file = match std::fs::File::open(&path) {
+            Ok(f) => f,
+            Err(e) => {
+                let _ = tx.send(Err(format!("Failed to open zip image: {}", e)));
+                return;
+            }
+        };
+        let mut archive = match zip::ZipArchive::new(file) {
+            Ok(a) => a,
+            Err(e) => {
+                let _ = tx.send(Err(format!("Failed to read zip image: {}", e)));
+                return;
+            }
+        };
+        let mut entry = match archive.by_index(0) {
+            Ok(e) => e,
+            Err(e) => {
+                let _ = tx.send(Err(format!("Failed to open first zip entry: {}", e)));
+                return;
+            }
+        };
+
+        let mut buffer = vec![0u8; ARCHIVE_CHUNK_SIZE];
+        loop {
+            match entry.read(&mut buffer) {
+                Ok(0) => break,
+                Ok(n) => {
+                    // A send error means the reader was dropped (cancelled burn)
+                    if tx.send(Ok(buffer[..n].to_vec())).is_err() {
+                        return;
+                    }
+                }
+                Err(e) => {
+                    let _ = tx.send(Err(format!("Failed to decompress zip image: {}", e)));
+                    return;
+                }
+            }
+        }
+    });
+
+    Ok(ChannelReader::new(rx))
+}
+
+/// Streams the image entry out of a 7z archive, single- or multi-volume.
+///
+/// This is what keeps the 7z burn path honest: the bundled 7-Zip binary can
+/// only unpack to a file first, which would put an 8 GB scratch requirement on
+/// every user. `sevenz-rust` decompresses as it reads, so the image goes
+/// straight from the archive to the card the same way `.gz` and `.zip` do.
+fn spawn_7z_reader(volumes: Vec<std::path::PathBuf>) -> Result<ChannelReader, String> {
+    // Read the header first, so a truncated or unreadable set fails before the
+    // device is touched.
+    let (entry_name, entry_size) = seven_zip_image_entry(&volumes)?;
+    crate::debug::log(&format!("7z entry: {} ({} bytes)", entry_name, entry_size));
+
+    let (tx, rx) = std::sync::mpsc::sync_channel::<Result<Vec<u8>, String>>(4);
+
+    std::thread::spawn(move || {
+        use std::io::Read;
+
+        let reader = match MultiVolumeReader::open(&volumes) {
+            Ok(r) => r,
+            Err(e) => {
+                let _ = tx.send(Err(e));
+                return;
+            }
+        };
+        let len = reader.total();
+
+        let mut archive = match sevenz_rust::SevenZReader::new(
+            reader,
+            len,
+            sevenz_rust::Password::empty(),
+        ) {
+            Ok(a) => a,
+            Err(e) => {
+                let _ = tx.send(Err(format!("Failed to read 7z image: {}", e)));
+                return;
+            }
+        };
+
+        // `for_each_entries` walks every entry; returning false stops the walk.
+        let result = archive.for_each_entries(|entry, entry_reader| {
+            if entry.name != entry_name {
+                // Entries in a solid block are slices of one decompressed
+                // stream. Skipping one without reading it leaves the stream
+                // short, and the NEXT entry then decodes from the wrong offset
+                // -- silently, as plausible-looking garbage. Drain it instead.
+                std::io::copy(entry_reader, &mut std::io::sink())?;
+                return Ok(true);
+            }
+
+            let mut buffer = vec![0u8; ARCHIVE_CHUNK_SIZE];
+            loop {
+                let n = entry_reader.read(&mut buffer)?;
+                if n == 0 {
+                    break;
+                }
+                // A send error means the reader was dropped (cancelled burn)
+                if tx.send(Ok(buffer[..n].to_vec())).is_err() {
+                    return Ok(false);
+                }
+            }
+            Ok(false)
+        });
+
+        if let Err(e) = result {
+            let _ = tx.send(Err(format!("Failed to decompress 7z image: {}", e)));
+        }
+    });
+
+    Ok(ChannelReader::new(rx))
+}
+
+/// Opens an image as a stream of raw bytes, decompressing `.gz`, `.zip` and
+/// `.7z` on the fly so the burn paths always see a plain image.
 fn open_image_reader(image_path: &Path) -> Result<Box<dyn std::io::Read>, String> {
     match detect_compression(image_path) {
         ImageCompression::Zip => {
             crate::debug::log("Detected .zip image, decompressing on-the-fly during burn");
-            Ok(Box::new(ZipEntryReader::spawn(image_path)?))
+            Ok(Box::new(spawn_zip_reader(image_path)?))
+        }
+        ImageCompression::SevenZip => {
+            let volumes = volume_paths(image_path);
+            crate::debug::log(&format!(
+                "Detected .7z image ({} volume(s)), decompressing on-the-fly during burn",
+                volumes.len()
+            ));
+            Ok(Box::new(spawn_7z_reader(volumes)?))
         }
         ImageCompression::Gzip => {
             crate::debug::log("Detected .gz image, decompressing on-the-fly during burn");
@@ -241,6 +495,36 @@ pub async fn burn_image(
 
         if decompressed_size == 0 {
             return Err("Zip image reports an uncompressed size of zero".to_string());
+        }
+
+        crate::debug::log(&format!("Decompressed size: {} bytes ({:.2} GB)", decompressed_size, decompressed_size as f64 / 1_073_741_824.0));
+        decompressed_size
+    } else if compression == ImageCompression::SevenZip {
+        // Sum the volumes rather than stat the first part, so the log reports
+        // the real on-disk size of the set.
+        let volumes = volume_paths(image_path);
+        let archive_size: u64 = volumes
+            .iter()
+            .filter_map(|p| std::fs::metadata(p).ok().map(|m| m.len()))
+            .sum();
+        crate::debug::log(&format!(
+            "Compressed size: {} bytes ({:.2} GB) across {} volume(s)",
+            archive_size,
+            archive_size as f64 / 1_073_741_824.0,
+            volumes.len()
+        ));
+
+        // The 7z header records the uncompressed size, so this needs no
+        // pre-scan of the archive -- unlike the .gz path below.
+        let decompressed_size = tokio::task::spawn_blocking(move || -> Result<u64, String> {
+            let (name, size) = seven_zip_image_entry(&volumes)?;
+            crate::debug::log(&format!("7z image entry: {} ({} bytes)", name, size));
+            Ok(size)
+        }).await
+        .map_err(|e| format!("Size lookup task failed: {}", e))??;
+
+        if decompressed_size == 0 {
+            return Err("7z image reports an uncompressed size of zero".to_string());
         }
 
         crate::debug::log(&format!("Decompressed size: {} bytes ({:.2} GB)", decompressed_size, decompressed_size as f64 / 1_073_741_824.0));

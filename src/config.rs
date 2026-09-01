@@ -362,6 +362,18 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         supports_preserve_mode: false,
     },
     RepoOption {
+        name: "dArkMoss",
+        url: "spruceUI/dArkMoss",
+        info: "spruceOS for the Powkiddy RGB30, built on a Debian base.\nRaw disk image; erases the entire card.\nShipped as a multi-part archive - every part downloads automatically.",
+        display_name: Some("dArkMoss"),
+        supports_update_mode: false,  // Raw disk images always do a full burn
+        update_directories: &[],      // Not used for raw images
+        allowed_extensions: Some(&[".img.7z"]),  // Volumes are matched under their .001/.002 suffix
+        excluded_patterns: None,
+        asset_display_mappings: None,
+        supports_preserve_mode: false,
+    },
+    RepoOption {
         name: "BaseOS",
         url: "pvaibhav/BaseOS",
         info: "A minimal base OS for Anbernic RG XX devices. 3 second boot time.\nA third-party project by pvaibhav - not a spruceOS release.\nRaw disk image; erases the entire card.\n[Project page](https://github.com/pvaibhav/BaseOS)",

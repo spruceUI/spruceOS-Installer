@@ -17,7 +17,11 @@ egui_extras = { version = "0.33", features = ["all_loaders"] }
 egui-thematic = "0.1"
 tokio = { version = "1", features = ["rt-multi-thread", "fs", "process", "sync", "time", "io-util", "macros"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "stream", "rustls-tls"] }
-sevenz-rust = "0.6"
+# Streams a .7z entry as it decompresses, which the bundled 7-Zip binary cannot
+# do -- that is what keeps an 8 GB raw image from needing 8 GB of scratch space
+# on the way to the card. Decoders (LZMA/LZMA2/BCJ/DELTA) are always built; the
+# default "compress" feature only adds an encoder we never call.
+sevenz-rust = { version = "0.6", default-features = false }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 futures-util = "0.3"

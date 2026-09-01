@@ -124,12 +124,14 @@ impl eframe::App for InstallerApp {
                             .collect();
 
                         // Still apply extension filtering to manifest assets
-                        Self::filter_assets(manifest_assets, allowed_extensions, excluded_patterns)
+                        let filtered = Self::filter_assets(manifest_assets, allowed_extensions, excluded_patterns);
+                        Self::group_multipart_assets(filtered)
                     } else {
                         // No manifest found, use GitHub assets
                         crate::debug::log("No manifest found, using GitHub release assets");
                         self.manifest_display_name = None;  // Clear any previous manifest display name
-                        Self::filter_assets(release.assets.clone(), allowed_extensions, excluded_patterns)
+                        let filtered = Self::filter_assets(release.assets.clone(), allowed_extensions, excluded_patterns);
+                        Self::group_multipart_assets(filtered)
                     };
 
                     // Continue with existing asset processing logic

@@ -14,8 +14,12 @@ use tokio_util::sync::CancellationToken;
 use std::os::windows::process::CommandExt;
 
 // Embed platform-specific 7z binaries
+// 7-Zip 25.01 across the board. Windows ships `7za.exe` (the full standalone
+// console build) rather than the reduced `7zr.exe`: 7zr covers only a subset of
+// codecs, and nobody has ever verified it handles multi-volume archives. 7za
+// removes the question for ~700 KB.
 #[cfg(target_os = "windows")]
-const SEVEN_ZIP_EXE: &[u8] = include_bytes!("../assets/Windows/7zr.exe");
+const SEVEN_ZIP_EXE: &[u8] = include_bytes!("../assets/Windows/7za.exe");
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 const SEVEN_ZIP_EXE: &[u8] = include_bytes!("../assets/Linux-x86_64/7zzs");
@@ -103,7 +107,7 @@ pub async fn extract_7z(
             crate::debug::log("Bundled 7zz not found, extracting to temp...");
             // Fallback to temp extraction
             let bin_dir = dirs::cache_dir().unwrap_or_else(std::env::temp_dir);
-            let temp_path = bin_dir.join(format!("7zr_{}", TEMP_PREFIX));
+            let temp_path = bin_dir.join(format!("7z_{}", TEMP_PREFIX));
             std::fs::write(&temp_path, SEVEN_ZIP_EXE)
                 .map_err(|e| format!("Failed to extract 7z tool: {}", e))?;
             use std::os::unix::fs::PermissionsExt;
@@ -172,9 +176,9 @@ pub async fn extract_7z(
         let bin_dir = std::env::temp_dir();
 
         #[cfg(target_os = "windows")]
-        let temp_path = bin_dir.join(format!("7zr_{}.exe", TEMP_PREFIX));
+        let temp_path = bin_dir.join(format!("7z_{}.exe", TEMP_PREFIX));
         #[cfg(not(target_os = "windows"))]
-        let temp_path = bin_dir.join(format!("7zr_{}", TEMP_PREFIX));
+        let temp_path = bin_dir.join(format!("7z_{}", TEMP_PREFIX));
 
         crate::debug::log(&format!("Extracting 7z binary to: {:?}", temp_path));
         std::fs::write(&temp_path, SEVEN_ZIP_EXE)

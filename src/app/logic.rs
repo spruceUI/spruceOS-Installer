@@ -23,7 +23,7 @@ use crate::delete::{delete_directories, DeleteProgress};
 use crate::drives::DriveInfo;
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
-use crate::github::{download_asset, get_latest_release, DownloadProgress, Asset};
+use crate::github::{asset_file_paths, download_asset_group, get_latest_release, split_volume_suffix, DownloadProgress, Asset};
 use crate::preserve::{backup_preserve_paths, restore_preserve_paths, backup_dynamic_configs, restore_and_merge_configs, PreserveProgress};
 use crate::boxart_scraper::{BoxArtScraper, ScrapeProgress};
 use eframe::egui;
@@ -109,8 +109,13 @@ impl InstallerApp {
 
                 // Apply extension filter if provided
                 if let Some(extensions) = allowed_extensions {
-                    // Asset must end with at least one of the allowed extensions
-                    extensions.iter().any(|ext| a.name.ends_with(ext))
+                    // Asset must end with at least one of the allowed extensions.
+                    // A multi-part archive's volumes end in .001/.002/..., so the
+                    // extension to test is the one underneath that suffix -- without
+                    // this the parts are dropped here and never reach the UI.
+                    let effective = split_volume_suffix(&a.name)
+                        .map_or(a.name.as_str(), |(base, _)| base);
+                    extensions.iter().any(|ext| effective.ends_with(ext))
                 } else {
                     // No extension filter, allow all
                     true
@@ -119,14 +124,109 @@ impl InstallerApp {
             .collect()
     }
 
+    /// Collapses `name.7z.001`, `.002`, ... into one asset carrying every volume.
+    ///
+    /// The group takes the name the volumes share (`name.7z`) and the sum of
+    /// their sizes, so it reads as one download and `should_auto_select` sees
+    /// one option instead of N near-identical ones. Assets that are not volumes
+    /// pass through untouched.
+    ///
+    /// A set with a gap in it -- a `.001` whose `.002` never finished uploading,
+    /// which has happened on a real release -- is dropped rather than offered.
+    /// It cannot be extracted, and failing here says why; failing later just
+    /// looks like a corrupt download.
+    pub(super) fn group_multipart_assets(assets: Vec<Asset>) -> Vec<Asset> {
+        // Bucket volumes by the name they share, keeping first-seen order.
+        let mut order: Vec<String> = Vec::new();
+        let mut groups: std::collections::HashMap<String, Vec<(u32, Asset)>> =
+            std::collections::HashMap::new();
+        let mut singles: Vec<Asset> = Vec::new();
+
+        for asset in assets {
+            // Take an owned copy of the base name before touching `asset`, so
+            // nothing still borrows it when it moves into the bucket.
+            let volume = split_volume_suffix(&asset.name)
+                .map(|(base, number)| (base.to_string(), number));
+
+            match volume {
+                Some((base, number)) => {
+                    if !groups.contains_key(&base) {
+                        order.push(base.clone());
+                    }
+                    groups.entry(base).or_default().push((number, asset));
+                }
+                None => singles.push(asset),
+            }
+        }
+
+        let mut grouped: Vec<Asset> = Vec::new();
+
+        for base in order {
+            let mut parts = groups.remove(&base).unwrap_or_default();
+            if parts.is_empty() {
+                continue;
+            }
+            parts.sort_by_key(|(number, _)| *number);
+
+            // Volumes must run 1..=N with nothing missing.
+            let complete = parts
+                .iter()
+                .enumerate()
+                .all(|(i, (number, _))| *number as usize == i + 1);
+
+            if !complete {
+                let found: Vec<String> = parts.iter().map(|(_, a)| a.name.clone()).collect();
+                crate::debug::log(&format!(
+                    "Skipping incomplete multi-part archive '{}': volumes present are {}",
+                    base,
+                    found.join(", ")
+                ));
+                continue;
+            }
+
+            let total_size: u64 = parts.iter().map(|(_, a)| a.size).sum();
+            let first = &parts[0].1;
+
+            grouped.push(Asset {
+                name: base,
+                size: total_size,
+                browser_download_url: first.browser_download_url.clone(),
+                display_name: first.display_name.clone(),
+                devices: first.devices.clone(),
+                volumes: parts
+                    .iter()
+                    .map(|(_, a)| crate::github::AssetVolume {
+                        name: a.name.clone(),
+                        size: a.size,
+                        browser_download_url: a.browser_download_url.clone(),
+                    })
+                    .collect(),
+            });
+        }
+
+        // Singles first, in their original order, then the collapsed groups.
+        // The caller sorts by name straight after this, so exact order here
+        // only matters for determinism.
+        singles.extend(grouped);
+        singles
+    }
+
     /// Whether an asset is a raw disk image to burn, rather than an archive
     /// whose contents get copied onto a formatted card.
     ///
     /// `.img.zip` is a raw image inside a zip container (BaseOS ships these) and
     /// must be burned, so it is checked before the plain `.zip` archive case.
+    ///
+    /// `.img.7z` is dArkMoss: a raw image inside a 7z, usually split across
+    /// volumes. The name a grouped asset carries has the volume suffix already
+    /// removed, so this sees `.img.7z` and not `.img.7z.001`. Detection has to
+    /// go by name -- a 7z keeps its header in the LAST volume, so nothing can
+    /// look inside the archive until every part has been downloaded, and this
+    /// runs before the download.
     pub(super) fn is_raw_image_asset(name: &str) -> bool {
         name.ends_with(".img.gz") ||
         name.ends_with(".img.zip") ||
+        name.ends_with(".img.7z") ||
         name.ends_with(".img")
     }
 
@@ -135,7 +235,7 @@ impl InstallerApp {
         let mut base = name.to_string();
 
         // Remove known extensions in order of specificity
-        for ext in &[".img.gz", ".img.zip", ".tar.gz", ".7z", ".zip", ".img"] {
+        for ext in &[".img.gz", ".img.zip", ".img.7z", ".tar.gz", ".7z", ".zip", ".img"] {
             if base.ends_with(ext) {
                 base = base.strip_suffix(ext).unwrap_or(&base).to_string();
                 break; // Only strip one extension
@@ -400,9 +500,27 @@ impl InstallerApp {
 
             crate::debug::log(&format!("Cache/temp directory: {:?}", temp_dir));
 
-            // Check available disk space before starting
-            // We need space for: download (asset.size) + extraction (~3x asset.size)
-            let required_space = asset.size * 4; // 4x for safety margin
+            // Detect installation mode: raw image vs archive.
+            // This is needed before the disk space check, because the two modes
+            // need very different amounts of room.
+            let is_raw_image = Self::is_raw_image_asset(&asset.name);
+
+            // Check available disk space before starting.
+            //
+            // `asset.size` is the whole download -- for a multi-part archive it
+            // is the sum of every volume, so this covers the group.
+            //
+            // An archive install unpacks into the cache directory before copying
+            // to the card, so it needs the download plus the extracted tree.
+            // A raw image is streamed straight to the device while it decompresses
+            // and never lands on disk uncompressed, so it only needs the download
+            // itself plus a little slack. Charging it 4x would demand tens of
+            // gigabytes for an image that needs none of them.
+            let required_space = if is_raw_image {
+                asset.size + asset.size / 10
+            } else {
+                asset.size * 4 // 4x for safety margin
+            };
             let available_space = get_available_disk_space(&temp_dir);
 
             crate::debug::log(&format!("Required disk space: {} MB", required_space / 1_048_576));
@@ -424,9 +542,6 @@ impl InstallerApp {
 
             log(&format!("Disk space check passed: {} MB available", available_space / 1_048_576));
 
-            // Detect installation mode: raw image vs archive
-            let is_raw_image = Self::is_raw_image_asset(&asset.name);
-
             if is_raw_image {
                 crate::debug::log("Detected RAW IMAGE mode - will burn image to device");
                 log("Note: Raw image mode - this will erase the entire drive");
@@ -440,12 +555,13 @@ impl InstallerApp {
             log(&format!("Downloading release ({:.1} MB)...", size_mb));
             crate::debug::log_section("Downloading Release");
 
-            let download_path = temp_dir.join(&asset.name);
-            crate::debug::log(&format!("Download path: {:?}", download_path));
+            // Every file this asset occupies -- one, or N volumes -- so a
+            // cancelled or failed download can clean up all of them.
+            let download_files = asset_file_paths(&asset, &temp_dir);
+            crate::debug::log(&format!("Download files: {:?}", download_files));
 
             let (dl_tx, mut dl_rx) = mpsc::unbounded_channel::<DownloadProgress>();
 
-            let download_path_clone = download_path.clone();
             let asset_clone = asset.clone();
             let progress_clone = progress.clone();
             let ctx_dl = ctx_clone.clone();
@@ -505,29 +621,44 @@ impl InstallerApp {
                 }
             });
 
-            if let Err(e) = download_asset(&asset_clone, &download_path_clone, dl_tx, cancel_token_clone.clone(), pause_token_clone.clone()).await {
-                if e.contains("cancelled") {
-                    log("Download cancelled");
-                    let _ = tokio::fs::remove_file(&download_path_clone).await;
-                    crate::debug::log("Cleaned up partial download file");
-                    let _ = state_tx_clone.send(AppState::Idle);
+            let download_result = download_asset_group(
+                &asset_clone,
+                &temp_dir,
+                dl_tx,
+                cancel_token_clone.clone(),
+                pause_token_clone.clone(),
+            ).await;
+
+            let download_path = match download_result {
+                Ok(path) => path,
+                Err(e) => {
+                    if e.contains("cancelled") {
+                        log("Download cancelled");
+                        for path in &download_files {
+                            let _ = tokio::fs::remove_file(path).await;
+                        }
+                        crate::debug::log("Cleaned up partial download files");
+                        let _ = state_tx_clone.send(AppState::Idle);
+                        let _ = drive_poll_tx_clone.send(true);
+                        return;
+                    }
+                    if e.contains("paused") {
+                        log("Download paused - progress saved");
+                        crate::debug::log("Download paused, state saved for resume");
+                        let _ = state_tx_clone.send(AppState::Idle);
+                        let _ = drive_poll_tx_clone.send(true);
+                        return;
+                    }
+                    log(&format!("Download error: {}", e));
+                    for path in &download_files {
+                        let _ = tokio::fs::remove_file(path).await;
+                    }
+                    crate::debug::log("Cleaned up partial download files");
+                    let _ = state_tx_clone.send(AppState::Error);
                     let _ = drive_poll_tx_clone.send(true);
                     return;
                 }
-                if e.contains("paused") {
-                    log("Download paused - progress saved");
-                    crate::debug::log("Download paused, state saved for resume");
-                    let _ = state_tx_clone.send(AppState::Idle);
-                    let _ = drive_poll_tx_clone.send(true);
-                    return;
-                }
-                log(&format!("Download error: {}", e));
-                let _ = tokio::fs::remove_file(&download_path_clone).await;
-                crate::debug::log("Cleaned up partial download file");
-                let _ = state_tx_clone.send(AppState::Error);
-                let _ = drive_poll_tx_clone.send(true);
-                return;
-            }
+            };
 
             let _ = dl_handle.await;
             log("Download complete");
@@ -906,13 +1037,17 @@ impl InstallerApp {
                 if let Err(e) = burn_image(&download_path, &drive.device_path, burn_tx, cancel_token_clone.clone()).await {
                     if e.contains("cancelled") {
                         log("Burn cancelled");
-                        let _ = tokio::fs::remove_file(&download_path).await;
+                        for path in &download_files {
+                            let _ = tokio::fs::remove_file(path).await;
+                        }
                         let _ = state_tx_clone.send(AppState::Idle);
                         let _ = drive_poll_tx_clone.send(true);
                         return;
                     }
                     log(&format!("Burn error: {}", e));
-                    let _ = tokio::fs::remove_file(&download_path).await;
+                    for path in &download_files {
+                        let _ = tokio::fs::remove_file(path).await;
+                    }
                     let _ = state_tx_clone.send(AppState::Error);
                     let _ = drive_poll_tx_clone.send(true);
                     return;
@@ -923,7 +1058,9 @@ impl InstallerApp {
                 crate::debug::log("Image burn and verification complete");
 
                 // Clean up downloaded image
-                let _ = tokio::fs::remove_file(&download_path).await;
+                for path in &download_files {
+                    let _ = tokio::fs::remove_file(path).await;
+                }
                 crate::debug::log("Cleaned up temp files");
 
                 log("Installation complete! You can now safely eject the drive.");
@@ -1011,7 +1148,9 @@ impl InstallerApp {
                     write_card_log("Extraction cancelled");
                     log("Extraction cancelled");
                     let _ = std::fs::remove_dir_all(&temp_extract_dir);
-                    let _ = tokio::fs::remove_file(&download_path).await;
+                    for path in &download_files {
+                        let _ = tokio::fs::remove_file(path).await;
+                    }
                     crate::debug::log("Cleaned up download file after cancellation");
                     let _ = state_tx_clone.send(AppState::Idle);
                     let _ = drive_poll_tx_clone.send(true);
@@ -1020,7 +1159,9 @@ impl InstallerApp {
                 write_card_log(&format!("Extract error: {}", e));
                 log(&format!("Extract error: {}", e));
                 let _ = std::fs::remove_dir_all(&temp_extract_dir);
-                let _ = tokio::fs::remove_file(&download_path).await;
+                for path in &download_files {
+                    let _ = tokio::fs::remove_file(path).await;
+                }
                 crate::debug::log("Cleaned up download file after error");
                 let _ = state_tx_clone.send(AppState::Error);
                 let _ = drive_poll_tx_clone.send(true);
@@ -1103,7 +1244,9 @@ impl InstallerApp {
                     write_card_log("Copy cancelled");
                     log("Copy cancelled");
                     let _ = std::fs::remove_dir_all(&temp_extract_dir);
-                    let _ = tokio::fs::remove_file(&download_path).await;
+                    for path in &download_files {
+                        let _ = tokio::fs::remove_file(path).await;
+                    }
                     crate::debug::log("Cleaned up download file after cancellation");
                     let _ = state_tx_clone.send(AppState::Idle);
                     let _ = drive_poll_tx_clone.send(true);
@@ -1112,7 +1255,9 @@ impl InstallerApp {
                 write_card_log(&format!("Copy error: {}", e));
                 log(&format!("Copy error: {}", e));
                 let _ = std::fs::remove_dir_all(&temp_extract_dir);
-                let _ = tokio::fs::remove_file(&download_path).await;
+                for path in &download_files {
+                    let _ = tokio::fs::remove_file(path).await;
+                }
                 crate::debug::log("Cleaned up download file after error");
                 let _ = state_tx_clone.send(AppState::Error);
                 let _ = drive_poll_tx_clone.send(true);
@@ -1129,7 +1274,9 @@ impl InstallerApp {
             crate::debug::log("Cleaned up temp extraction folder");
 
             // Cleanup temp file
-            let _ = tokio::fs::remove_file(&download_path).await;
+            for path in &download_files {
+                let _ = tokio::fs::remove_file(path).await;
+            }
             write_card_log("Cleaned up temp download file");
             crate::debug::log("Cleaned up temp download file");
 

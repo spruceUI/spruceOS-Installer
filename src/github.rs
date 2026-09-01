@@ -5,7 +5,7 @@ use crate::config::USER_AGENT;
 use crate::manifest::Manifest;
 use futures_util::StreamExt;
 use serde::Deserialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
@@ -17,6 +17,17 @@ pub struct Release {
     #[allow(dead_code)]
     pub name: Option<String>,
     pub assets: Vec<Asset>,
+}
+
+/// One file of a multi-volume archive (`name.7z.001`, `.002`, ...).
+///
+/// 7-Zip splits a single archive stream byte-for-byte across volumes, so the
+/// set is only meaningful in order and only complete if every part is present.
+#[derive(Debug, Clone)]
+pub struct AssetVolume {
+    pub name: String,
+    pub size: u64,
+    pub browser_download_url: String,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -31,6 +42,12 @@ pub struct Asset {
 
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub devices: Option<String>,
+
+    /// Volumes of a multi-part archive, in order. Empty for an ordinary
+    /// single-file asset. Never present in a GitHub API response or a
+    /// manifest -- `group_multipart_assets` fills this in after filtering.
+    #[serde(skip)]
+    pub volumes: Vec<AssetVolume>,
 }
 
 #[derive(Debug)]
@@ -139,8 +156,166 @@ impl From<crate::manifest::ManifestAsset> for Asset {
             browser_download_url: manifest_asset.url,
             display_name: manifest_asset.display_name,
             devices: manifest_asset.devices,
+            volumes: Vec::new(),
         }
     }
+}
+
+/// Splits a trailing `.NNN` volume suffix off a file or asset name.
+///
+/// Returns the name without the suffix and the volume number, or `None` if the
+/// name is not one part of a multi-volume set. 7-Zip always writes exactly
+/// three digits, so requiring three avoids treating a version-like `foo.7z.1`
+/// or a stray `.0012` as a volume.
+pub fn split_volume_suffix(name: &str) -> Option<(&str, u32)> {
+    let (base, digits) = name.rsplit_once('.')?;
+    if digits.len() == 3 && digits.bytes().all(|b| b.is_ascii_digit()) {
+        Some((base, digits.parse().ok()?))
+    } else {
+        None
+    }
+}
+
+/// Every file this asset occupies on disk, in order.
+///
+/// One path for an ordinary asset, N for a multi-volume archive. Used both to
+/// drive the download and to clean up after a cancelled or failed one.
+pub fn asset_file_paths(asset: &Asset, dest_dir: &Path) -> Vec<PathBuf> {
+    if asset.volumes.is_empty() {
+        vec![dest_dir.join(&asset.name)]
+    } else {
+        asset.volumes.iter().map(|v| dest_dir.join(&v.name)).collect()
+    }
+}
+
+/// Whether a volume already sitting in `dest_dir` is a finished download.
+///
+/// The chunked downloader preallocates the destination with `set_len`, so file
+/// size alone proves nothing -- a half-downloaded part is already full size.
+/// The `.partial` state file is the real marker: it exists while a download is
+/// in flight and is deleted on success.
+fn volume_already_downloaded(path: &Path, expected_size: u64) -> bool {
+    if crate::download_state::DownloadState::get_state_file_path(path).exists() {
+        return false;
+    }
+    std::fs::metadata(path).map(|m| m.len() == expected_size).unwrap_or(false)
+}
+
+/// Downloads an asset, fetching every volume if it is a multi-part archive.
+///
+/// Returns the path to hand to extraction or burning: the file itself for an
+/// ordinary asset, the first volume for a multi-part one (7-Zip and our own
+/// reader both take the set from `.001`).
+///
+/// Progress is reported against the whole group, so the bar fills once rather
+/// than resetting per part. The download machinery itself -- parallel chunks,
+/// resume, pause, cancel -- is reused unchanged, one part at a time.
+pub async fn download_asset_group(
+    asset: &Asset,
+    dest_dir: &Path,
+    progress_tx: mpsc::UnboundedSender<DownloadProgress>,
+    cancel_token: CancellationToken,
+    pause_token: CancellationToken,
+) -> Result<PathBuf, String> {
+    // Ordinary single-file asset: unchanged path, no wrapping.
+    if asset.volumes.is_empty() {
+        let dest = dest_dir.join(&asset.name);
+        download_asset(asset, &dest, progress_tx, cancel_token, pause_token).await?;
+        return Ok(dest);
+    }
+
+    let part_count = asset.volumes.len();
+    let group_total: u64 = asset.volumes.iter().map(|v| v.size).sum();
+    crate::debug::log(&format!(
+        "Multi-part asset: {} volumes, {} bytes total",
+        part_count, group_total
+    ));
+
+    let _ = progress_tx.send(DownloadProgress::Started { total_bytes: group_total });
+
+    let mut completed: u64 = 0;
+
+    for (i, vol) in asset.volumes.iter().enumerate() {
+        let dest = dest_dir.join(&vol.name);
+
+        // Skip parts a previous run already finished, so resuming a paused
+        // group download doesn't re-fetch gigabytes that are already here.
+        if volume_already_downloaded(&dest, vol.size) {
+            crate::debug::log(&format!("Part {}/{} already downloaded: {}", i + 1, part_count, vol.name));
+            completed += vol.size;
+            let _ = progress_tx.send(DownloadProgress::Progress {
+                downloaded: completed,
+                total: group_total,
+            });
+            continue;
+        }
+
+        crate::debug::log(&format!("Downloading part {}/{}: {}", i + 1, part_count, vol.name));
+
+        let part_asset = Asset {
+            name: vol.name.clone(),
+            size: vol.size,
+            browser_download_url: vol.browser_download_url.clone(),
+            display_name: None,
+            devices: None,
+            volumes: Vec::new(),
+        };
+
+        // Shift this part's byte counts onto the group's range before they
+        // reach the UI. Per-part Started/Completed are swallowed; the group
+        // sends its own around the whole loop.
+        let (part_tx, mut part_rx) = mpsc::unbounded_channel::<DownloadProgress>();
+        let group_tx = progress_tx.clone();
+        let base = completed;
+        let pump = tokio::spawn(async move {
+            while let Some(prog) = part_rx.recv().await {
+                let mapped = match prog {
+                    DownloadProgress::Started { .. } | DownloadProgress::Completed => continue,
+                    DownloadProgress::Progress { downloaded, .. } => DownloadProgress::Progress {
+                        downloaded: base + downloaded,
+                        total: group_total,
+                    },
+                    DownloadProgress::Paused { downloaded, .. } => DownloadProgress::Paused {
+                        downloaded: base + downloaded,
+                        total: group_total,
+                    },
+                    DownloadProgress::Resuming { downloaded, .. } => DownloadProgress::Resuming {
+                        downloaded: base + downloaded,
+                        total: group_total,
+                    },
+                    other => other,
+                };
+                let _ = group_tx.send(mapped);
+            }
+        });
+
+        let result = download_asset(
+            &part_asset,
+            &dest,
+            part_tx,
+            cancel_token.clone(),
+            pause_token.clone(),
+        ).await;
+
+        let _ = pump.await;
+
+        // Keep the caller's cancelled/paused wording intact so the existing
+        // branches in the install flow still recognise it; name the part for
+        // anything else, since "part 2 of 3 failed" is the useful message.
+        result.map_err(|e| {
+            if e.contains("cancelled") || e.contains("paused") {
+                e
+            } else {
+                format!("Part {} of {} ({}): {}", i + 1, part_count, vol.name, e)
+            }
+        })?;
+
+        completed += vol.size;
+    }
+
+    let _ = progress_tx.send(DownloadProgress::Completed);
+
+    Ok(dest_dir.join(&asset.volumes[0].name))
 }
 
 pub async fn download_asset(
