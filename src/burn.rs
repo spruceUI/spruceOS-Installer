@@ -1,7 +1,6 @@
 // Copyright (C) 2026 SpruceOS Team
 // Licensed under CC BY-NC 4.0 (Creative Commons Attribution-NonCommercial 4.0 International)
 
-use sha2::{Sha256, Digest};
 use std::path::Path;
 use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
@@ -16,8 +15,6 @@ const ARCHIVE_CHUNK_SIZE: usize = 1024 * 1024; // 1MB
 pub enum BurnProgress {
     Started { total_bytes: u64 },
     Writing { written: u64, total: u64 },
-    #[allow(dead_code)]
-    Verifying { verified: u64, total: u64 },
     Completed,
     #[allow(dead_code)]
     Cancelled,
@@ -583,14 +580,16 @@ pub async fn burn_image(
 
     match result {
         Ok(actual_bytes_written) => {
-            crate::debug::log("Image write completed, starting verification...");
             crate::debug::log(&format!("Actual bytes written: {} ({:.2} GB)", actual_bytes_written, actual_bytes_written as f64 / 1_073_741_824.0));
 
-            // Verify the written image using the actual decompressed size
-            verify_image(image_path, device_path, actual_bytes_written, &progress_tx, &cancel_token).await?;
-
+            // No read-back verification. It only ever ran on Linux -- Windows and
+            // macOS returned an empty hash and skipped the comparison -- while the
+            // image-hash half ran everywhere and was discarded on those platforms.
+            // That cost a second full decompression pass, silently, after the write
+            // had already finished. Dropped deliberately; see git history if it
+            // needs to come back.
             let _ = progress_tx.send(BurnProgress::Completed);
-            crate::debug::log("Image burn and verification complete");
+            crate::debug::log("Image burn complete");
             Ok(())
         }
         Err(e) => {
@@ -1315,164 +1314,4 @@ async fn burn_image_macos(
     .map_err(|e| format!("Write task failed: {}", e))??;
 
     Ok(bytes_written)
-}
-// =============================================================================
-// Verification
-// =============================================================================
-
-/// Verify the written image by reading back and comparing SHA256 hash
-async fn verify_image(
-    image_path: &Path,
-    device_path: &str,
-    #[allow(unused_variables)] image_size: u64,
-    progress_tx: &UnboundedSender<BurnProgress>,
-    cancel_token: &CancellationToken,
-) -> Result<(), String> {
-    crate::debug::log("Computing image hash...");
-
-    // Compute hash of original image (decompressing .gz/.zip as needed)
-    let image_hash = tokio::task::spawn_blocking({
-        let image_path = image_path.to_path_buf();
-        let cancel_token = cancel_token.clone();
-
-        move || -> Result<String, String> {
-            use std::io::Read;
-
-            let mut image_reader = open_image_reader(&image_path)?;
-
-            let mut hasher = Sha256::new();
-            let mut buffer = vec![0u8; CHUNK_SIZE];
-
-            loop {
-                if cancel_token.is_cancelled() {
-                    return Err("Verification cancelled".to_string());
-                }
-
-                let bytes_read = image_reader.read(&mut buffer)
-                    .map_err(|e| format!("Failed to read image: {}", e))?;
-
-                if bytes_read == 0 {
-                    break;
-                }
-
-                hasher.update(&buffer[..bytes_read]);
-            }
-
-            let result = hasher.finalize();
-            Ok(format!("{:x}", result))
-        }
-    }).await
-    .map_err(|e| format!("Hash computation failed: {}", e))??;
-
-    crate::debug::log(&format!("Image SHA256: {}", image_hash));
-    crate::debug::log("Reading back device data...");
-
-    // Read back device and compute hash
-    let device_hash = tokio::task::spawn_blocking({
-        let device_path = device_path.to_string();
-        let _progress_tx = progress_tx.clone();
-        let _cancel_token = cancel_token.clone();
-
-        move || -> Result<String, String> {
-            #[cfg(any(target_os = "linux", target_os = "macos"))]
-            use std::io::Read;
-
-            #[cfg(target_os = "windows")]
-            let mut _device = {
-                use windows::Win32::Foundation::*;
-                use windows::Win32::Storage::FileSystem::*;
-
-                let device_path_wide: Vec<u16> = device_path
-                    .encode_utf16()
-                    .chain(Some(0))
-                    .collect();
-
-                let handle = unsafe {
-                    CreateFileW(
-                        windows::core::PCWSTR(device_path_wide.as_ptr()),
-                        FILE_GENERIC_READ.0,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE,
-                        None,
-                        OPEN_EXISTING,
-                        FILE_ATTRIBUTE_NORMAL,
-                        None,
-                    )
-                };
-
-                if handle.is_err() {
-                    crate::debug::log("Warning: Could not open device for verification on Windows");
-                    crate::debug::log("Skipping verification - burn completed successfully");
-                    return Ok("".to_string()); // Return empty hash to skip comparison
-                }
-
-                // We can't easily convert HANDLE to File on Windows
-                // For now, just skip verification
-                // TODO: Implement proper Windows device reading
-                crate::debug::log("Warning: Verification on Windows is not yet fully implemented");
-                crate::debug::log("Skipping verification - burn completed successfully");
-                unsafe { let _ = CloseHandle(handle.unwrap()); }
-                return Ok("".to_string()); // Return empty hash to skip comparison
-            };
-
-            #[cfg(target_os = "macos")]
-            {
-                crate::debug::log("Skipping verification on macOS - burn completed successfully");
-                return Ok("".to_string()); // Return empty hash to skip comparison
-            }
-
-            #[cfg(target_os = "linux")]
-            let mut device = {
-                let dev_path = device_path.clone();
-
-                std::fs::File::open(&dev_path)
-                    .map_err(|e| format!("Failed to open device for verification: {}. Are you running with sudo?", e))?
-            };
-
-            #[cfg(target_os = "linux")]
-            {
-                let mut hasher = Sha256::new();
-                let mut buffer = vec![0u8; CHUNK_SIZE];
-                let mut total_read = 0u64;
-
-                while total_read < image_size {
-                    if _cancel_token.is_cancelled() {
-                        return Err("Verification cancelled".to_string());
-                    }
-
-                    let to_read = std::cmp::min(CHUNK_SIZE, (image_size - total_read) as usize);
-                    let bytes_read = device.read(&mut buffer[..to_read])
-                        .map_err(|e| format!("Failed to read device: {}", e))?;
-
-                    if bytes_read == 0 {
-                        return Err(format!("Unexpected EOF: read {} bytes, expected {}", total_read, image_size));
-                    }
-
-                    hasher.update(&buffer[..bytes_read]);
-                    total_read += bytes_read as u64;
-
-                    let _ = _progress_tx.send(BurnProgress::Verifying {
-                        verified: total_read,
-                        total: image_size,
-                    });
-                }
-
-                let result = hasher.finalize();
-                Ok(format!("{:x}", result))
-            }
-        }
-    }).await
-    .map_err(|e| format!("Device read failed: {}", e))??;
-
-    crate::debug::log(&format!("Device SHA256: {}", device_hash));
-
-    // Skip verification if device hash is empty (Windows not implemented)
-    if device_hash.is_empty() {
-        crate::debug::log("Verification skipped (not implemented on this platform)");
-        Ok(())
-    } else if image_hash != device_hash {
-        Err("Verification failed: Hashes do not match!".to_string())
-    } else {
-        crate::debug::log("Verification passed: Hashes match");
-        Ok(())
-    }
 }

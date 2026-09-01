@@ -1012,12 +1012,6 @@ impl InstallerApp {
                                     let mb_total = total / 1_048_576;
                                     p.message = format!("Writing... {}% ({}/{} MB)", pct, mb_written, mb_total);
                                 }
-                                BurnProgress::Verifying { verified, total } => {
-                                    p.current = verified;
-                                    p.total = total;
-                                    let pct = (verified as f64 / total as f64 * 100.0) as u32;
-                                    p.message = format!("Verifying... {}%", pct);
-                                }
                                 BurnProgress::Completed => {
                                     p.current = p.total;
                                     p.message = "Burn complete".to_string();

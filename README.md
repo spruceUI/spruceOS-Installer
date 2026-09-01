@@ -23,7 +23,9 @@
   to disk uncompressed, so an 8GB image needs no scratch space
 - Pre-scans to determine decompressed size (`.gz` only; `.zip` and `.7z` record it
   in their headers)
-- SHA256 verification (Linux only; disabled on Windows/macOS for reliability)
+- No read-back verification. The write is checked for byte count and sync errors,
+  but the card is not hashed afterwards -- it only ever ran on Linux, and it cost a
+  second full decompression pass of the image to do it
 - Sector-aligned writes (Windows: 512-byte, macOS: 512-byte with F_NOCACHE)
 - Direct hardware I/O on macOS (F_NOCACHE + O_SYNC flags prevent buffer cache stalls)
 

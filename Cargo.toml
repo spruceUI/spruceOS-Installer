@@ -31,7 +31,6 @@ tempfile = "3"
 image = { version = "0.25", default-features = false, features = ["png", "qoi"] }
 lazy_static = "1.4"
 libc = "0.2"
-sha2 = "0.10"
 flate2 = "1.0"
 zip = { version = "2", default-features = false, features = ["deflate"] }
 arboard = "3.4"
