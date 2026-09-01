@@ -52,11 +52,11 @@ use std::sync::Arc;
 
 /// The name of your OS (displayed in window title and UI)
 /// Examples: "SpruceOS", "Onion", "MinUI"
-pub const APP_NAME: &str = "SpruceOS";
+pub const APP_NAME: &str = "dArkOS";
 
 /// Volume label applied to formatted SD cards (max 11 characters, uppercase)
 /// This is what the SD card will be named in file explorers
-pub const VOLUME_LABEL: &str = "SPRUCEOS";
+pub const VOLUME_LABEL: &str = "DARKOS";
 
 // ----------------------------------------------------------------------------
 // INTERNAL IDENTIFIERS (auto-generated from APP_NAME)
@@ -64,7 +64,7 @@ pub const VOLUME_LABEL: &str = "SPRUCEOS";
 // ----------------------------------------------------------------------------
 
 /// Window title (displayed in title bar)
-pub const WINDOW_TITLE: &str = "SpruceOS Installer";
+pub const WINDOW_TITLE: &str = "dArkOS Installer";
 
 /// User-Agent string for HTTP requests to GitHub
 pub const USER_AGENT: &str = env!("CARGO_PKG_NAME");
@@ -162,227 +162,42 @@ pub struct RepoOption {
     pub supports_preserve_mode: bool,  // Show "Preserve user data" checkbox in update mode
 }
 
-// ----------------------------------------------------------------------------
-// SELECTIVE DELETE PATHS FOR UPDATE MODE
-// ----------------------------------------------------------------------------
-// Mirrors the on-device App/-Updater/delete_files.sh behavior.
-// Only specific subdirectories/files are deleted — NOT entire top-level dirs.
-// This preserves user customizations (custom apps, custom emu folders,
-// user-added RetroArch assets, etc.) that would be lost by wholesale deletion.
-// ----------------------------------------------------------------------------
-
-pub const SPRUCE_UPDATE_DELETE_PATHS: &[&str] = &[
-    // App: specific subdirs only
-    // (preserves BootLogo, fn_editor, PortMaster, RandomGame, user-added apps)
-    "App/-FirmwareUpdate-",
-    "App/-OTA",
-    "App/-Updater",
-    "App/Credits",
-    "App/FileManagement",
-    "App/GameNursery",
-    "App/MiyooGamelist",
-    "App/PixelReader",
-    "App/PyUI",
-    "App/RetroArch",
-    "App/spruceBackup",
-    "App/spruceRestore",
-    "App/ThemeGarden",
-    "App/USBStorageMode",
-    // Emu: specific system folders only
-    // (preserves custom-named folders the user created)
-    "Emu/A30PORTS",
-    "Emu/AMIGA",
-    "Emu/ARCADE",
-    "Emu/ARDUBOY",
-    "Emu/ATARI",
-    "Emu/ATARIST",
-    "Emu/CHAI",
-    "Emu/COLECO",
-    "Emu/COMMODORE",
-    "Emu/CPC",
-    "Emu/CPS1",
-    "Emu/CPS2",
-    "Emu/CPS3",
-    "Emu/-CUSTOM-SYSTEM-",
-    "Emu/DC",
-    "Emu/DOOM",
-    "Emu/DOS",
-    "Emu/EASYRPG",
-    "Emu/EIGHTHUNDRED",
-    "Emu/.emu_setup",
-    "Emu/FAIRCHILD",
-    "Emu/FAKE08",
-    "Emu/FBNEO",
-    "Emu/FC",
-    "Emu/FDS",
-    "Emu/FIFTYTWOHUNDRED",
-    "Emu/GAMETANK",
-    "Emu/GB",
-    "Emu/GBA",
-    "Emu/GBC",
-    "Emu/GG",
-    "Emu/GW",
-    "Emu/INTELLIVISION",
-    "Emu/LYNX",
-    "Emu/MAME2003PLUS",
-    "Emu/MD",
-    "Emu/MEDIA",
-    "Emu/MEGADUCK",
-    "Emu/MS",
-    "Emu/MSU1",
-    "Emu/MSUMD",
-    "Emu/MSX",
-    "Emu/N64",
-    "Emu/NAOMI",
-    "Emu/NDS",
-    "Emu/NEOCD",
-    "Emu/NEOGEO",
-    "Emu/NGP",
-    "Emu/NGPC",
-    "Emu/ODYSSEY",
-    "Emu/OPENBOR",
-    "Emu/PC98",
-    "Emu/PCE",
-    "Emu/PCECD",
-    "Emu/PICO8",
-    "Emu/POKE",
-    "Emu/PORTS",
-    "Emu/PS",
-    "Emu/PSP",
-    "Emu/QUAKE",
-    "Emu/SATELLAVIEW",
-    "Emu/SATURN",
-    "Emu/SCUMMVM",
-    "Emu/SEGACD",
-    "Emu/SEGASGONE",
-    "Emu/SEVENTYEIGHTHUNDRED",
-    "Emu/SFC",
-    "Emu/SGB",
-    "Emu/SGFX",
-    "Emu/SUFAMI",
-    "Emu/SUPERVISION",
-    "Emu/THIRTYTWOX",
-    "Emu/TIC",
-    "Emu/VB",
-    "Emu/VECTREX",
-    "Emu/VIC20",
-    "Emu/VIDEOPAC",
-    "Emu/WOLF",
-    "Emu/WS",
-    "Emu/WSC",
-    "Emu/X68000",
-    "Emu/ZXS",
-    // spruce: specific subdirs only
-    // (preserves bin, bin64, a30, brick, flip, miyoomini — needed for PyUI)
-    "spruce/archives",
-    "spruce/etc",
-    "spruce/FIRMWARE_UPDATE",
-    "spruce/flags",
-    "spruce/imgs",
-    "spruce/scripts",
-    "spruce/www",
-    "spruce/spruce",
-    // SD card root: specific items
-    // (RetroArch is NOT deleted — preserves user-added overlays/shaders/cheats)
-    ".github",
-    ".tmp_update",
-    "Icons",
-    "miyoo",
-    "miyoo355",
-    "trimui",
-    ".gitattributes",
-    ".gitignore",
-    "autorun.inf",
-    "create_spruce_release.bat",
-    "create_spruce_release.sh",
-    "LICENSE",
-    "Pico8.Native.INFO.txt",
-    "README.md",
-];
-
-/// Device name mappings for BaseOS release assets.
+/// Device name mappings for dArkOS release assets.
 ///
-/// Assets are named `baseos-<device>-<version>.img.zip`. Matching is a plain
-/// substring test against the filename and the FIRST match wins, so more
-/// specific patterns must come first — `-rg34xx` would otherwise swallow
-/// `-rg34xxsp`. The leading dash keeps patterns anchored to the device field.
-pub const BASEOS_DEVICE_MAPPINGS: &[AssetDisplayMapping] = &[
-    AssetDisplayMapping { pattern: "-rg35xxplus", display_name: "RG35XX Plus", devices: "Anbernic RG35XX Plus" },
-    AssetDisplayMapping { pattern: "-rg35xxpro",  display_name: "RG35XX Pro",  devices: "Anbernic RG35XX Pro" },
-    AssetDisplayMapping { pattern: "-rg35xxsp",   display_name: "RG35XX SP",   devices: "Anbernic RG35XX SP" },
-    AssetDisplayMapping { pattern: "-rg35xxh",    display_name: "RG35XX H",    devices: "Anbernic RG35XX H" },
-    AssetDisplayMapping { pattern: "-rg34xxsp",   display_name: "RG34XX SP",   devices: "Anbernic RG34XX SP" },
-    AssetDisplayMapping { pattern: "-rg34xx",     display_name: "RG34XX",      devices: "Anbernic RG34XX" },
-    AssetDisplayMapping { pattern: "-rg40xxh",    display_name: "RG40XX H",    devices: "Anbernic RG40XX H" },
-    AssetDisplayMapping { pattern: "-rg40xxv",    display_name: "RG40XX V",    devices: "Anbernic RG40XX V" },
-    AssetDisplayMapping { pattern: "-rgcubexx",   display_name: "RG CubeXX",   devices: "Anbernic RG CubeXX" },
-    AssetDisplayMapping { pattern: "-rg28xx",     display_name: "RG28XX",      devices: "Anbernic RG28XX" },
-    AssetDisplayMapping { pattern: "-rgsp",       display_name: "RG SP",       devices: "Anbernic RG SP" },
+/// Assets are named `dArkOS_<DEVICE>_trixie_<MMDDYYYY>.img.7z.NNN`. Matching is a
+/// plain substring test against the filename and the FIRST match wins, so the
+/// patterns are wrapped in underscores to pin them to the device field -- an
+/// unanchored `RGB10` would also match a future `RGB10X`.
+///
+/// The volume suffix is stripped before this runs, so these match the grouped
+/// name `dArkOS_RGB30_trixie_08282026.img.7z`.
+pub const DARKOS_DEVICE_MAPPINGS: &[AssetDisplayMapping] = &[
+    AssetDisplayMapping { pattern: "_RG351MP_",   display_name: "RG351MP",         devices: "Anbernic RG351MP" },
+    AssetDisplayMapping { pattern: "_RG353m_",    display_name: "RG353M",          devices: "Anbernic RG353M" },
+    AssetDisplayMapping { pattern: "_RG353v_",    display_name: "RG353V",          devices: "Anbernic RG353V" },
+    AssetDisplayMapping { pattern: "_RG503_",     display_name: "RG503",           devices: "Anbernic RG503" },
+    AssetDisplayMapping { pattern: "_RGB10_",     display_name: "RGB10",           devices: "Powkiddy RGB10" },
+    AssetDisplayMapping { pattern: "_RGB20PRO_",  display_name: "RGB20 Pro",       devices: "Powkiddy RGB20 Pro" },
+    AssetDisplayMapping { pattern: "_RGB30_",     display_name: "RGB30",           devices: "Powkiddy RGB30" },
+    AssetDisplayMapping { pattern: "_RK2023_",    display_name: "RK2023",          devices: "Powkiddy RK2023" },
+    AssetDisplayMapping { pattern: "_MINILOONG_", display_name: "Miniloong",       devices: "Miniloong Pocket 1" },
+    // Manufacturer for these two is not stated anywhere in the dArkOS sources,
+    // so they carry the model name only rather than a guessed attribution.
+    AssetDisplayMapping { pattern: "_A10MINI_",   display_name: "A10 Mini",        devices: "A10 Mini" },
+    AssetDisplayMapping { pattern: "_G350_",      display_name: "G350",            devices: "G350" },
 ];
 
 pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
-        name: "Stable",
-        url: "spruceUI/spruceOS",
-        info: "Stable releases of spruceOS.\nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Series\nTrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick, TrimUI Brick Pro\nAnbernic RG-XX Series\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
-        display_name: Some("spruceOS Stable"),  // Display name for popups
-        supports_update_mode: true,  // Archive-based (.7z)
-        update_directories: SPRUCE_UPDATE_DELETE_PATHS,
-        allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
-        // The incremental OTA package is a .7z too, so the extension filter
-        // cannot separate it from the full archive. Deliberately not anchored
-        // to the "spruce" prefix: if the archive naming ever changes, a
-        // prefixed pattern stops matching while still looking correct.
-        excluded_patterns: Some(&["OTA"]),
-        asset_display_mappings: None,
-        supports_preserve_mode: true,
-    },
-    RepoOption {
-        name: "Nightlies",
-        url: "spruceUI/spruceOSNightlies",
-        info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Series\nTrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick, TrimUI Brick Pro\nAnbernic RG-XX Series",
-        display_name: Some("spruceOS Nightly"),  // Display name for popups
-        supports_update_mode: true,  // Supports archives
-        update_directories: SPRUCE_UPDATE_DELETE_PATHS,
-        allowed_extensions: Some(&[".7z"]),  // Match Stable; None listed everything
-        excluded_patterns: Some(&["OTA"]),
-        asset_display_mappings: None,
-        supports_preserve_mode: true,
-    },
-    RepoOption {
-        name: "TwigUI",
-        url: "spruceUI/twigUI",
-        info: "SpruceOS for the GKD Pixel 2.",
-        display_name: None,  // Falls back to "TwigUI"
-        supports_update_mode: false,  // Raw disk images only (.img.gz)
-        update_directories: &["Retroarch", "spruce"],
-        allowed_extensions: Some(&[".img.gz"]),  // Only show .img.gz files
-        excluded_patterns: None,
-        asset_display_mappings: None,
-        supports_preserve_mode: false,
-    },
-    RepoOption {
-        name: "dArkMoss",
-        url: "spruceUI/dArkMoss",
-        info: "spruceOS for the Powkiddy RGB30, built on a Debian base.\nRaw disk image; erases the entire card.\nShipped as a multi-part archive - every part downloads automatically.",
-        display_name: Some("dArkMoss"),
+        name: "dArkOS",
+        url: "christianhaitian/dArkOS",
+        info: "Debian based version of the ArkOS operating system, for select RK3326 and RK3566 handhelds.\nBy christianhaitian.\nRaw disk image; erases the entire card.\n[Project page](https://github.com/christianhaitian/dArkOS)",
+        display_name: Some("dArkOS"),
         supports_update_mode: false,  // Raw disk images always do a full burn
         update_directories: &[],      // Not used for raw images
-        allowed_extensions: Some(&[".img.7z"]),  // Volumes are matched under their .001/.002 suffix
+        allowed_extensions: Some(&[".img.7z"]),  // Every release asset is a multi-volume .img.7z
         excluded_patterns: None,
-        asset_display_mappings: None,
-        supports_preserve_mode: false,
-    },
-    RepoOption {
-        name: "BaseOS",
-        url: "pvaibhav/BaseOS",
-        info: "A minimal base OS for Anbernic RG XX devices. 3 second boot time.\nA third-party project by pvaibhav - not a spruceOS release.\nRaw disk image; erases the entire card.\n[Project page](https://github.com/pvaibhav/BaseOS)",
-        display_name: Some("BaseOS"),
-        supports_update_mode: false,  // Raw disk images always do a full burn
-        update_directories: &[],      // Not used for raw images
-        allowed_extensions: Some(&[".img.zip"]),  // Excludes .bosupd update packages
-        excluded_patterns: None,  // .bosupd already fails the extension filter
-        asset_display_mappings: Some(BASEOS_DEVICE_MAPPINGS),
+        asset_display_mappings: Some(DARKOS_DEVICE_MAPPINGS),
         supports_preserve_mode: false,
     },
 ];
