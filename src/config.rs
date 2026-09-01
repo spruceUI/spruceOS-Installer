@@ -181,10 +181,10 @@ pub const DARKOS_DEVICE_MAPPINGS: &[AssetDisplayMapping] = &[
     AssetDisplayMapping { pattern: "_RGB30_",     display_name: "RGB30",           devices: "Powkiddy RGB30" },
     AssetDisplayMapping { pattern: "_RK2023_",    display_name: "RK2023",          devices: "Powkiddy RK2023" },
     AssetDisplayMapping { pattern: "_MINILOONG_", display_name: "Miniloong",       devices: "Miniloong Pocket 1" },
-    // Manufacturer for these two is not stated anywhere in the dArkOS sources,
-    // so they carry the model name only rather than a guessed attribution.
+    AssetDisplayMapping { pattern: "_G350_",      display_name: "G350",            devices: "Anbernic G350" },
+    // The dArkOS sources never state a manufacturer for this one, so it carries
+    // the model name only rather than a guessed attribution.
     AssetDisplayMapping { pattern: "_A10MINI_",   display_name: "A10 Mini",        devices: "A10 Mini" },
-    AssetDisplayMapping { pattern: "_G350_",      display_name: "G350",            devices: "G350" },
 ];
 
 pub const REPO_OPTIONS: &[RepoOption] = &[
