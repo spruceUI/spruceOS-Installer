@@ -19,14 +19,19 @@
 - macOS: `diskutil eraseDisk` with automatic retry logic
 
 **Raw image burning:**
-- On-the-fly `.gz` decompression
-- Pre-scans to determine decompressed size
+- On-the-fly `.gz`, `.zip` and `.7z` decompression -- the image is never written
+  to disk uncompressed, so an 8GB image needs no scratch space
+- Pre-scans to determine decompressed size (`.gz` only; `.zip` and `.7z` record it
+  in their headers)
 - SHA256 verification (Linux only; disabled on Windows/macOS for reliability)
 - Sector-aligned writes (Windows: 512-byte, macOS: 512-byte with F_NOCACHE)
 - Direct hardware I/O on macOS (F_NOCACHE + O_SYNC flags prevent buffer cache stalls)
 
 **GitHub integration:**
 - Fetches latest releases via GitHub API
+- Multi-part archives (`.7z.001`, `.002`, ...) are presented and downloaded as a
+  single asset, working around GitHub's 2GB per-file limit without external
+  hosting. See [Release Asset Naming](#release-asset-naming)
 - Chunked streaming for large downloads
 - Rate limit detection and timeout handling
 - Automatic filtering of source code archives
@@ -80,6 +85,89 @@ GitHub Actions automatically build releases per branch. If you'd like to use thi
 - [Helaas](https://github.com/Helaas)
 
 ---
+
+## Release Asset Naming
+
+**Read this before publishing a release.** The installer decides what to do with
+your release asset from its **filename alone**, and it decides this before
+downloading anything. Get the name right and everything else is automatic; get it
+wrong and users get a card that does not boot, or worse.
+
+### The two install modes
+
+| Mode | What the installer does | Triggered by |
+|------|------------------------|--------------|
+| **Archive** | Formats the card FAT32, extracts the archive, copies the files onto it | Any allowed extension that is *not* a raw image |
+| **Burn** | Writes the image to the raw device, partition table and all | A name ending in `.img`, `.img.gz`, `.img.zip` or `.img.7z` |
+
+Burn mode overwrites the entire disk. Archive mode formats a single FAT32
+partition. They are not interchangeable, and the only thing separating them is
+how you named the file.
+
+### Naming
+
+| Your release contains | Name it | Mode |
+|----------------------|---------|------|
+| Files to copy onto a FAT32 card | `MyOS-v1.2.7z` | Archive |
+| Files to copy, `.zip` instead | `MyOS-v1.2.zip` | Archive |
+| A raw disk image, uncompressed | `MyOS-v1.2.img` | Burn |
+| A raw disk image, gzipped | `MyOS-v1.2.img.gz` | Burn |
+| A raw disk image in a zip | `MyOS-v1.2.img.zip` | Burn |
+| A raw disk image in a 7z | `MyOS-v1.2.img.7z` | Burn |
+
+The rule is just: **if the archive contains a raw disk image, put `.img` in front
+of the compression extension.** If it contains files, don't.
+
+### Multi-part archives
+
+GitHub caps a single release asset at 2GB. Splitting the archive across volumes
+is the simplest way around that -- no external hosting, no manifest file:
+
+```bash
+7z a -v1950m MyOS-v1.2.img.7z MyOS-v1.2.img
+# produces MyOS-v1.2.img.7z.001, .002, ...
+```
+
+Upload every part to the release. The installer collapses them into one entry
+named for what they share, sized as the sum of the parts, and downloads them all
+when the user picks it. Users see one download and one progress bar; they never
+need to know it was split.
+
+**The volume suffix does not change the mode.** It is stripped before the archive
+vs. image test, so `.7z.001` behaves exactly like `.7z`, and `.img.7z.001`
+exactly like `.img.7z`. Multi-part works for both modes.
+
+Requirements:
+
+- **Three-digit suffixes, starting at `.001`, contiguous.** This is what `7z -v`
+  produces by default. A set with a gap in it is skipped entirely rather than
+  offered, since it cannot be extracted.
+- **Upload every part before publishing.** A partial upload is silent: `.001`
+  lands, `.002` doesn't, and the release looks fine until someone tries to
+  install it. Verify with `gh release view <tag> --json assets` before you
+  announce.
+- **Any codec 7-Zip writes by default (LZMA2) is fine.** Archive mode extracts
+  with the bundled 7-Zip binary, which handles anything. Burn mode streams the
+  image out with a pure-Rust reader that covers LZMA, LZMA2, BCJ and delta
+  filters -- so avoid exotic options like PPMd for `.img.7z` releases.
+
+For assets that need to live somewhere other than GitHub entirely, see
+[External Asset Hosting](#external-asset-hosting-manifestjson) below.
+
+### Getting it wrong
+
+Both of these are naming mistakes, not installer bugs, and both are fixed by
+renaming the release asset:
+
+**A raw image without `.img` in the name** (`MyOS-v1.2.7z` containing
+`MyOS.img`). The installer formats the card and copies the `.img` file onto it as
+a file. The card won't boot. Annoying, not destructive.
+
+**A file archive with `.img` in the name** (`ports.img.7z` containing a folder of
+games). The installer burns it to the raw device. This destroys the partition
+table and everything on the disk, with no format step and no warning beyond the
+standard one. **Don't put `.img` in the name of anything that isn't a disk
+image.**
 
 ## External Asset Hosting (manifest.json)
 
@@ -417,6 +505,7 @@ Control which file types users see per repository:
 ```rust
 allowed_extensions: Some(&[".7z", ".zip"]),  // Only archives
 allowed_extensions: Some(&[".img.gz"]),       // Only compressed images
+allowed_extensions: Some(&[".img.7z"]),       // Only images in a 7z (single or multi-part)
 allowed_extensions: None,                     // Show everything
 ```
 
@@ -424,6 +513,17 @@ allowed_extensions: None,                     // Show everything
 - Separate "full installer" repos (show only `.7z`) from "update package" repos (show only `.zip`)
 - Hide experimental formats from stable releases
 - Simplify UI when releases have many file types
+
+**Multi-part archives are matched under their volume suffix.** A filter of
+`".7z"` accepts `MyOS.7z.001` as well as `MyOS.7z` -- the trailing `.001`/`.002`
+is stripped before the test, so you do not list volume suffixes here.
+
+**⚠️ `".7z"` also matches `".img.7z"`**, because the test is a suffix match. If a
+repo publishes both file archives and raw images in 7z containers, a filter of
+`".7z"` will show both, and the ones named `.img.7z` will be burned rather than
+extracted. Give raw images their own repo tab with
+`allowed_extensions: Some(&[".img.7z"])`, or keep the two out of the same release.
+See [Release Asset Naming](#release-asset-naming).
 
 ---
 
@@ -1213,6 +1313,10 @@ cargo build --release --features icon
 | Colors don't apply | Updated `theme.rs` but not `ui.rs` hardcoded colors | Search `Color32::from_rgb` in ui.rs |
 | Build fails on GitHub | Binary name changed but workflows not updated | Update `.github/workflows/*.yml` artifact names |
 | Icon not showing | PNG doesn't have transparency or wrong format | Use RGBA PNG, valid multi-res ICO |
+| Card doesn't boot after install | Raw image published without `.img` in the name, so it was extracted as a file instead of burned | Rename the asset to `*.img.7z` / `*.img.gz` / `*.img.zip` |
+| Install wiped the whole disk unexpectedly | A file archive was named `*.img.*`, so it was burned to the raw device | Don't put `.img` in the name of anything that isn't a disk image |
+| Multi-part release not listed | A volume is missing, or the suffixes aren't contiguous 3-digit `.001`, `.002`, ... | Re-upload the missing part; verify with `gh release view <tag> --json assets` |
+| Only one part of a set downloaded | Parts were uploaded to different releases, or one upload silently failed | All volumes must be assets of the same release |
 
 ---
 
@@ -1277,12 +1381,12 @@ src/
 ├── drives.rs            - Cross-platform drive detection
 ├── format.rs            - FAT32 formatting (>32GB support on Windows)
 ├── extract.rs           - 7z extraction with embedded binaries
-├── burn.rs              - Raw image burning (.img/.gz) with sector alignment
+├── burn.rs              - Raw image burning (.img/.gz/.zip/.7z) with sector alignment
 ├── copy.rs              - File copying with progress tracking
 ├── delete.rs            - Selective directory deletion (update mode)
 ├── preserve.rs          - Backup/restore user data during updates
 ├── eject.rs             - Safe drive ejection
-├── github.rs            - GitHub API integration
+├── github.rs            - GitHub API integration, multi-part asset grouping
 ├── fat32.rs             - Custom FAT32 formatter (Windows >32GB)
 ├── debug.rs             - Debug logging to file
 ├── boxart_scraper.rs    - ⚠️ CONFIG: ROM boxart scraper with fuzzy matching
