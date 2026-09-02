@@ -1048,8 +1048,8 @@ impl InstallerApp {
                 }
 
                 let _ = burn_handle.await;
-                log("Image burn and verification complete");
-                crate::debug::log("Image burn and verification complete");
+                log("Image burn complete");
+                crate::debug::log("Image burn complete");
 
                 // Clean up downloaded image
                 for path in &download_files {
