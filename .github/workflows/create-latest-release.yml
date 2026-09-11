@@ -1,0 +1,143 @@
+name: Create Latest Release
+
+# Promotes an already-built beta to a versioned release and marks it latest.
+# The platform builds only ever upload to beta-<branch>, so build that first.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release tag, e.g. V1.6'
+        required: true
+      source_tag:
+        description: 'Beta release to promote'
+        required: true
+        default: 'beta-main'
+
+jobs:
+  create-latest-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download the beta assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SOURCE_TAG: ${{ inputs.source_tag }}
+        run: |
+          set -e
+          # A beta tag is reused build after build, so it can still hold binaries
+          # older than the code being released. Refuse those.
+          HEAD_DATE="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq '.commit.committer.date')"
+          echo "main committed $HEAD_DATE"
+          gh release view "$SOURCE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[] | "\(.updatedAt) \(.name)"' | sort > assets.txt
+          # Read from a file, not a pipe: a pipeline would put this loop in a
+          # subshell and its exit would not fail the step.
+          while read -r ts name; do
+            echo "  $ts $name"
+            [[ "$ts" > "$HEAD_DATE" ]] || { echo "$name is older than main; build the beta first"; exit 1; }
+          done < assets.txt
+
+          mkdir -p dist
+          gh release download "$SOURCE_TAG" --repo "$GITHUB_REPOSITORY" --dir dist --clobber
+          # A release missing a platform is worse than no release at all.
+          for f in spruceos-installer-windows.exe \
+                   SpruceOS-Installer-macOS-Universal.zip \
+                   spruceos-installer-linux-x64.tar.gz \
+                   spruceos-installer-linux-arm64.tar.gz \
+                   spruceos-installer-linux-armv7.tar.gz \
+                   spruceos-installer-linux-i686.tar.gz; do
+            [ -f "dist/$f" ] || { echo "$SOURCE_TAG has no $f"; exit 1; }
+          done
+          ls -la dist
+
+      - name: Write the release notes
+        env:
+          TAG: ${{ inputs.version }}
+        run: |
+          set -e
+          cat > notes.md <<'NOTES'
+          ## Downloads
+
+          | Platform | Download |
+          |----------|----------|
+          | Windows (x64) | [spruceos-installer-windows.exe](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/spruceos-installer-windows.exe) |
+          | macOS (Apple Silicon + Intel) | [SpruceOS-Installer-macOS-Universal.zip](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/SpruceOS-Installer-macOS-Universal.zip) |
+          | Linux x64 | [spruceos-installer-linux-x64.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/spruceos-installer-linux-x64.tar.gz) |
+          | Linux ARM64 | [spruceos-installer-linux-arm64.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/spruceos-installer-linux-arm64.tar.gz) |
+          | Linux ARMv7 | [spruceos-installer-linux-armv7.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/spruceos-installer-linux-armv7.tar.gz) |
+          | Linux i686 (32-bit) | [spruceos-installer-linux-i686.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/spruceos-installer-linux-i686.tar.gz) |
+
+          ---
+
+          ## Installation Instructions
+
+          ### Windows
+          1. Download `spruceos-installer-windows.exe`
+          2. Run the executable
+          3. If Windows SmartScreen appears, click "More info" → "Run anyway" (app is not code-signed)
+          4. The installer will automatically request administrator privileges when needed
+
+          The installer supports Windows 7 and later (x64).
+
+          ### Linux
+          1. Download the appropriate binary for your architecture
+          2. Extract: `tar -xzf spruceos-installer-linux-*.tar.gz`
+          3. Run: `./spruceos-installer-linux-*`
+          4. The installer will automatically request privileges
+
+          ### macOS
+          1. Extract the zip file
+          2. Double-click `launch-installer.command` to run
+
+          **If the app can't see your SD card:**
+          - You may need to grant Full Disk Access in System Settings → Privacy & Security
+          - Add either Terminal (if running via command line) or the app itself
+          - Restart the app after granting access
+
+          **Opening unsigned apps:** https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac
+
+          ---
+
+          ## Anbernic RG XX devices
+
+          These need a base OS on the first card before spruce will boot. Use the
+          **BaseOS** tab, pick your model, and write it to TF1. BaseOS is a
+          third-party project by pvaibhav, not a spruceOS release.
+
+          Then use the **Stable** tab to install spruceOS to TF2, exactly as you
+          would for any other device. That card stays freely swappable between
+          supported devices.
+
+          ## Powkiddy RGB30
+
+          Use the **dArkMoss** tab and write it to TF1. It is a raw disk image, so
+          it erases that whole card, and it ships as a multi-part archive - every
+          part downloads on its own, nothing to join by hand.
+
+          Then use the **Stable** tab to install spruceOS to TF2.
+
+          ---
+          Universal binary for Apple Silicon (M1/M2/M3/M4) and Intel Macs. Not code-signed.
+          NOTES
+          sed -i "s|__TAG__|${TAG}|g" notes.md
+          cat notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.version }}
+        run: |
+          set -e
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target main \
+            --title "SpruceOS Installer $TAG" \
+            --notes-file notes.md \
+            --latest
+          echo "Published $TAG as latest" >> "$GITHUB_STEP_SUMMARY"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isLatest,isPrerelease,assets \
+            --jq '"tag=\(.tagName) latest=\(.isLatest) prerelease=\(.isPrerelease) assets=\(.assets|length)"' \
+            >> "$GITHUB_STEP_SUMMARY"
