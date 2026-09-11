@@ -1,6 +1,6 @@
 name: Create Latest Release
 
-# Promotes an already-built beta to a versioned release and marks it latest.
+# Drafts a versioned release from an already-built beta, for manual publishing.
 # The platform builds only ever upload to beta-<branch>, so build that first.
 
 on:
@@ -131,13 +131,18 @@ jobs:
           TAG: ${{ inputs.version }}
         run: |
           set -e
+          # Draft, like the spruceOS release workflow: edit the notes and publish
+          # by hand. GitHub's publish dialog marks it latest.
           gh release create "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --target main \
             --title "SpruceOS Installer $TAG" \
             --notes-file notes.md \
-            --latest
-          echo "Published $TAG as latest" >> "$GITHUB_STEP_SUMMARY"
-          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isLatest,isPrerelease,assets \
-            --jq '"tag=\(.tagName) latest=\(.isLatest) prerelease=\(.isPrerelease) assets=\(.assets|length)"' \
-            >> "$GITHUB_STEP_SUMMARY"
+            --draft
+          # Reporting must not fail a run that already produced the draft.
+          {
+            echo "Drafted $TAG. Review the notes and publish it from the GitHub UI."
+            gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json tagName,isDraft,isPrerelease,assets \
+              --jq '"tag=\(.tagName) draft=\(.isDraft) prerelease=\(.isPrerelease) assets=\(.assets|length)"' \
+              || echo "(could not read the draft back; check the Releases page)"
+          } >> "$GITHUB_STEP_SUMMARY"
