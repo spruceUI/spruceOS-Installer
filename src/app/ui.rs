@@ -1453,12 +1453,12 @@ impl InstallerApp {
             .order(egui::Order::Foreground)
             .collapsible(false)
             .resizable(false)
-            // Fixed: in an auto-sizing window the available space is the whole
-            // parent, so anything that fills its width (columns especially)
-            // stretches the window instead of fitting the content.
-            .fixed_width(340.0)
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
+                // Cap the width from inside: in an auto-sizing window the
+                // available space is the whole parent, so anything that fills
+                // its width stretches the window instead of fitting content.
+                ui.set_max_width(320.0);
                 ui.vertical_centered(|ui| {
                     ui.add_space(8.0);
                     ui.label(format!(
