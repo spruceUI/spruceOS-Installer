@@ -1453,6 +1453,10 @@ impl InstallerApp {
             .order(egui::Order::Foreground)
             .collapsible(false)
             .resizable(false)
+            // Fixed: in an auto-sizing window the available space is the whole
+            // parent, so anything that fills its width (columns especially)
+            // stretches the window instead of fitting the content.
+            .fixed_width(340.0)
             .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
             .show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
@@ -1470,27 +1474,20 @@ impl InstallerApp {
                     // here" leaves the user with nothing to copy.
                     ui.hyperlink(crate::config::UPDATE_DOWNLOAD_URL);
                     ui.add_space(8.0);
-                    // Two columns meeting at the midline: the left one ends
-                    // right-aligned, the right one starts left-aligned, so the
-                    // pair straddles the centre whatever the buttons measure.
-                    // A zero-size allocation gets placed before its contents
-                    // grow, which is why that approach sat right of centre.
+                    // main_align centres the row along its own axis, which
+                    // neither a plain horizontal (left) nor a zero-size
+                    // allocation (placed before it grows) manages.
                     let mut copy_clicked = false;
                     let mut continue_clicked = false;
-                    ui.columns(2, |cols| {
-                        cols[0].with_layout(
-                            egui::Layout::right_to_left(egui::Align::Center),
-                            |ui| {
-                                copy_clicked = ui.button("📋 Copy link").clicked();
-                            },
-                        );
-                        cols[1].with_layout(
-                            egui::Layout::left_to_right(egui::Align::Center),
-                            |ui| {
-                                continue_clicked = ui.button("Continue").clicked();
-                            },
-                        );
-                    });
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(ui.available_width(), 0.0),
+                        egui::Layout::left_to_right(egui::Align::Center)
+                            .with_main_align(egui::Align::Center),
+                        |ui| {
+                            copy_clicked = ui.button("📋 Copy link").clicked();
+                            continue_clicked = ui.button("Continue").clicked();
+                        },
+                    );
                     if copy_clicked {
                         if let Ok(mut clipboard) = arboard::Clipboard::new() {
                             let _ = clipboard.set_text(crate::config::UPDATE_DOWNLOAD_URL);
