@@ -14,6 +14,11 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: beta-${{ github.ref_name }}
+          # Branch builds must never take the Latest slot: the installer's own
+          # update check reads /releases/latest, so a beta there would tell every
+          # user to "update" to a branch build.
+          prerelease: true
+          make_latest: false
           name: Beta Build (${{ github.ref_name }})
           body: |
             Automated beta build from the `${{ github.ref_name }}` branch.
