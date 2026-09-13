@@ -1474,20 +1474,31 @@ impl InstallerApp {
                     // here" leaves the user with nothing to copy.
                     ui.hyperlink(crate::config::UPDATE_DOWNLOAD_URL);
                     ui.add_space(8.0);
-                    // main_align centres the row along its own axis, which
-                    // neither a plain horizontal (left) nor a zero-size
-                    // allocation (placed before it grows) manages.
+                    // egui lays a row out from the cursor, and main_align only
+                    // aligns content *inside* a widget (text in a button), so a
+                    // row of widgets is centred by measuring it and padding.
+                    // A Button is its text galley plus button_padding each side.
+                    const COPY_LABEL: &str = "📋 Copy link";
+                    const CONTINUE_LABEL: &str = "Continue";
+                    let font = egui::TextStyle::Button.resolve(ui.style());
+                    let button_width = |ui: &egui::Ui, label: &str| {
+                        ui.painter()
+                            .layout_no_wrap(label.to_owned(), font.clone(), egui::Color32::WHITE)
+                            .size()
+                            .x
+                            + ui.spacing().button_padding.x * 2.0
+                    };
+                    let row_width = button_width(ui, COPY_LABEL)
+                        + button_width(ui, CONTINUE_LABEL)
+                        + ui.spacing().item_spacing.x;
+
                     let mut copy_clicked = false;
                     let mut continue_clicked = false;
-                    ui.allocate_ui_with_layout(
-                        egui::vec2(ui.available_width(), 0.0),
-                        egui::Layout::left_to_right(egui::Align::Center)
-                            .with_main_align(egui::Align::Center),
-                        |ui| {
-                            copy_clicked = ui.button("📋 Copy link").clicked();
-                            continue_clicked = ui.button("Continue").clicked();
-                        },
-                    );
+                    ui.horizontal(|ui| {
+                        ui.add_space(((ui.available_width() - row_width) / 2.0).max(0.0));
+                        copy_clicked = ui.button(COPY_LABEL).clicked();
+                        continue_clicked = ui.button(CONTINUE_LABEL).clicked();
+                    });
                     if copy_clicked {
                         if let Ok(mut clipboard) = arboard::Clipboard::new() {
                             let _ = clipboard.set_text(crate::config::UPDATE_DOWNLOAD_URL);
