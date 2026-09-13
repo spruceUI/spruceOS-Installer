@@ -63,6 +63,14 @@ impl eframe::App for InstallerApp {
             self.ensure_selection_valid();
         }
 
+        // Startup update check result, if it ever arrives
+        if let Some(rx) = &mut self.update_rx {
+            if let Ok(tag) = rx.try_recv() {
+                self.newer_version = Some(tag);
+                self.update_rx = None;
+            }
+        }
+
         // Check for release fetch results
         if let Some(rx) = &mut self.release_rx {
             if let Ok(result) = rx.try_recv() {
@@ -1406,7 +1414,62 @@ impl eframe::App for InstallerApp {
                 }
 
                 ui.add_space(10.0);
+
+                // Version, and a quiet nudge when a newer one exists. No
+                // auto-update: the binaries are unsigned, so a self-replacing
+                // download would trip Gatekeeper and SmartScreen.
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add_space(4.0);
+                        if let Some(tag) = self.newer_version.clone() {
+                            ui.hyperlink_to(
+                                format!("{} available", tag),
+                                crate::config::UPDATE_DOWNLOAD_URL,
+                            );
+                            ui.label("-");
+                        }
+                        ui.weak(format!("v{}", crate::config::APP_VERSION));
+                    });
+                });
             });
         });
+
+        self.show_update_notice(ctx);
+    }
+}
+
+impl InstallerApp {
+    /// One-off notice on startup when a newer installer exists. Dismissed for
+    /// the rest of the run; the footer link stays either way.
+    fn show_update_notice(&mut self, ctx: &egui::Context) {
+        let Some(tag) = self.newer_version.clone() else {
+            return;
+        };
+        if self.update_notice_dismissed {
+            return;
+        }
+
+        egui::Window::new("Update available")
+            .order(egui::Order::Foreground)
+            .collapsible(false)
+            .resizable(false)
+            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+            .show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(8.0);
+                    ui.label(format!(
+                        "{} is out. You have v{}.",
+                        tag,
+                        crate::config::APP_VERSION
+                    ));
+                    ui.add_space(6.0);
+                    ui.hyperlink_to("Get the latest version", crate::config::UPDATE_DOWNLOAD_URL);
+                    ui.add_space(10.0);
+                    if ui.button("Continue").clicked() {
+                        self.update_notice_dismissed = true;
+                    }
+                    ui.add_space(4.0);
+                });
+            });
     }
 }

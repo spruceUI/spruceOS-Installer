@@ -81,6 +81,11 @@ pub struct InstallerApp {
     pub(super) available_assets: Vec<Asset>,
     pub(super) selected_asset_idx: Option<usize>,
     pub(super) release_rx: Option<mpsc::UnboundedReceiver<Result<Release, String>>>,
+    /// Startup update check. Carries the newer release tag if one exists;
+    /// stays silent otherwise, including when offline.
+    pub(super) update_rx: Option<mpsc::UnboundedReceiver<String>>,
+    pub(super) newer_version: Option<String>,
+    pub(super) update_notice_dismissed: bool,
 
     // Manifest support for external asset hosting
     pub(super) manifest_rx: Option<mpsc::UnboundedReceiver<Option<crate::manifest::Manifest>>>,
@@ -196,6 +201,22 @@ impl InstallerApp {
             }
         });
 
+        // Ask GitHub whether a newer installer exists. Fire and forget: a
+        // failure of any kind simply means the app never mentions an update.
+        let update_rx = crate::config::UPDATE_CHECK_REPO.map(|repo| {
+            let (update_tx, update_rx) = mpsc::unbounded_channel();
+            let update_ctx = cc.egui_ctx.clone();
+            runtime.spawn(async move {
+                if let Ok(release) = crate::github::get_latest_release(repo).await {
+                    if crate::github::tag_is_newer(&release.tag_name, crate::config::APP_VERSION) {
+                        let _ = update_tx.send(release.tag_name);
+                        update_ctx.request_repaint();
+                    }
+                }
+            });
+            update_rx
+        });
+
         let is_dark = cc.egui_ctx.style().visuals.dark_mode;
 
         // Initial app creation to use helper method
@@ -225,6 +246,9 @@ impl InstallerApp {
             available_assets: Vec::new(),
             selected_asset_idx: None,
             release_rx: None,
+            update_rx,
+            newer_version: None,
+            update_notice_dismissed: false,
             manifest_rx: None,
             pending_release: None,
             manifest_display_name: None,

@@ -167,6 +167,56 @@ impl From<crate::manifest::ManifestAsset> for Asset {
 /// name is not one part of a multi-volume set. 7-Zip always writes exactly
 /// three digits, so requiring three avoids treating a version-like `foo.7z.1`
 /// or a stray `.0012` as a volume.
+/// True if `tag` names a version newer than `current`.
+///
+/// Release tags and the crate version are written differently - "V1.6" against
+/// "1.6.0" - so both are reduced to numbers and compared field by field, with
+/// a missing field reading as zero. Anything unparseable answers false: a
+/// notice the user cannot act on is worse than no notice.
+pub fn tag_is_newer(tag: &str, current: &str) -> bool {
+    fn fields(s: &str) -> Option<Vec<u64>> {
+        let s = s.trim().trim_start_matches(['v', 'V']);
+        // Drop any pre-release or build suffix: 1.7.0-rc1 compares as 1.7.0.
+        let s = s.split(['-', '+', ' ']).next().unwrap_or("");
+        if s.is_empty() {
+            return None;
+        }
+        s.split('.').map(|f| f.parse::<u64>().ok()).collect()
+    }
+
+    let (Some(remote), Some(local)) = (fields(tag), fields(current)) else {
+        return false;
+    };
+
+    for i in 0..remote.len().max(local.len()) {
+        let r = remote.get(i).copied().unwrap_or(0);
+        let l = local.get(i).copied().unwrap_or(0);
+        if r != l {
+            return r > l;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::tag_is_newer;
+
+    #[test]
+    fn compares_tags_against_the_crate_version() {
+        // The shapes we actually ship: tag "V1.6", crate version "1.6.0".
+        assert!(!tag_is_newer("V1.6", "1.6.0"));
+        assert!(tag_is_newer("V1.7", "1.6.0"));
+        assert!(tag_is_newer("V1.6.1", "1.6.0"));
+        assert!(!tag_is_newer("V1.5", "1.6.0"));
+        // Field-wise, not lexical: 10 beats 9.
+        assert!(tag_is_newer("V1.10", "1.9.0"));
+        // Unreadable tags stay quiet.
+        assert!(!tag_is_newer("nightly", "1.6.0"));
+        assert!(!tag_is_newer("", "1.6.0"));
+    }
+}
+
 pub fn split_volume_suffix(name: &str) -> Option<(&str, u32)> {
     let (base, digits) = name.rsplit_once('.')?;
     if digits.len() == 3 && digits.bytes().all(|b| b.is_ascii_digit()) {

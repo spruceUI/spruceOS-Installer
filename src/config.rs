@@ -69,6 +69,20 @@ pub const WINDOW_TITLE: &str = "SpruceOS Installer";
 /// User-Agent string for HTTP requests to GitHub
 pub const USER_AGENT: &str = env!("CARGO_PKG_NAME");
 
+/// Shown in the UI and compared against the latest release at startup.
+pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Repo to check for a newer installer when the app starts, or None to skip
+/// the check entirely. Forks: point this at your own repo, or set it to None.
+/// The check is silent - offline, rate limited or unreadable all mean "say
+/// nothing", because a nag the user cannot act on is worse than no nag.
+pub const UPDATE_CHECK_REPO: Option<&str> = Some("https://github.com/spruceUI/spruceOS-Installer");
+
+/// Where the "new version" notice sends people. There is deliberately no
+/// auto-update: the binaries are not code signed, so a downloaded replacement
+/// would be blocked by Gatekeeper on macOS and SmartScreen on Windows.
+pub const UPDATE_DOWNLOAD_URL: &str = "https://github.com/spruceUI/spruceOS-Installer/releases/latest";
+
 /// Prefix for temporary folders and files
 pub const TEMP_PREFIX: &str = env!("CARGO_PKG_NAME");
 

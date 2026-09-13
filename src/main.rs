@@ -222,7 +222,7 @@ fn main() -> eframe::Result<()> {
     };
 
     eframe::run_native(
-        WINDOW_TITLE,
+        &format!("{} v{}", WINDOW_TITLE, config::APP_VERSION),
         options,
         Box::new(|cc| {
             // Load custom fonts first (if configured)
