@@ -365,7 +365,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
     },
     RepoOption {
         name: "TwigUI",
-        url: "spruceUI/twigUI",
+        url: "spruceUI/twigUI-next",
         info: "SpruceOS for the GKD Pixel 2.",
         display_name: None,  // Falls back to "TwigUI"
         supports_update_mode: false,  // Raw disk images only (.img.gz)
