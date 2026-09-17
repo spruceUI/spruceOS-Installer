@@ -227,6 +227,7 @@ impl InstallerApp {
         name.ends_with(".img.gz") ||
         name.ends_with(".img.zip") ||
         name.ends_with(".img.7z") ||
+        name.ends_with(".img.xz") ||
         name.ends_with(".img")
     }
 
@@ -235,7 +236,7 @@ impl InstallerApp {
         let mut base = name.to_string();
 
         // Remove known extensions in order of specificity
-        for ext in &[".img.gz", ".img.zip", ".img.7z", ".tar.gz", ".7z", ".zip", ".img"] {
+        for ext in &[".img.gz", ".img.zip", ".img.7z", ".img.xz", ".tar.gz", ".7z", ".zip", ".img"] {
             if base.ends_with(ext) {
                 base = base.strip_suffix(ext).unwrap_or(&base).to_string();
                 break; // Only strip one extension
@@ -260,10 +261,10 @@ impl InstallerApp {
 
         if base_names.len() == 1 {
             // Same base name, different extensions - pick by priority
-            // Priority: .7z > .img.zip > .zip > .img.gz > .img
+            // Priority: .7z > .img.zip > .zip > .img.gz > .img.xz > .img
             // .img.zip is listed before .zip so the plain-archive entry does not
             // shadow it — every .img.zip name also ends with .zip.
-            const PRIORITY: &[&str] = &[".7z", ".img.zip", ".zip", ".img.gz", ".img"];
+            const PRIORITY: &[&str] = &[".7z", ".img.zip", ".zip", ".img.gz", ".img.xz", ".img"];
 
             for ext in PRIORITY {
                 if let Some((idx, _)) = assets.iter()

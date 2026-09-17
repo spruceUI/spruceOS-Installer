@@ -24,8 +24,8 @@ pub enum BurnProgress {
 /// How a downloaded raw image is compressed.
 ///
 /// BaseOS publishes `.img.zip`; TwigUI publishes `.img.gz`; dArkMoss publishes
-/// `.img.7z`, usually split across volumes. All forms are read back as a plain
-/// stream of raw image bytes.
+/// `.img.7z`, usually split across volumes; oakMOSS publishes `.img.xz`. All
+/// forms are read back as a plain stream of raw image bytes.
 ///
 /// NOTE: `Read` is written fully qualified throughout this section on purpose.
 /// Several functions below have their own `use std::io::Read;`, one of which is
@@ -38,6 +38,7 @@ enum ImageCompression {
     Gzip,
     Zip,
     SevenZip,
+    Xz,
 }
 
 fn detect_compression(image_path: &Path) -> ImageCompression {
@@ -58,6 +59,8 @@ fn detect_compression(image_path: &Path) -> ImageCompression {
         ImageCompression::Zip
     } else if format_name.ends_with(".gz") {
         ImageCompression::Gzip
+    } else if format_name.ends_with(".xz") {
+        ImageCompression::Xz
     } else {
         ImageCompression::None
     }
@@ -418,10 +421,94 @@ fn spawn_7z_reader(volumes: Vec<std::path::PathBuf>) -> Result<ChannelReader, St
     Ok(ChannelReader::new(rx))
 }
 
-/// Opens an image as a stream of raw bytes, decompressing `.gz`, `.zip` and
-/// `.7z` on the fly so the burn paths always see a plain image.
+/// Total uncompressed size of an `.xz` file, read from the index of each
+/// stream, so the progress bar has a total without a decompression pre-scan.
+fn xz_uncompressed_size(image_path: &Path) -> Result<u64, String> {
+    use std::io::{Read, Seek, SeekFrom};
+
+    fn read_at(file: &mut std::fs::File, offset: u64, len: usize) -> Result<Vec<u8>, String> {
+        let mut buf = vec![0u8; len];
+        file.seek(SeekFrom::Start(offset))
+            .and_then(|_| file.read_exact(&mut buf))
+            .map_err(|e| format!("Failed to read xz image: {}", e))?;
+        Ok(buf)
+    }
+
+    fn read_vli(buf: &[u8], pos: &mut usize) -> Result<u64, String> {
+        let mut value = 0u64;
+        for i in 0..9 {
+            let byte = *buf.get(*pos).ok_or("Truncated xz index")?;
+            *pos += 1;
+            value |= u64::from(byte & 0x7f) << (7 * i);
+            if byte & 0x80 == 0 {
+                return Ok(value);
+            }
+        }
+        Err("Invalid xz index".to_string())
+    }
+
+    let mut file = std::fs::File::open(image_path)
+        .map_err(|e| format!("Failed to open xz image: {}", e))?;
+    let mut end = file.metadata()
+        .map_err(|e| format!("Failed to read xz image size: {}", e))?
+        .len();
+    let mut total = 0u64;
+
+    // Streams can be concatenated with zero padding between them, so walk
+    // backwards from the end one stream at a time.
+    while end > 0 {
+        if end < 12 || end % 4 != 0 {
+            return Err("Invalid xz image: bad stream padding".to_string());
+        }
+        let footer = read_at(&mut file, end - 12, 12)?;
+        if footer[8..12] == [0, 0, 0, 0] {
+            end -= 4;
+            continue;
+        }
+        if &footer[10..12] != b"YZ" {
+            return Err("Invalid xz image: missing stream footer".to_string());
+        }
+
+        let index_size = (u64::from(u32::from_le_bytes([footer[4], footer[5], footer[6], footer[7]])) + 1) * 4;
+        if index_size + 24 > end {
+            return Err("Invalid xz image: index larger than file".to_string());
+        }
+        let index_start = end - 12 - index_size;
+        let index = read_at(&mut file, index_start, index_size as usize)?;
+        if index[0] != 0 {
+            return Err("Invalid xz image: bad index indicator".to_string());
+        }
+
+        let mut pos = 1;
+        let records = read_vli(&index, &mut pos)?;
+        let mut blocks_size = 0u64;
+        for _ in 0..records {
+            let unpadded = read_vli(&index, &mut pos)?;
+            let uncompressed = read_vli(&index, &mut pos)?;
+            blocks_size += (unpadded + 3) & !3;
+            total += uncompressed;
+        }
+
+        let stream_size = 12 + blocks_size + index_size + 12;
+        if stream_size > end {
+            return Err("Invalid xz image: stream larger than file".to_string());
+        }
+        end -= stream_size;
+    }
+
+    Ok(total)
+}
+
+/// Opens an image as a stream of raw bytes, decompressing `.gz`, `.zip`,
+/// `.7z` and `.xz` on the fly so the burn paths always see a plain image.
 fn open_image_reader(image_path: &Path) -> Result<Box<dyn std::io::Read>, String> {
     match detect_compression(image_path) {
+        ImageCompression::Xz => {
+            crate::debug::log("Detected .xz image, decompressing on-the-fly during burn");
+            let file = std::fs::File::open(image_path)
+                .map_err(|e| format!("Failed to open image file: {}", e))?;
+            Ok(Box::new(lzma_rust2::XzReader::new(std::io::BufReader::new(file), true)))
+        }
         ImageCompression::Zip => {
             crate::debug::log("Detected .zip image, decompressing on-the-fly during burn");
             Ok(Box::new(spawn_zip_reader(image_path)?))
@@ -522,6 +609,21 @@ pub async fn burn_image(
 
         if decompressed_size == 0 {
             return Err("7z image reports an uncompressed size of zero".to_string());
+        }
+
+        crate::debug::log(&format!("Decompressed size: {} bytes ({:.2} GB)", decompressed_size, decompressed_size as f64 / 1_073_741_824.0));
+        decompressed_size
+    } else if compression == ImageCompression::Xz {
+        crate::debug::log(&format!("Compressed size: {} bytes ({:.2} GB)", compressed_size, compressed_size as f64 / 1_073_741_824.0));
+
+        let decompressed_size = tokio::task::spawn_blocking({
+            let image_path = image_path.to_path_buf();
+            move || xz_uncompressed_size(&image_path)
+        }).await
+        .map_err(|e| format!("Size lookup task failed: {}", e))??;
+
+        if decompressed_size == 0 {
+            return Err("Xz image reports an uncompressed size of zero".to_string());
         }
 
         crate::debug::log(&format!("Decompressed size: {} bytes ({:.2} GB)", decompressed_size, decompressed_size as f64 / 1_073_741_824.0));

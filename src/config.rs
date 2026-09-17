@@ -334,69 +334,24 @@ pub const BASEOS_DEVICE_MAPPINGS: &[AssetDisplayMapping] = &[
     AssetDisplayMapping { pattern: "-rgsp",       display_name: "RG SP",       devices: "Anbernic RG SP" },
 ];
 
+/// Device name mappings for oakMOSS release assets, named
+/// `oakmoss-<board>-<version>-sd1.img.xz`.
+pub const OAKMOSS_DEVICE_MAPPINGS: &[AssetDisplayMapping] = &[
+    AssetDisplayMapping { pattern: "-zero28-", display_name: "MagicX Zero 28", devices: "MagicX Zero 28" },
+    AssetDisplayMapping { pattern: "-zero40-", display_name: "MagicX Zero 40", devices: "MagicX Zero 40" },
+];
+
 pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
-        name: "Stable",
-        url: "spruceUI/spruceOS",
-        info: "Stable releases of spruceOS.\nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Series\nTrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick, TrimUI Brick Pro\nAnbernic RG-XX Series\n[For more info check out our Wiki](https://github.com/spruceUI/spruceOS/wiki)",
-        display_name: Some("spruceOS Stable"),  // Display name for popups
-        supports_update_mode: true,  // Archive-based (.7z)
-        update_directories: SPRUCE_UPDATE_DELETE_PATHS,
-        allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
-        // The incremental OTA package is a .7z too, so the extension filter
-        // cannot separate it from the full archive. Deliberately not anchored
-        // to the "spruce" prefix: if the archive naming ever changes, a
-        // prefixed pattern stops matching while still looking correct.
-        excluded_patterns: Some(&["OTA"]),
-        asset_display_mappings: None,
-        supports_preserve_mode: true,
-    },
-    RepoOption {
-        name: "Nightlies",
-        url: "spruceUI/spruceOSNightlies",
-        info: "Nightly development builds.\n⚠️ Warning: May be unstable! \nSupported devices:\nMiyoo A30, Miyoo Flip, Miyoo Mini Series\nTrimUI Smart Pro, TrimUI Smart Pro S, TrimUI Brick, TrimUI Brick Pro\nAnbernic RG-XX Series",
-        display_name: Some("spruceOS Nightly"),  // Display name for popups
-        supports_update_mode: true,  // Supports archives
-        update_directories: SPRUCE_UPDATE_DELETE_PATHS,
-        allowed_extensions: Some(&[".7z"]),  // Match Stable; None listed everything
-        excluded_patterns: Some(&["OTA"]),
-        asset_display_mappings: None,
-        supports_preserve_mode: true,
-    },
-    RepoOption {
-        name: "TwigUI",
-        url: "spruceUI/twigUI-next",
-        info: "SpruceOS for the GKD Pixel 2.",
-        display_name: None,  // Falls back to "TwigUI"
-        supports_update_mode: false,  // Raw disk images only (.img.gz)
-        update_directories: &["Retroarch", "spruce"],
-        allowed_extensions: Some(&[".img.gz"]),  // Only show .img.gz files
-        excluded_patterns: None,
-        asset_display_mappings: None,
-        supports_preserve_mode: false,
-    },
-    RepoOption {
-        name: "dArkMoss",
-        url: "spruceUI/dArkMoss",
-        info: "spruceOS for the Powkiddy RGB30, built on a Debian base.\nRaw disk image; erases the entire card.\nShipped as a multi-part archive - every part downloads automatically.",
-        display_name: Some("dArkMoss"),
+        name: "oakMOSS",
+        url: "spruceUI/oakMOSS",
+        info: "Base system card (SD1) for MagicX Zero 28 and Zero 40.\nRaw disk image; erases the entire card.\nThe spruce card goes in the other slot.",
+        display_name: Some("oakMOSS"),
         supports_update_mode: false,  // Raw disk images always do a full burn
         update_directories: &[],      // Not used for raw images
-        allowed_extensions: Some(&[".img.7z"]),  // Volumes are matched under their .001/.002 suffix
+        allowed_extensions: Some(&[".img.xz"]),  // Hides BUILD-INFO.txt and SHA256SUMS
         excluded_patterns: None,
-        asset_display_mappings: None,
-        supports_preserve_mode: false,
-    },
-    RepoOption {
-        name: "BaseOS",
-        url: "pvaibhav/BaseOS",
-        info: "A minimal base OS for Anbernic RG XX devices. 3 second boot time.\nA third-party project by pvaibhav - not a spruceOS release.\nRaw disk image; erases the entire card.\n[Project page](https://github.com/pvaibhav/BaseOS)",
-        display_name: Some("BaseOS"),
-        supports_update_mode: false,  // Raw disk images always do a full burn
-        update_directories: &[],      // Not used for raw images
-        allowed_extensions: Some(&[".img.zip"]),  // Excludes .bosupd update packages
-        excluded_patterns: None,  // .bosupd already fails the extension filter
-        asset_display_mappings: Some(BASEOS_DEVICE_MAPPINGS),
+        asset_display_mappings: Some(OAKMOSS_DEVICE_MAPPINGS),
         supports_preserve_mode: false,
     },
 ];

@@ -32,6 +32,9 @@ image = { version = "0.25", default-features = false, features = ["png", "qoi"] 
 lazy_static = "1.4"
 libc = "0.2"
 flate2 = "1.0"
+# Streaming .xz decoder for raw images, pure Rust like the rest of the
+# compression stack; the default encoder and lzip features are not needed.
+lzma-rust2 = { version = "0.20", default-features = false, features = ["std", "xz", "optimization"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 arboard = "3.4"
 regex = "1"
