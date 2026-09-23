@@ -12,16 +12,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Generate the manifest
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python3 manifest/generate.py && jq empty manifest/manifest.json
-
       - name: Create Beta Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: beta-${{ github.ref_name }}
-          files: manifest/manifest.json
           # Branch builds must never take the Latest slot: the installer's own
           # update check reads /releases/latest, so a beta there would tell every
           # user to "update" to a branch build.
@@ -35,13 +29,13 @@ jobs:
             ## Downloads
 
             ### Windows
-            - **spruceos-installer-windows.exe**
+            - **zlyme-installer-windows.exe**
 
             ### Linux
-            - **Linux x64:** `spruceos-installer-linux-x64.tar.gz`
-            - **Linux ARM64:** `spruceos-installer-linux-arm64.tar.gz`
-            - **Linux i686 (32-bit):** `spruceos-installer-linux-i686.tar.gz`
-            - **Linux ARMv7:** `spruceos-installer-linux-armv7.tar.gz`
+            - **Linux x64:** `zlyme-installer-linux-x64.tar.gz`
+            - **Linux ARM64:** `zlyme-installer-linux-arm64.tar.gz`
+            - **Linux i686 (32-bit):** `zlyme-installer-linux-i686.tar.gz`
+            - **Linux ARMv7:** `zlyme-installer-linux-armv7.tar.gz`
 
             ### macOS
             - **SpruceOS-Installer-macOS-Universal.zip** (Apple Silicon + Intel)
@@ -51,7 +45,7 @@ jobs:
             ## Installation Instructions
 
             ### Windows
-            1. Download `spruceos-installer-windows.exe`
+            1. Download `zlyme-installer-windows.exe`
             2. Run the executable
             3. If Windows SmartScreen appears, click "More info" → "Run anyway" (app is not code-signed)
             4. The installer will automatically request administrator privileges when needed
@@ -60,8 +54,8 @@ jobs:
 
             ### Linux
             1. Download the appropriate binary for your architecture
-            2. Extract: `tar -xzf spruceos-installer-linux-*.tar.gz`
-            3. Run: `./spruceos-installer-linux-*`
+            2. Extract: `tar -xzf zlyme-installer-linux-*.tar.gz`
+            3. Run: `./zlyme-installer-linux-*`
             4. The installer will automatically request privileges
 
             ### macOS

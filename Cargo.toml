@@ -1,8 +1,8 @@
 [package]
-name = "spruceos-installer"
+name = "zlyme-installer"
 version = "1.8.0"
 edition = "2021"
-description = "SpruceOS SD Card Installer"
+description = "zlyme SD Card Installer"
 authors = ["SpruceOS Team (https://github.com/spruceUI)", "CMTag (https://github.com/CMTag)",  "NextUI Team (https://github.com/LoveRetro)", "Helaas (https://github.com/Helaas)"]
 license = "CC-BY-NC-4.0"
 

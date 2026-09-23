@@ -44,18 +44,13 @@ jobs:
 
           mkdir -p dist
           gh release download "$SOURCE_TAG" --repo "$GITHUB_REPOSITORY" --dir dist --clobber
-          # The TF1 Image tab reads manifest.json off the latest release.
-          python3 manifest/generate.py
-          jq empty manifest/manifest.json
-          cp manifest/manifest.json dist/manifest.json
           # A release missing a platform is worse than no release at all.
-          for f in spruceos-installer-windows.exe \
+          for f in zlyme-installer-windows.exe \
                    SpruceOS-Installer-macOS-Universal.zip \
-                   spruceos-installer-linux-x64.tar.gz \
-                   spruceos-installer-linux-arm64.tar.gz \
-                   spruceos-installer-linux-armv7.tar.gz \
-                   spruceos-installer-linux-i686.tar.gz \
-                   manifest.json; do
+                   zlyme-installer-linux-x64.tar.gz \
+                   zlyme-installer-linux-arm64.tar.gz \
+                   zlyme-installer-linux-armv7.tar.gz \
+                   zlyme-installer-linux-i686.tar.gz; do
             [ -f "dist/$f" ] || { echo "$SOURCE_TAG has no $f"; exit 1; }
           done
           ls -la dist
@@ -70,19 +65,19 @@ jobs:
 
           | Platform | Download |
           |----------|----------|
-          | Windows (x64) | [spruceos-installer-windows.exe](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/spruceos-installer-windows.exe) |
+          | Windows (x64) | [zlyme-installer-windows.exe](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/zlyme-installer-windows.exe) |
           | macOS (Apple Silicon + Intel) | [SpruceOS-Installer-macOS-Universal.zip](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/SpruceOS-Installer-macOS-Universal.zip) |
-          | Linux x64 | [spruceos-installer-linux-x64.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/spruceos-installer-linux-x64.tar.gz) |
-          | Linux ARM64 | [spruceos-installer-linux-arm64.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/spruceos-installer-linux-arm64.tar.gz) |
-          | Linux ARMv7 | [spruceos-installer-linux-armv7.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/spruceos-installer-linux-armv7.tar.gz) |
-          | Linux i686 (32-bit) | [spruceos-installer-linux-i686.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/spruceos-installer-linux-i686.tar.gz) |
+          | Linux x64 | [zlyme-installer-linux-x64.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/zlyme-installer-linux-x64.tar.gz) |
+          | Linux ARM64 | [zlyme-installer-linux-arm64.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/zlyme-installer-linux-arm64.tar.gz) |
+          | Linux ARMv7 | [zlyme-installer-linux-armv7.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/zlyme-installer-linux-armv7.tar.gz) |
+          | Linux i686 (32-bit) | [zlyme-installer-linux-i686.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/zlyme-installer-linux-i686.tar.gz) |
 
           ---
 
           ## Installation Instructions
 
           ### Windows
-          1. Download `spruceos-installer-windows.exe`
+          1. Download `zlyme-installer-windows.exe`
           2. Run the executable
           3. If Windows SmartScreen appears, click "More info" → "Run anyway" (app is not code-signed)
           4. The installer will automatically request administrator privileges when needed
@@ -91,8 +86,8 @@ jobs:
 
           ### Linux
           1. Download the appropriate binary for your architecture
-          2. Extract: `tar -xzf spruceos-installer-linux-*.tar.gz`
-          3. Run: `./spruceos-installer-linux-*`
+          2. Extract: `tar -xzf zlyme-installer-linux-*.tar.gz`
+          3. Run: `./zlyme-installer-linux-*`
           4. The installer will automatically request privileges
 
           ### macOS
@@ -105,20 +100,6 @@ jobs:
           - Restart the app after granting access
 
           **Opening unsigned apps:** https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac
-
-          ---
-
-          ## Two-card devices
-
-          Anbernic RG XX, Powkiddy RGB30, Miniloong Pocket 1 and MagicX Zero 28 /
-          Zero 40 / XU20 need a base system on their first card before spruce
-          will boot. Use the **TF1 Image** tab, pick your device, and write it to
-          the first card. It is a raw disk image, so it erases that whole card.
-          The list of images comes from `manifest.json` on this release.
-
-          Then use the **Stable** tab to install spruceOS to the second card,
-          exactly as you would for any other device. That card stays freely
-          swappable between supported devices.
 
           ---
           Universal binary for Apple Silicon (M1/M2/M3/M4) and Intel Macs. Not code-signed.

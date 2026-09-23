@@ -92,8 +92,8 @@ pub async fn extract_7z(
         let bundled_path = std::env::current_exe()
             .ok()
             .and_then(|exe| {
-                // exe is at: SpruceOSInstaller.app/Contents/MacOS/spruceos-installer
-                // We want: SpruceOSInstaller.app/Contents/Resources/7zz
+                // exe is at: ZlymeInstaller.app/Contents/MacOS/zlyme-installer
+                // We want: ZlymeInstaller.app/Contents/Resources/7zz
                 exe.parent()  // Contents/MacOS
                     .and_then(|p| p.parent())  // Contents
                     .map(|contents| contents.join("Resources/7zz"))

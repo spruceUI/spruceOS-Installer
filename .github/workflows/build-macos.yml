@@ -50,7 +50,7 @@ jobs:
           cat > launch-installer.command << 'EOF'
           #!/bin/bash
           SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-          APP_PATH="$SCRIPT_DIR/SpruceOSInstaller.app"
+          APP_PATH="$SCRIPT_DIR/ZlymeInstaller.app"
           echo "SpruceOS Installer Launcher"
           echo "============================"
           echo "Removing quarantine attribute..."
@@ -63,35 +63,35 @@ jobs:
       - name: Create Universal App Bundle
         run: |
           # Create universal binary using lipo
-          lipo -create -output spruceos-installer-universal \
-            target/aarch64-apple-darwin/release/spruceos-installer \
-            target/x86_64-apple-darwin/release/spruceos-installer
+          lipo -create -output zlyme-installer-universal \
+            target/aarch64-apple-darwin/release/zlyme-installer \
+            target/x86_64-apple-darwin/release/zlyme-installer
 
           # Verify the universal binary contains both architectures
           echo "Universal binary architectures:"
-          lipo -info spruceos-installer-universal
+          lipo -info zlyme-installer-universal
 
           # Create .app bundle structure (no spaces in name)
-          mkdir -p "SpruceOSInstaller.app/Contents/MacOS"
-          mkdir -p "SpruceOSInstaller.app/Contents/Resources"
+          mkdir -p "ZlymeInstaller.app/Contents/MacOS"
+          mkdir -p "ZlymeInstaller.app/Contents/Resources"
 
           # Copy universal binary
-          cp spruceos-installer-universal "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
-          chmod +x "SpruceOSInstaller.app/Contents/MacOS/spruceos-installer"
+          cp zlyme-installer-universal "ZlymeInstaller.app/Contents/MacOS/zlyme-installer"
+          chmod +x "ZlymeInstaller.app/Contents/MacOS/zlyme-installer"
 
           # Copy Info.plist and icon
-          cp "assets/Mac/Info.plist" "SpruceOSInstaller.app/Contents/"
-          cp "AppIcon.icns" "SpruceOSInstaller.app/Contents/Resources/"
+          cp "assets/Mac/Info.plist" "ZlymeInstaller.app/Contents/"
+          cp "AppIcon.icns" "ZlymeInstaller.app/Contents/Resources/"
 
           # Copy 7zz binary to Resources so it inherits app's unquarantine status
-          cp "assets/Mac/7zz" "SpruceOSInstaller.app/Contents/Resources/7zz"
-          chmod +x "SpruceOSInstaller.app/Contents/Resources/7zz"
+          cp "assets/Mac/7zz" "ZlymeInstaller.app/Contents/Resources/7zz"
+          chmod +x "ZlymeInstaller.app/Contents/Resources/7zz"
 
           # Remove quarantine attribute to prevent macOS Gatekeeper issues
-          xattr -cr "SpruceOSInstaller.app"
+          xattr -cr "ZlymeInstaller.app"
 
           # Create zip for distribution with both app and launcher
-          zip -r "SpruceOS-Installer-macOS-Universal.zip" "SpruceOSInstaller.app" "launch-installer.command"
+          zip -r "SpruceOS-Installer-macOS-Universal.zip" "ZlymeInstaller.app" "launch-installer.command"
 
       - name: Upload Universal artifact
         uses: actions/upload-artifact@v4
