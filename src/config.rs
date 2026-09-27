@@ -314,8 +314,6 @@ pub const SPRUCE_UPDATE_DELETE_PATHS: &[&str] = &[
     "README.md",
 ];
 
-pub const TORTOS_UPDATE_DELETE_PATHS: &[&str] = &["TortOS", ".tmp_update", "trimui"];
-
 pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
         name: "TortOS",
@@ -323,7 +321,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         info: "A fast, focused custom firmware for the TrimUI Brick and Brick Hammer.\nFormats the card and copies TortOS onto it; the first boot finishes the install.\nRuns from the card - take it out and the Brick boots stock again.\n[tortos.games](https://tortos.games)",
         display_name: Some("TortOS"),
         supports_update_mode: true,
-        update_directories: TORTOS_UPDATE_DELETE_PATHS,  // Roms, Bios and Saves stay
+        update_directories: &[],  // Eric: nothing is deleted on update, the zip copies over the top
         allowed_extensions: Some(&[".zip"]),
         excluded_patterns: None,
         asset_display_mappings: None,

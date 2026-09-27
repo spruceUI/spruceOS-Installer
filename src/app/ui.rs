@@ -505,44 +505,8 @@ impl eframe::App for InstallerApp {
                                 ui.heading("Update Preview");
                                 ui.add_space(12.0);
 
-                                ui.label("The following directories will be deleted:");
-                                ui.add_space(8.0);
-
-                                // Show directories to be deleted
-                                let update_dirs = REPO_OPTIONS[self.selected_repo_idx].update_directories;
-                                egui::ScrollArea::vertical()
-                                    .max_height(150.0)
-                                    .show(ui, |ui| {
-                                        for dir in update_dirs {
-                                            ui.label(format!("  \u{2022} {}/", dir));
-                                        }
-                                    });
-
-                                ui.add_space(12.0);
-
-                                if self.preserve_data {
-                                    ui.colored_label(
-                                        egui::Color32::from_rgb(104, 157, 106),
-                                        "The following user data will be preserved:"
-                                    );
-                                    ui.add_space(4.0);
-                                    ui.label("  \u{2022} RetroArch configs & overlays");
-                                    ui.label("  \u{2022} Emulator saves & settings");
-                                    ui.label("  \u{2022} Syncthing config & SSH keys");
-                                    ui.label("  \u{2022} Spruce config & theme backups");
-                                } else {
-                                    ui.colored_label(
-                                        ui.visuals().warn_fg_color,
-                                        "\u{26A0} User data preservation is disabled."
-                                    );
-                                    ui.add_space(4.0);
-                                    ui.label("Emulator configs, RetroArch settings, and other user");
-                                    ui.label("customizations within deleted directories will be lost.");
-                                    ui.colored_label(
-                                        egui::Color32::from_rgb(104, 157, 106),
-                                        "Roms, BIOS, and Saves will still be kept."
-                                    );
-                                }
+                                ui.label("Nothing is deleted. The release is copied over the existing card;");
+                                ui.label("games, saves and settings stay where they are.");
                                 ui.add_space(12.0);
                                 ui.separator();
                                 ui.add_space(8.0);
