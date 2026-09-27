@@ -16,20 +16,23 @@ pub enum CopyProgress {
     Error(String),
 }
 
-/// Recursively collect all files in a directory (including hidden files)
-fn collect_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+/// Recursively collect all directories and files (including hidden ones).
+/// Directories are listed too so empty ones reach the card.
+fn collect_files(dir: &Path) -> std::io::Result<(Vec<PathBuf>, Vec<PathBuf>)> {
+    let mut dirs = Vec::new();
     let mut files = Vec::new();
-    collect_files_recursive(dir, &mut files)?;
-    Ok(files)
+    collect_files_recursive(dir, &mut dirs, &mut files)?;
+    Ok((dirs, files))
 }
 
-fn collect_files_recursive(dir: &Path, files: &mut Vec<PathBuf>) -> std::io::Result<()> {
+fn collect_files_recursive(dir: &Path, dirs: &mut Vec<PathBuf>, files: &mut Vec<PathBuf>) -> std::io::Result<()> {
     if dir.is_dir() {
         for entry in std::fs::read_dir(dir)? {
             let entry = entry?;
             let path = entry.path();
             if path.is_dir() {
-                collect_files_recursive(&path, files)?;
+                dirs.push(path.clone());
+                collect_files_recursive(&path, dirs, files)?;
             } else {
                 files.push(path);
             }
@@ -65,8 +68,7 @@ pub async fn copy_directory_with_progress(
 
     let _ = progress_tx.send(CopyProgress::Counting);
 
-    // Collect all files
-    let files = collect_files(source_dir)
+    let (dirs, files) = collect_files(source_dir)
         .map_err(|e| format!("Failed to scan source directory: {}", e))?;
 
     let total_files = files.len() as u64;
@@ -80,6 +82,13 @@ pub async fn copy_directory_with_progress(
     if !dest_dir.exists() {
         std::fs::create_dir_all(dest_dir)
             .map_err(|e| format!("Failed to create destination directory: {}", e))?;
+    }
+
+    for dir in &dirs {
+        let relative_path = dir.strip_prefix(source_dir)
+            .map_err(|e| format!("Failed to get relative path: {}", e))?;
+        std::fs::create_dir_all(dest_dir.join(relative_path))
+            .map_err(|e| format!("Failed to create directory {:?}: {}", relative_path, e))?;
     }
 
     let mut copied_bytes: u64 = 0;
