@@ -52,11 +52,11 @@ use std::sync::Arc;
 
 /// The name of your OS (displayed in window title and UI)
 /// Examples: "SpruceOS", "Onion", "MinUI"
-pub const APP_NAME: &str = "SpruceOS";
+pub const APP_NAME: &str = "TortOS";
 
 /// Volume label applied to formatted SD cards (max 11 characters, uppercase)
 /// This is what the SD card will be named in file explorers
-pub const VOLUME_LABEL: &str = "SPRUCEOS";
+pub const VOLUME_LABEL: &str = "TORTOS";
 
 // ----------------------------------------------------------------------------
 // INTERNAL IDENTIFIERS (auto-generated from APP_NAME)
@@ -64,7 +64,7 @@ pub const VOLUME_LABEL: &str = "SPRUCEOS";
 // ----------------------------------------------------------------------------
 
 /// Window title (displayed in title bar)
-pub const WINDOW_TITLE: &str = "SpruceOS Installer";
+pub const WINDOW_TITLE: &str = "TortOS Installer";
 
 /// User-Agent string for HTTP requests to GitHub
 pub const USER_AGENT: &str = env!("CARGO_PKG_NAME");
@@ -76,7 +76,7 @@ pub const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 /// the check entirely. Forks: point this at your own repo, or set it to None.
 /// The check is silent - offline, rate limited or unreadable all mean "say
 /// nothing", because a nag the user cannot act on is worse than no nag.
-pub const UPDATE_CHECK_REPO: Option<&str> = Some("https://github.com/spruceUI/spruceOS-Installer");
+pub const UPDATE_CHECK_REPO: Option<&str> = None;
 
 /// Where the "new version" notice sends people. There is deliberately no
 /// auto-update: the binaries are not code signed, so a downloaded replacement
@@ -314,60 +314,20 @@ pub const SPRUCE_UPDATE_DELETE_PATHS: &[&str] = &[
     "README.md",
 ];
 
+pub const TORTOS_UPDATE_DELETE_PATHS: &[&str] = &["TortOS", ".tmp_update", "trimui"];
+
 pub const REPO_OPTIONS: &[RepoOption] = &[
     RepoOption {
-        name: "Stable",
-        url: "spruceUI/spruceOS",
-        info: "Stable releases of spruceOS.\n[Supported devices](https://github.com/spruceUI/spruceOS/wiki/Supported-Devices)",
-        display_name: Some("spruceOS Stable"),  // Display name for popups
-        supports_update_mode: true,  // Archive-based (.7z)
-        update_directories: SPRUCE_UPDATE_DELETE_PATHS,
-        allowed_extensions: Some(&[".7z"]),  // Only show 7z archives
-        // The incremental OTA package is a .7z too, so the extension filter
-        // cannot separate it from the full archive. Deliberately not anchored
-        // to the "spruce" prefix: if the archive naming ever changes, a
-        // prefixed pattern stops matching while still looking correct.
-        excluded_patterns: Some(&["OTA"]),
-        asset_display_mappings: None,
-        supports_preserve_mode: true,
-    },
-    RepoOption {
-        name: "Nightlies",
-        url: "spruceUI/spruceOSNightlies",
-        info: "Nightly development builds.\n⚠️ Warning: May be unstable!\n[Supported devices](https://github.com/spruceUI/spruceOS/wiki/Supported-Devices)",
-        display_name: Some("spruceOS Nightly"),  // Display name for popups
-        supports_update_mode: true,  // Supports archives
-        update_directories: SPRUCE_UPDATE_DELETE_PATHS,
-        allowed_extensions: Some(&[".7z"]),  // Match Stable; None listed everything
-        excluded_patterns: Some(&["OTA"]),
-        asset_display_mappings: None,
-        supports_preserve_mode: true,
-    },
-    RepoOption {
-        name: "TwigUI",
-        url: "spruceUI/twigUI-next",
-        info: "SpruceOS for the GKD Pixel 2.",
-        display_name: None,  // Falls back to "TwigUI"
-        supports_update_mode: false,  // Raw disk images only (.img.gz)
-        update_directories: &["Retroarch", "spruce"],
-        allowed_extensions: Some(&[".img.gz"]),  // Only show .img.gz files
+        name: "TortOS",
+        url: "ericreinsmidt/TortOS",
+        info: "A fast, focused custom firmware for the TrimUI Brick and Brick Hammer.\nFormats the card and copies TortOS onto it; the first boot finishes the install.\nRuns from the card - take it out and the Brick boots stock again.\n[tortos.games](https://tortos.games)",
+        display_name: Some("TortOS"),
+        supports_update_mode: true,
+        update_directories: TORTOS_UPDATE_DELETE_PATHS,  // Roms, Bios and Saves stay
+        allowed_extensions: Some(&[".zip"]),
         excluded_patterns: None,
         asset_display_mappings: None,
-        supports_preserve_mode: false,
-    },
-    RepoOption {
-        // Placeholder name; the manifest's display_name is what the popups use.
-        name: "TF1 Image",
-        url: "spruceUI/spruceOS-Installer",
-        info: "Base system card for two-card devices: Anbernic RG XX, Powkiddy RGB30, Miniloong Pocket 1, MagicX Zero 28 / Zero 40 / XU20.\nThe list comes from manifest.json on the installer's latest release.\nRaw disk image; erases the entire card. spruceOS then goes on the second card from the Stable tab.",
-        display_name: Some("TF1 image"),
-        supports_update_mode: false,  // Raw disk images always do a full burn
-        update_directories: &[],
-        // Every raw image format the manifest can name; the filter still runs on manifest assets.
-        allowed_extensions: Some(&[".img.7z", ".img.zip", ".img.xz", ".img.gz"]),
-        excluded_patterns: None,
-        asset_display_mappings: None,  // The manifest carries the device names
-        supports_preserve_mode: false,
+        supports_preserve_mode: false,  // spruce-config backup, nothing to preserve here
     },
 ];
 
@@ -470,14 +430,14 @@ pub fn load_app_icon() -> Option<egui::IconData> {
 // ----------------------------------------------------------------------------
 // CUSTOM FONT CONFIGURATION
 // ----------------------------------------------------------------------------
-// To use a different font, replace the file at assets/Fonts/nunwen.ttf
+// To use a different font, replace the file at assets/Fonts/josefin_sans.ttf
 // with your own TTF/OTF file and update CUSTOM_FONT_NAME if desired
 
 /// Embedded custom font (TTF/OTF format)
-pub const CUSTOM_FONT: &[u8] = include_bytes!("../assets/Fonts/nunwen.ttf");
+pub const CUSTOM_FONT: &[u8] = include_bytes!("../assets/Fonts/josefin_sans.ttf");
 
 /// Font family name (used to reference the font in the UI)
-pub const CUSTOM_FONT_NAME: &str = "Nunwen";
+pub const CUSTOM_FONT_NAME: &str = "Josefin Sans";
 
 /// Load custom fonts into egui
 /// Call this during app initialization, before creating the UI

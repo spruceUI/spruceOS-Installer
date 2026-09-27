@@ -24,13 +24,13 @@ jobs:
 
       - name: Rename binary
         shell: bash
-        run: cp "target/x86_64-pc-windows-msvc/release/spruceos-installer.exe" "spruceos-installer-windows.exe"
+        run: cp "target/x86_64-pc-windows-msvc/release/tortos-installer.exe" "tortos-installer-windows.exe"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: spruceos-installer-windows.exe
-          path: spruceos-installer-windows.exe
+          name: tortos-installer-windows.exe
+          path: tortos-installer-windows.exe
 
       - name: Upload to Beta Release
         uses: softprops/action-gh-release@v1
@@ -41,6 +41,6 @@ jobs:
           # user to "update" to a branch build.
           prerelease: true
           make_latest: false
-          files: spruceos-installer-windows.exe
+          files: tortos-installer-windows.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
