@@ -644,9 +644,9 @@ mod tests {
 
     #[test]
     fn test_get_ra_alias() {
-        assert_eq!(BoxArtScraper::get_ra_alias("FC"), Some("Nintendo - Nintendo Entertainment System"));
-        assert_eq!(BoxArtScraper::get_ra_alias("GBA"), Some("Nintendo - Game Boy Advance"));
-        assert_eq!(BoxArtScraper::get_ra_alias("fc"), Some("Nintendo - Nintendo Entertainment System")); // Case insensitive
+        assert_eq!(BoxArtScraper::get_ra_alias("NES"), Some("Nintendo - Nintendo Entertainment System"));
+        assert_eq!(BoxArtScraper::get_ra_alias("Game Boy Advance"), Some("Nintendo - Game Boy Advance"));
+        assert_eq!(BoxArtScraper::get_ra_alias("nes"), Some("Nintendo - Nintendo Entertainment System")); // Case insensitive
         assert_eq!(BoxArtScraper::get_ra_alias("UNKNOWN"), None);
     }
 
