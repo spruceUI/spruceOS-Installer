@@ -3646,7 +3646,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "spruceos-installer"
+name = "tortos-installer"
 version = "1.0.0"
 dependencies = [
  "dirs",

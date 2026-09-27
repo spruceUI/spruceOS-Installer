@@ -9,9 +9,9 @@
     <key>CFBundleIdentifier</key>
     <string>com.ericreinsmidt.tortos.installer</string>
     <key>CFBundleVersion</key>
-    <string>1.8.0</string>
+    <string>1.0.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.8.0</string>
+    <string>1.0.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>

@@ -1,6 +1,6 @@
 [package]
 name = "tortos-installer"
-version = "1.8.0"
+version = "1.0.0"
 edition = "2021"
 description = "TortOS SD Card Installer"
 authors = ["SpruceOS Team (https://github.com/spruceUI)", "CMTag (https://github.com/CMTag)",  "NextUI Team (https://github.com/LoveRetro)", "Helaas (https://github.com/Helaas)"]
