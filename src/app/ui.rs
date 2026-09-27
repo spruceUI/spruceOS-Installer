@@ -531,8 +531,8 @@ impl eframe::App for InstallerApp {
                                         egui::Vec2::ZERO,
                                         egui::Layout::left_to_right(egui::Align::Center),
                                         |ui| {
-                                            if ui.button("Continue").clicked() {
-                                                self.state = AppState::AwaitingConfirmation;
+                                            if ui.button("Update").clicked() {
+                                                self.start_installation(ctx.clone());
                                             }
                                         },
                                     );
@@ -543,23 +543,17 @@ impl eframe::App for InstallerApp {
                                 ui.colored_label(ui.visuals().warn_fg_color, "WARNING");
                                 ui.add_space(12.0);
 
-                                if self.update_mode {
-                                    ui.label("The selected directories will be deleted.");
-                                    ui.add_space(8.0);
-                                    ui.label("Continue with the update?");
-                                } else {
-                                    ui.label("This will DELETE ALL DATA on the selected drive:");
-                                    ui.add_space(8.0);
+                                ui.label("This will DELETE ALL DATA on the selected drive:");
+                                ui.add_space(8.0);
 
-                                    if let Some(idx) = self.selected_drive_idx {
-                                        if let Some(drive) = self.drives.get(idx) {
-                                            ui.label(drive.display_name());
-                                        }
+                                if let Some(idx) = self.selected_drive_idx {
+                                    if let Some(drive) = self.drives.get(idx) {
+                                        ui.label(drive.display_name());
                                     }
-
-                                    ui.add_space(12.0);
-                                    ui.label("Are you sure you want to continue?");
                                 }
+
+                                ui.add_space(12.0);
+                                ui.label("Are you sure you want to continue?");
 
                                 ui.add_space(12.0);
                                 ui.separator();
@@ -581,12 +575,7 @@ impl eframe::App for InstallerApp {
                                         egui::Vec2::ZERO,
                                         egui::Layout::left_to_right(egui::Align::Center),
                                         |ui| {
-                                            let button_text = if self.update_mode {
-                                                "Yes, update"
-                                            } else {
-                                                "Yes, install"
-                                            };
-                                            if ui.button(button_text).clicked() {
+                                            if ui.button("Yes, install").clicked() {
                                                 self.start_installation(ctx.clone());
                                             }
                                         },
