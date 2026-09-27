@@ -38,7 +38,7 @@ jobs:
             - **Linux ARMv7:** `zlyme-installer-linux-armv7.tar.gz`
 
             ### macOS
-            - **SpruceOS-Installer-macOS-Universal.zip** (Apple Silicon + Intel)
+            - **zlyme-installer-macOS-Universal.zip** (Apple Silicon + Intel)
 
             ---
 

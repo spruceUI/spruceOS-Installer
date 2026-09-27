@@ -3,10 +3,10 @@
   <assemblyIdentity
     version="1.0.0.0"
     processorArchitecture="*"
-    name="SpruceOS.Installer"
+    name="zlyme.Installer"
     type="win32"
   />
-  <description>SpruceOS SD Card Installer</description>
+  <description>zlyme SD Card Installer</description>
   <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
     <security>
       <requestedPrivileges>

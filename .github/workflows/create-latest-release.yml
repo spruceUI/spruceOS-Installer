@@ -46,7 +46,7 @@ jobs:
           gh release download "$SOURCE_TAG" --repo "$GITHUB_REPOSITORY" --dir dist --clobber
           # A release missing a platform is worse than no release at all.
           for f in zlyme-installer-windows.exe \
-                   SpruceOS-Installer-macOS-Universal.zip \
+                   zlyme-installer-macOS-Universal.zip \
                    zlyme-installer-linux-x64.tar.gz \
                    zlyme-installer-linux-arm64.tar.gz \
                    zlyme-installer-linux-armv7.tar.gz \
@@ -66,7 +66,7 @@ jobs:
           | Platform | Download |
           |----------|----------|
           | Windows (x64) | [zlyme-installer-windows.exe](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/zlyme-installer-windows.exe) |
-          | macOS (Apple Silicon + Intel) | [SpruceOS-Installer-macOS-Universal.zip](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/SpruceOS-Installer-macOS-Universal.zip) |
+          | macOS (Apple Silicon + Intel) | [zlyme-installer-macOS-Universal.zip](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/zlyme-installer-macOS-Universal.zip) |
           | Linux x64 | [zlyme-installer-linux-x64.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/zlyme-installer-linux-x64.tar.gz) |
           | Linux ARM64 | [zlyme-installer-linux-arm64.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/zlyme-installer-linux-arm64.tar.gz) |
           | Linux ARMv7 | [zlyme-installer-linux-armv7.tar.gz](https://github.com/spruceUI/spruceOS-Installer/releases/download/__TAG__/zlyme-installer-linux-armv7.tar.gz) |
@@ -118,7 +118,7 @@ jobs:
           gh release create "$TAG" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --target main \
-            --title "SpruceOS Installer $TAG" \
+            --title "zlyme Installer $TAG" \
             --notes-file notes.md \
             --draft
           # Reporting must not fail a run that already produced the draft.

@@ -51,11 +51,11 @@ jobs:
           #!/bin/bash
           SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
           APP_PATH="$SCRIPT_DIR/ZlymeInstaller.app"
-          echo "SpruceOS Installer Launcher"
+          echo "zlyme Installer Launcher"
           echo "============================"
           echo "Removing quarantine attribute..."
           xattr -d com.apple.quarantine "$APP_PATH" 2>/dev/null
-          echo "Launching SpruceOS Installer..."
+          echo "Launching zlyme Installer..."
           open "$APP_PATH"
           EOF
           chmod +x launch-installer.command
@@ -91,13 +91,13 @@ jobs:
           xattr -cr "ZlymeInstaller.app"
 
           # Create zip for distribution with both app and launcher
-          zip -r "SpruceOS-Installer-macOS-Universal.zip" "ZlymeInstaller.app" "launch-installer.command"
+          zip -r "zlyme-installer-macOS-Universal.zip" "ZlymeInstaller.app" "launch-installer.command"
 
       - name: Upload Universal artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SpruceOS-Installer-macOS-Universal
-          path: SpruceOS-Installer-macOS-Universal.zip
+          name: zlyme-installer-macOS-Universal
+          path: zlyme-installer-macOS-Universal.zip
 
       - name: Upload to Beta Release
         uses: softprops/action-gh-release@v1
@@ -108,6 +108,6 @@ jobs:
           # user to "update" to a branch build.
           prerelease: true
           make_latest: false
-          files: SpruceOS-Installer-macOS-Universal.zip
+          files: zlyme-installer-macOS-Universal.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
