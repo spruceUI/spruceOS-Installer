@@ -18,6 +18,7 @@ pub fn get_boxart_db(system: &str) -> Option<&'static str> {
         "GAME BOY" => Some(include_boxart_db!("GB")),
         "GENESIS" => Some(include_boxart_db!("MD")),
         "TURBOGRAFX-16" => Some(include_boxart_db!("PCE")),
+        "PCECD" => Some(include_boxart_db!("PCECD")),
         "GAME GEAR" => Some(include_boxart_db!("GG")),
         "SNES" => Some(include_boxart_db!("SFC")),
         "NEO GEO POCKET" => Some(include_boxart_db!("NGP")),

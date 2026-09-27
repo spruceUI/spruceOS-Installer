@@ -66,21 +66,9 @@ impl BoxArtScraper {
     }
 
     /// Find the best matching image name for a given ROM
-    pub fn find_image_name(&mut self, sys_name: &str, rom_name: &str) -> Option<String> {
-        // Load and cache the image list for this system from embedded database
-        if !self.cache.contains_key(sys_name) {
-            let content = boxart_db::get_boxart_db(sys_name)?;
-
-            let image_list: Vec<String> = content.lines().map(|s| s.to_string()).collect();
-            let tokenized: Vec<(String, HashSet<String>)> = image_list
-                .iter()
-                .map(|name| {
-                    let stripped = Self::normalize_name(&name.replace(".png", ""));
-                    (name.clone(), Self::tokenize(&stripped))
-                })
-                .collect();
-            self.cache.insert(sys_name.to_string(), tokenized);
-        }
+    /// Returns the image name and the libretro collection it belongs to.
+    pub fn find_image_name(&mut self, sys_name: &str, rom_name: &str) -> Option<(String, &'static str)> {
+        let mapping = Self::get_system_mapping(sys_name)?;
 
         let rom_without_ext = Path::new(rom_name)
             .file_stem()
@@ -111,7 +99,34 @@ impl BoxArtScraper {
             rom_without_ext
         };
 
-        self.find_image_from_list(sys_name, search_name)
+        if self.load_list(sys_name) {
+            if let Some(img) = self.find_image_from_list(sys_name, search_name) {
+                return Some((img, mapping.libretro_name));
+            }
+        }
+        let (ra_name, key) = mapping.fallback?;
+        if !self.load_list(key) {
+            return None;
+        }
+        self.find_image_from_list(key, search_name).map(|img| (img, ra_name))
+    }
+
+    /// Load and cache the embedded name list for a key; false when there is none.
+    fn load_list(&mut self, key: &str) -> bool {
+        if !self.cache.contains_key(key) {
+            let Some(content) = boxart_db::get_boxart_db(key) else {
+                return false;
+            };
+            let tokenized: Vec<(String, HashSet<String>)> = content
+                .lines()
+                .map(|name| {
+                    let stripped = Self::normalize_name(&name.replace(".png", ""));
+                    (name.to_string(), Self::tokenize(&stripped))
+                })
+                .collect();
+            self.cache.insert(key.to_string(), tokenized);
+        }
+        true
     }
 
     fn re_parens() -> &'static Regex {
@@ -351,13 +366,10 @@ impl BoxArtScraper {
     /// Otherwise the original PNG is saved directly.
     pub async fn download_boxart(
         client: &reqwest::Client,
-        sys_name: &str,
+        ra_name: &str,
         image_name: &str,
         dest_path: &Path,
     ) -> Result<(), String> {
-        let ra_name = Self::get_ra_alias(sys_name)
-            .ok_or_else(|| format!("No Libretro alias found for system: {}", sys_name))?;
-
         let boxart_url = format!(
             "http://thumbnails.libretro.com/{}/Named_Boxarts/{}",
             ra_name,
@@ -485,11 +497,10 @@ impl BoxArtScraper {
             let progress_tx = progress_tx.clone();
             let client = client.clone();
             let dest_path = dest_path.clone();
-            let sys_name = sys_name.clone();
 
             let handle = tokio::spawn(async move {
-                let result = if let Some(img_name) = image_name {
-                    BoxArtScraper::download_boxart(&client, &sys_name, &img_name, &dest_path).await
+                let result = if let Some((img_name, ra_name)) = image_name {
+                    BoxArtScraper::download_boxart(&client, ra_name, &img_name, &dest_path).await
                 } else {
                     Err("No matching image found".to_string())
                 };

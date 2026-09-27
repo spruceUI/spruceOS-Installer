@@ -475,20 +475,22 @@ pub struct SystemMapping {
     pub libretro_name: &'static str,
     /// Subfolder where boxart images are saved (e.g., "Imgs")
     pub boxart_subfolder: &'static str,
+    /// Second collection tried when the first has no match: (libretro name, name list key)
+    pub fallback: Option<(&'static str, &'static str)>,
 }
 
 pub const SYSTEM_MAPPINGS: &[SystemMapping] = &[
-    SystemMapping { folder_name: "NES", libretro_name: "Nintendo - Nintendo Entertainment System", boxart_subfolder: ".media" },
-    SystemMapping { folder_name: "Master System", libretro_name: "Sega - Master System - Mark III", boxart_subfolder: ".media" },
-    SystemMapping { folder_name: "Game Boy", libretro_name: "Nintendo - Game Boy", boxart_subfolder: ".media" },
-    SystemMapping { folder_name: "Genesis", libretro_name: "Sega - Mega Drive - Genesis", boxart_subfolder: ".media" },
-    SystemMapping { folder_name: "TurboGrafx-16", libretro_name: "NEC - PC Engine - TurboGrafx 16", boxart_subfolder: ".media" },
-    SystemMapping { folder_name: "Game Gear", libretro_name: "Sega - Game Gear", boxart_subfolder: ".media" },
-    SystemMapping { folder_name: "SNES", libretro_name: "Nintendo - Super Nintendo Entertainment System", boxart_subfolder: ".media" },
-    SystemMapping { folder_name: "Neo Geo Pocket", libretro_name: "SNK - Neo Geo Pocket", boxart_subfolder: ".media" },
-    SystemMapping { folder_name: "Game Boy Color", libretro_name: "Nintendo - Game Boy Color", boxart_subfolder: ".media" },
-    SystemMapping { folder_name: "Neo Geo Pocket Color", libretro_name: "SNK - Neo Geo Pocket Color", boxart_subfolder: ".media" },
-    SystemMapping { folder_name: "Game Boy Advance", libretro_name: "Nintendo - Game Boy Advance", boxart_subfolder: ".media" },
+    SystemMapping { folder_name: "NES", libretro_name: "Nintendo - Nintendo Entertainment System", boxart_subfolder: ".media", fallback: None },
+    SystemMapping { folder_name: "Master System", libretro_name: "Sega - Master System - Mark III", boxart_subfolder: ".media", fallback: None },
+    SystemMapping { folder_name: "Game Boy", libretro_name: "Nintendo - Game Boy", boxart_subfolder: ".media", fallback: None },
+    SystemMapping { folder_name: "Genesis", libretro_name: "Sega - Mega Drive - Genesis", boxart_subfolder: ".media", fallback: None },
+    SystemMapping { folder_name: "TurboGrafx-16", libretro_name: "NEC - PC Engine - TurboGrafx 16", boxart_subfolder: ".media", fallback: Some(("NEC - PC Engine CD - TurboGrafx-CD", "PCECD")) },
+    SystemMapping { folder_name: "Game Gear", libretro_name: "Sega - Game Gear", boxart_subfolder: ".media", fallback: None },
+    SystemMapping { folder_name: "SNES", libretro_name: "Nintendo - Super Nintendo Entertainment System", boxart_subfolder: ".media", fallback: None },
+    SystemMapping { folder_name: "Neo Geo Pocket", libretro_name: "SNK - Neo Geo Pocket", boxart_subfolder: ".media", fallback: None },
+    SystemMapping { folder_name: "Game Boy Color", libretro_name: "Nintendo - Game Boy Color", boxart_subfolder: ".media", fallback: None },
+    SystemMapping { folder_name: "Neo Geo Pocket Color", libretro_name: "SNK - Neo Geo Pocket Color", boxart_subfolder: ".media", fallback: None },
+    SystemMapping { folder_name: "Game Boy Advance", libretro_name: "Nintendo - Game Boy Advance", boxart_subfolder: ".media", fallback: None },
 ];
 
 /// Boxart path and naming configuration
