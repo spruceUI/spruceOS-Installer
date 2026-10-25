@@ -20,7 +20,7 @@ use crate::config::{REPO_OPTIONS, TEMP_PREFIX, VOLUME_LABEL, UPDATE_PRESERVE_PAT
 use crate::burn::{burn_image, BurnProgress};
 use crate::copy::{copy_directory_with_progress, CopyProgress};
 use crate::delete::{delete_directories, DeleteProgress};
-use crate::drives::DriveInfo;
+use crate::drives::{default_drive_index, DriveInfo};
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
 use crate::github::{asset_file_paths, download_asset_group, get_latest_release, split_volume_suffix, DownloadProgress, Asset};
@@ -33,16 +33,12 @@ use tokio_util::sync::CancellationToken;
 
 impl InstallerApp {
     pub(super) fn ensure_selection_valid(&mut self) {
-        if !self.drives.is_empty() && self.selected_drive_idx.is_none() {
-            self.selected_drive_idx = Some(0);
+        if self.selected_drive_idx.is_none() {
+            self.selected_drive_idx = default_drive_index(&self.drives);
         }
         if let Some(idx) = self.selected_drive_idx {
             if idx >= self.drives.len() {
-                self.selected_drive_idx = if self.drives.is_empty() {
-                    None
-                } else {
-                    Some(0)
-                };
+                self.selected_drive_idx = default_drive_index(&self.drives);
             }
         }
     }

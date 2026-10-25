@@ -26,6 +26,11 @@ use eframe::egui;
 use egui_thematic::render_theme_panel;
 use tokio::sync::mpsc;
 
+/// Widest the drive picker may grow; a longer selection is cut off with an
+/// ellipsis so the refresh button beside it stays in the window. The open
+/// menu still shows full names.
+const DRIVE_PICKER_MAX_WIDTH: f32 = 260.0;
+
 impl eframe::App for InstallerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Show modal dialogs for confirmation or status
@@ -1090,15 +1095,18 @@ impl eframe::App for InstallerApp {
                             };
 
                             ui.add_enabled_ui(enabled, |ui| {
+                                ui.set_max_width(DRIVE_PICKER_MAX_WIDTH);
                                 egui::ComboBox::from_id_salt("drive_select")
                                     .selected_text(&selected_text)
+                                    .truncate()
                                     .show_ui(ui, |ui| {
                                         for (idx, drive) in self.drives.iter().enumerate() {
-                                            ui.selectable_value(
-                                                &mut self.selected_drive_idx,
-                                                Some(idx),
-                                                drive.display_name(),
-                                            );
+                                            let text = if drive.is_card_sized() {
+                                                drive.display_name()
+                                            } else {
+                                                format!("\u{26A0} {}", drive.display_name())
+                                            };
+                                            ui.selectable_value(&mut self.selected_drive_idx, Some(idx), text);
                                         }
                                     });
                             });

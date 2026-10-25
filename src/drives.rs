@@ -15,17 +15,67 @@ pub struct DriveInfo {
     pub label: String,
     /// Total size in bytes
     pub size_bytes: u64,
+    /// Bus the device is attached by (e.g., "USB", "Secure Digital"); empty if unknown
+    pub bus: String,
+    /// Device or media name the hardware reports (e.g., "SD Card Reader"); empty if unknown
+    pub media_name: String,
 }
 
+/// Drives at or above this size are flagged in the drive menu: anything this
+/// large is almost certainly a hard drive or SSD, not an SD card.
+const CARD_SIZE_LIMIT_BYTES: u64 = 1_100_000_000_000;
+
 impl DriveInfo {
+    /// "name - label - size (bus; media name)", e.g.
+    /// "disk4 - SPRUCE - 128 GB (USB; SD Card Reader)". Empty parts are left
+    /// out, so every platform shares the format with whatever it can report.
     pub fn display_name(&self) -> String {
-        let size_gb = self.size_bytes as f64 / 1_073_741_824.0;
-        if self.label.is_empty() {
-            format!("{} ({:.1} GB)", self.name, size_gb)
-        } else {
-            format!("{} - {} ({:.1} GB)", self.name, self.label, size_gb)
+        let mut text = self.name.clone();
+        if !self.label.is_empty() {
+            text.push_str(&format!(" - {}", self.label));
         }
+        text.push_str(&format!(" - {}", format_size_si(self.size_bytes)));
+
+        let hardware: Vec<&str> = [self.bus.as_str(), self.media_name.as_str()]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect();
+        if !hardware.is_empty() {
+            text.push_str(&format!(" ({})", hardware.join("; ")));
+        }
+        text
     }
+
+    pub fn is_card_sized(&self) -> bool {
+        self.size_bytes < CARD_SIZE_LIMIT_BYTES
+    }
+}
+
+/// The drive to preselect: the first card-sized one. None when every drive is
+/// large, so erasing one takes a deliberate choice.
+pub fn default_drive_index(drives: &[DriveInfo]) -> Option<usize> {
+    drives.iter().position(DriveInfo::is_card_sized)
+}
+
+/// Formats a byte count in SI units (1 GB = 10^9 bytes), the way card and
+/// drive packaging is labeled. One decimal below 10, whole numbers above.
+fn format_size_si(bytes: u64) -> String {
+    const UNITS: [&str; 6] = ["B", "kB", "MB", "GB", "TB", "PB"];
+
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    // Step up while the rounded value would print as 1000 or more
+    while value >= 999.5 && unit < UNITS.len() - 1 {
+        value /= 1000.0;
+        unit += 1;
+    }
+
+    let number = if value < 10.0 {
+        format!("{:.1}", value).trim_end_matches(".0").to_string()
+    } else {
+        format!("{:.0}", value)
+    };
+    format!("{} {}", number, UNITS[unit])
 }
 
 // =============================================================================
@@ -184,6 +234,8 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
                     mount_path: Some(PathBuf::from(format!("{}:\\", letter))),
                     label,
                     size_bytes: total_bytes,
+                    bus: String::new(),
+                    media_name: String::new(),
                 });
             }
         }
@@ -314,6 +366,8 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
             mount_path,
             label,
             size_bytes,
+            bus: String::new(),
+            media_name: String::new(),
         });
     }
 
@@ -362,78 +416,109 @@ fn find_linux_mount_info(device_path: &str, device_name: &str) -> (Option<PathBu
 // macOS Implementation
 // =============================================================================
 
+/// The subset of `diskutil list -plist` this module reads.
 #[cfg(target_os = "macos")]
-fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(default, rename_all = "PascalCase")]
+struct DiskutilList {
+    all_disks_and_partitions: Vec<ListedDisk>,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(default, rename_all = "PascalCase")]
+struct ListedDisk {
+    device_identifier: String,
+    /// Set only when the whole disk holds one filesystem, with no partitions
+    volume_name: String,
+    partitions: Vec<ListedPartition>,
+}
+
+#[cfg(target_os = "macos")]
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(default, rename_all = "PascalCase")]
+struct ListedPartition {
+    device_identifier: String,
+    volume_name: String,
+}
+
+#[cfg(target_os = "macos")]
+impl ListedDisk {
+    /// The volume name of the lowest-numbered partition that has one, or the
+    /// disk's own name when it is formatted whole. "EFI" is skipped: every GPT
+    /// disk has that system partition, so it names nothing. Empty if nothing
+    /// else is named.
+    fn label(&self) -> String {
+        let names_the_disk = |name: &str| !name.is_empty() && name != "EFI";
+        // "disk8s3" is partition 3; anything unparseable sorts last
+        let number = |p: &ListedPartition| {
+            p.device_identifier
+                .rsplit_once('s')
+                .and_then(|(_, n)| n.parse::<u32>().ok())
+                .unwrap_or(u32::MAX)
+        };
+        self.partitions
+            .iter()
+            .filter(|p| names_the_disk(&p.volume_name))
+            .min_by_key(|p| number(p))
+            .map(|p| p.volume_name.as_str())
+            .or(Some(self.volume_name.as_str()).filter(|name| names_the_disk(name)))
+            .unwrap_or_default()
+            .to_string()
+    }
+}
+
+/// The subset of `diskutil info -plist <disk>` this module reads. String keys
+/// are empty, not absent, when they do not apply (e.g., `MountPoint` on a
+/// whole disk), but every key defaults so an older macOS cannot fail the parse.
+#[cfg(target_os = "macos")]
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(default, rename_all = "PascalCase")]
+struct DiskutilInfo {
+    total_size: u64,
+    media_name: String,
+    media_type: String,
+    mount_point: String,
+    bus_protocol: String,
+    removable_media: bool,
+    ejectable: bool,
+    /// Absent reads as external, so an unexpected plist lists a disk rather
+    /// than hiding the card the user is trying to flash.
+    internal: bool,
+}
+
+/// Runs `diskutil` with `args` and decodes its plist output.
+#[cfg(target_os = "macos")]
+fn run_diskutil<T: serde::de::DeserializeOwned>(args: &[&str]) -> Option<T> {
     use std::process::Command;
 
-    let output = Command::new("diskutil")
-        .args(["info", disk_id])
-        .output()
-        .ok()?;
-
+    let output = match Command::new("diskutil").args(args).output() {
+        Ok(output) => output,
+        Err(e) => {
+            crate::debug::log(&format!("Failed to run diskutil {:?}: {}", args, e));
+            return None;
+        }
+    };
     if !output.status.success() {
-        crate::debug::log(&format!("{} - diskutil info failed", disk_id));
+        crate::debug::log(&format!("diskutil {:?} failed", args));
         return None;
     }
 
-    let info = String::from_utf8_lossy(&output.stdout);
+    plist::from_bytes(&output.stdout)
+        .inspect_err(|e| crate::debug::log(&format!("diskutil {:?} gave an unreadable plist: {}", args, e)))
+        .ok()
+}
 
-    let mut size_bytes: u64 = 0;
-    let mut label = String::new();
-    let mut mount_point: Option<PathBuf> = None;
-    let mut is_removable = false;
-    let mut is_ejectable = false;
-    let mut is_internal = false;
-    let mut protocol = String::new();
-    let mut media_type = String::new();
-    let mut device_location = String::new();
+#[cfg(target_os = "macos")]
+fn get_macos_disk_info(disk: &ListedDisk) -> Option<DriveInfo> {
+    let disk_id = disk.device_identifier.as_str();
+    let info: DiskutilInfo = run_diskutil(&["info", "-plist", disk_id])?;
+    macos_drive_from_info(disk_id, disk.label(), info)
+}
 
-    for line in info.lines() {
-        let line = line.trim();
-
-        if line.starts_with("Disk Size:") || line.starts_with("Total Size:") {
-            if let Some(start) = line.find('(') {
-                if let Some(end) = line.find(" Bytes") {
-                    if let Ok(bytes) = line[start + 1..end].trim().replace(",", "").parse::<u64>() {
-                        size_bytes = bytes;
-                    }
-                }
-            }
-        } else if line.starts_with("Volume Name:") {
-            label = line.replace("Volume Name:", "").trim().to_string();
-            if label == "Not applicable (no file system)" {
-                label = String::new();
-            }
-        } else if line.starts_with("Device / Media Name:") {
-            // Fallback label if Volume Name is empty
-            if label.is_empty() {
-                label = line.replace("Device / Media Name:", "").trim().to_string();
-            }
-        } else if line.starts_with("Mount Point:") || line.starts_with("Mounted:") {
-            let mp = line.replace("Mount Point:", "").replace("Mounted:", "").trim().to_string();
-            if !mp.is_empty() && mp != "Not applicable (no file system)" {
-                mount_point = Some(PathBuf::from(mp));
-            }
-        } else if line.starts_with("Removable Media:") {
-            // Parse "Removable Media:     Removable" or "Removable Media:     Yes"
-            let value = line.replace("Removable Media:", "").trim().to_lowercase();
-            is_removable = value.contains("removable") || value == "yes";
-        } else if line.starts_with("Ejectable:") {
-            let value = line.replace("Ejectable:", "").trim().to_lowercase();
-            is_ejectable = value == "yes";
-        } else if line.starts_with("Protocol:") {
-            protocol = line.replace("Protocol:", "").trim().to_string();
-        } else if line.starts_with("Device Location:") {
-            device_location = line.replace("Device Location:", "").trim().to_string();
-            is_internal = device_location.to_lowercase().contains("internal");
-        } else if line.starts_with("Media Type:") {
-            media_type = line.replace("Media Type:", "").trim().to_string();
-        }
-    }
-
-    // Enhanced detection
-    let proto_lower = protocol.to_lowercase();
-    let loc_lower = device_location.to_lowercase();
+#[cfg(target_os = "macos")]
+fn macos_drive_from_info(disk_id: &str, label: String, info: DiskutilInfo) -> Option<DriveInfo> {
+    let proto_lower = info.bus_protocol.to_lowercase();
 
     // Skip disk images (DMGs)
     if proto_lower.contains("disk image") {
@@ -443,50 +528,45 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
 
     // Check various removable indicators
     let is_sd_card = proto_lower.contains("secure digital") || proto_lower.contains("sd");
-    let is_usb = proto_lower.contains("usb") || loc_lower.contains("usb");
-    let is_external = loc_lower.contains("external");
-    
+    let is_usb = proto_lower.contains("usb");
+    let is_external = !info.internal;
+
     // SD cards and USB are always removable
-    if is_sd_card || is_usb {
-        is_removable = true;
-    }
+    let is_removable = info.removable_media || is_sd_card || is_usb;
 
     // Debug output
     crate::debug::log(&format!("  label: '{}'", label));
-    crate::debug::log(&format!("  size_bytes: {}", size_bytes));
-    crate::debug::log(&format!("  protocol: '{}'", protocol));
-    crate::debug::log(&format!("  media_type: '{}'", media_type));
-    crate::debug::log(&format!("  device_location: '{}'", device_location));
+    crate::debug::log(&format!("  media_name: '{}'", info.media_name));
+    crate::debug::log(&format!("  size_bytes: {}", info.total_size));
+    crate::debug::log(&format!("  protocol: '{}'", info.bus_protocol));
+    crate::debug::log(&format!("  media_type: '{}'", info.media_type));
     crate::debug::log(&format!("  is_removable: {}", is_removable));
-    crate::debug::log(&format!("  is_ejectable: {}", is_ejectable));
-    crate::debug::log(&format!("  is_internal: {}", is_internal));
+    crate::debug::log(&format!("  is_ejectable: {}", info.ejectable));
+    crate::debug::log(&format!("  internal: {}", info.internal));
     crate::debug::log(&format!("  is_sd_card: {}", is_sd_card));
     crate::debug::log(&format!("  is_usb: {}", is_usb));
-    crate::debug::log(&format!("  is_external: {}", is_external));
 
     // A disk is usable if it's removable, ejectable, SD card, USB, or external
-    let is_usable = is_removable || is_ejectable || is_sd_card || is_usb || is_external;
+    let is_usable = is_removable || info.ejectable || is_sd_card || is_usb || is_external;
 
     crate::debug::log(&format!("  is_usable: {}", is_usable));
 
-    // Skip synthesized disks
-    if loc_lower.contains("synthesized") {
-        crate::debug::log("  REJECTED: synthesized disk");
-        return None;
-    }
-
     // Accept if usable and has size
-    if is_usable && size_bytes > 0 {
+    if is_usable && info.total_size > 0 {
         crate::debug::log("  ACCEPTED");
         Some(DriveInfo {
             name: disk_id.to_string(),
             device_path: format!("/dev/{}", disk_id),
-            mount_path: mount_point,
-            label: if label.is_empty() { disk_id.to_string() } else { label },
-            size_bytes,
+            mount_path: Some(info.mount_point)
+                .filter(|mp| !mp.is_empty())
+                .map(PathBuf::from),
+            label,
+            size_bytes: info.total_size,
+            bus: info.bus_protocol,
+            media_name: info.media_name,
         })
     } else {
-        crate::debug::log(&format!("  REJECTED: not usable (usable={}, size={})", is_usable, size_bytes));
+        crate::debug::log(&format!("  REJECTED: not usable (usable={}, size={})", is_usable, info.total_size));
         None
     }
 }
@@ -497,32 +577,23 @@ fn get_macos_disk_info(disk_id: &str) -> Option<DriveInfo> {
 
 #[cfg(target_os = "macos")]
 pub fn get_removable_drives() -> Vec<DriveInfo> {
-    use std::process::Command;
-    use std::collections::HashSet;
-
     crate::debug::log_section("macOS Drive Detection");
 
     let mut drives = Vec::new();
-    let mut disk_ids: HashSet<String> = HashSet::new();
 
-    if let Ok(output) = Command::new("diskutil")
-        .args(["list", "-plist"])
-        .output()
-    {
-        if output.status.success() {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            parse_diskutil_plist(&stdout, &mut disk_ids);
-            crate::debug::log(&format!("Found disk IDs: {:?}", disk_ids));
-        } else {
-            crate::debug::log("diskutil list -plist failed");
-        }
-    } else {
-        crate::debug::log("Failed to run diskutil");
-    }
+    // "physical" leaves out disk images and the synthesized disks APFS
+    // containers appear as, which share their store's bus and location.
+    let disks = run_diskutil::<DiskutilList>(&["list", "-plist", "physical"])
+        .map(|list| list.all_disks_and_partitions)
+        .unwrap_or_default();
+    crate::debug::log(&format!(
+        "Found disk IDs: {:?}",
+        disks.iter().map(|d| d.device_identifier.as_str()).collect::<Vec<_>>()
+    ));
 
-    for disk_id in &disk_ids {
-        crate::debug::log(&format!("\nChecking disk: {}", disk_id));
-        if let Some(drive_info) = get_macos_disk_info(disk_id) {
+    for disk in &disks {
+        crate::debug::log(&format!("\nChecking disk: {}", disk.device_identifier));
+        if let Some(drive_info) = get_macos_disk_info(disk) {
             crate::debug::log(&format!(">>> ACCEPTED: {} - {} ({} bytes)",
                 drive_info.name, drive_info.label, drive_info.size_bytes));
             drives.push(drive_info);
@@ -533,35 +604,6 @@ pub fn get_removable_drives() -> Vec<DriveInfo> {
     drives
 }
 
-#[cfg(target_os = "macos")]
-fn parse_diskutil_plist(stdout: &str, disk_ids: &mut std::collections::HashSet<String>) {
-    let mut in_whole_disks = false;
-    
-    for line in stdout.lines() {
-        let line = line.trim();
-        
-        if line.contains("<key>WholeDisks</key>") {
-            in_whole_disks = true;
-            continue;
-        }
-        
-        if in_whole_disks && (line.starts_with("<key>") || line == "</array>") {
-            if line.starts_with("<key>") {
-                in_whole_disks = false;
-            }
-        }
-        
-        if in_whole_disks && line.starts_with("<string>disk") {
-            if let Some(start) = line.find("disk") {
-                if let Some(end) = line.find("</string>") {
-                    let disk_id = &line[start..end];
-                    disk_ids.insert(disk_id.to_string());
-                }
-            }
-        }
-    }
-}
-
 // =============================================================================
 // Fallback for other platforms
 // =============================================================================
@@ -570,4 +612,184 @@ fn parse_diskutil_plist(stdout: &str, disk_ids: &mut std::collections::HashSet<S
 pub fn get_removable_drives() -> Vec<DriveInfo> {
     eprintln!("Warning: Drive detection not implemented for this platform");
     Vec::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn drive(size_bytes: u64, label: &str, bus: &str, media_name: &str) -> DriveInfo {
+        DriveInfo {
+            name: "disk4".to_string(),
+            device_path: "/dev/disk4".to_string(),
+            mount_path: None,
+            label: label.to_string(),
+            size_bytes,
+            bus: bus.to_string(),
+            media_name: media_name.to_string(),
+        }
+    }
+
+    #[test]
+    fn sizes_read_like_the_packaging() {
+        assert_eq!(format_size_si(31_900_000_000), "32 GB");
+        assert_eq!(format_size_si(128_000_000_000), "128 GB");
+        assert_eq!(format_size_si(2_000_000_000_000), "2 TB");
+        assert_eq!(format_size_si(7_940_000_000), "7.9 GB");
+        assert_eq!(format_size_si(1_100_000_000_000), "1.1 TB");
+        assert_eq!(format_size_si(512), "512 B");
+    }
+
+    #[test]
+    fn sizes_that_round_to_a_thousand_move_up_a_unit() {
+        assert_eq!(format_size_si(999_600_000_000), "1 TB");
+    }
+
+    #[test]
+    fn display_name_shows_label_size_bus_and_media_name() {
+        let card = drive(128_000_000_000, "SPRUCE", "USB", "SD Card Reader");
+        assert_eq!(card.display_name(), "disk4 - SPRUCE - 128 GB (USB; SD Card Reader)");
+    }
+
+    #[test]
+    fn display_name_leaves_out_what_the_platform_cannot_report() {
+        assert_eq!(drive(31_900_000_000, "SPRUCE", "", "").display_name(), "disk4 - SPRUCE - 32 GB");
+        assert_eq!(drive(31_900_000_000, "", "USB", "").display_name(), "disk4 - 32 GB (USB)");
+        assert_eq!(drive(31_900_000_000, "", "", "").display_name(), "disk4 - 32 GB");
+    }
+
+    #[test]
+    fn default_is_the_first_card_sized_drive() {
+        let large = drive(2_000_000_000_000, "", "", "");
+        let card = drive(128_000_000_000, "", "", "");
+        assert_eq!(default_drive_index(&[large.clone(), card.clone(), card]), Some(1));
+        assert_eq!(default_drive_index(&[large.clone(), large]), None);
+        assert_eq!(default_drive_index(&[]), None);
+    }
+
+    #[test]
+    fn card_sized_stops_at_1_1_tb() {
+        assert!(drive(1_099_999_999_999, "", "", "").is_card_sized());
+        assert!(!drive(1_100_000_000_000, "", "", "").is_card_sized());
+    }
+
+    /// Decodes `diskutil ... -plist` style output from its `<dict>` entries.
+    #[cfg(target_os = "macos")]
+    fn decode<T: serde::de::DeserializeOwned>(entries: &str) -> T {
+        let plist = format!(
+            r#"<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>{}</dict></plist>"#,
+            entries
+        );
+        plist::from_bytes(plist.as_bytes()).unwrap()
+    }
+
+    /// An internal, fixed SSD: no key in it makes the disk usable.
+    #[cfg(target_os = "macos")]
+    const INTERNAL_SSD: &str = "
+        <key>BusProtocol</key><string>Apple Fabric</string>
+        <key>Internal</key><true/>
+        <key>TotalSize</key><integer>1000000000000</integer>";
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn diskutil_info_plist_decodes_into_a_drive() {
+        // Pins the keys that reach the drive; the filter's keys are pinned below
+        let info: DiskutilInfo = decode(
+            "<key>BusProtocol</key><string>USB</string>
+             <key>Ejectable</key><true/>
+             <key>Internal</key><false/>
+             <key>MediaName</key><string>SD Card Reader</string>
+             <key>MediaType</key><string>Generic</string>
+             <key>MountPoint</key><string>/Volumes/SPRUCE</string>
+             <key>RemovableMedia</key><true/>
+             <key>SMARTStatus</key><string>Not Supported</string>
+             <key>TotalSize</key><integer>128000000000</integer>",
+        );
+        let drive = macos_drive_from_info("disk4", "SPRUCE".to_string(), info).unwrap();
+
+        assert_eq!(drive.display_name(), "disk4 - SPRUCE - 128 GB (USB; SD Card Reader)");
+        assert_eq!(drive.device_path, "/dev/disk4");
+        assert_eq!(drive.mount_path, Some(PathBuf::from("/Volumes/SPRUCE")));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn internal_fixed_disk_is_rejected() {
+        let info = decode(INTERNAL_SSD);
+        assert!(macos_drive_from_info("disk0", String::new(), info).is_none());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn removable_or_ejectable_alone_makes_an_internal_disk_usable() {
+        for key in ["RemovableMedia", "Ejectable"] {
+            let info = decode(&format!("{}<key>{}</key><true/>", INTERNAL_SSD, key));
+            assert!(macos_drive_from_info("disk0", String::new(), info).is_some(), "{} was not read", key);
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn missing_internal_key_reads_as_external() {
+        let info = decode(&INTERNAL_SSD.replace("<key>Internal</key><true/>", ""));
+        assert!(macos_drive_from_info("disk0", String::new(), info).is_some());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn label_is_the_lowest_numbered_named_partition() {
+        // Listed out of order, with an unnamed first partition, the way a
+        // card holding a boot volume, a Linux root, and a games volume reads
+        let list: DiskutilList = decode(
+            "<key>AllDisksAndPartitions</key><array>
+                <dict>
+                    <key>DeviceIdentifier</key><string>disk4</string>
+                    <key>Partitions</key><array>
+                        <dict><key>DeviceIdentifier</key><string>disk4s3</string>
+                              <key>VolumeName</key><string>ROMS</string></dict>
+                        <dict><key>DeviceIdentifier</key><string>disk4s1</string></dict>
+                        <dict><key>DeviceIdentifier</key><string>disk4s2</string>
+                              <key>VolumeName</key><string>BOOT</string></dict>
+                    </array>
+                </dict>
+                <dict><key>DeviceIdentifier</key><string>disk5</string></dict>
+                <dict><key>DeviceIdentifier</key><string>disk6</string>
+                      <key>VolumeName</key><string>STICK</string></dict>
+            </array>",
+        );
+        let [card, blank, whole] = list.all_disks_and_partitions.as_slice() else {
+            panic!("expected three disks");
+        };
+
+        assert_eq!(card.device_identifier, "disk4");
+        assert_eq!(card.label(), "BOOT");
+        assert_eq!(blank.device_identifier, "disk5");
+        assert_eq!(blank.label(), "");
+        // Formatted whole, with no partition table, the name is the disk's own
+        assert_eq!(whole.label(), "STICK");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn efi_partition_never_names_the_disk() {
+        let partition = |id: &str, name: &str| ListedPartition {
+            device_identifier: id.to_string(),
+            volume_name: name.to_string(),
+        };
+        let gpt_data = ListedDisk {
+            device_identifier: "disk6".to_string(),
+            partitions: vec![partition("disk6s1", "EFI"), partition("disk6s2", "DATA")],
+            ..Default::default()
+        };
+        let gpt_only_efi = ListedDisk {
+            device_identifier: "disk7".to_string(),
+            partitions: vec![partition("disk7s1", "EFI"), partition("disk7s2", "")],
+            ..Default::default()
+        };
+
+        assert_eq!(gpt_data.label(), "DATA");
+        assert_eq!(gpt_only_efi.label(), "");
+    }
 }
