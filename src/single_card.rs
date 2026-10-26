@@ -382,30 +382,32 @@ pub fn install<D: Read + Write + Seek>(
     {
         let fs = fatfs::FileSystem::new(&mut part, fatfs::FsOptions::new())
             .map_err(|e| format!("Failed to open SPRUCEOS: {}", e))?;
-        let root = fs.root_dir();
-        for dir in &dirs {
-            let name = fat_path(&card.spruce_dir, dir);
-            root.create_dir(&name).map_err(|e| format!("Failed to create {}: {}", name, e))?;
-        }
+        {
+            let root = fs.root_dir();
+            for dir in &dirs {
+                let name = fat_path(&card.spruce_dir, dir);
+                root.create_dir(&name).map_err(|e| format!("Failed to create {}: {}", name, e))?;
+            }
 
-        let mut copied = 0u64;
-        let mut buf = vec![0u8; CHUNK as usize];
-        for (path, _) in &files {
-            if cancel_token.is_cancelled() {
-                return Err("Burn cancelled".to_string());
-            }
-            let name = fat_path(&card.spruce_dir, path);
-            let mut src = std::fs::File::open(path).map_err(|e| format!("Failed to open {:?}: {}", path, e))?;
-            let mut dst = root.create_file(&name).map_err(|e| format!("Failed to create {}: {}", name, e))?;
-            loop {
-                let n = src.read(&mut buf).map_err(|e| format!("Failed to read {:?}: {}", path, e))?;
-                if n == 0 {
-                    break;
+            let mut copied = 0u64;
+            let mut buf = vec![0u8; CHUNK as usize];
+            for (path, _) in &files {
+                if cancel_token.is_cancelled() {
+                    return Err("Burn cancelled".to_string());
                 }
-                dst.write_all(&buf[..n]).map_err(|e| format!("Failed to write {}: {}", name, e))?;
-                copied += n as u64;
+                let name = fat_path(&card.spruce_dir, path);
+                let mut src = std::fs::File::open(path).map_err(|e| format!("Failed to open {:?}: {}", path, e))?;
+                let mut dst = root.create_file(&name).map_err(|e| format!("Failed to create {}: {}", name, e))?;
+                loop {
+                    let n = src.read(&mut buf).map_err(|e| format!("Failed to read {:?}: {}", path, e))?;
+                    if n == 0 {
+                        break;
+                    }
+                    dst.write_all(&buf[..n]).map_err(|e| format!("Failed to write {}: {}", name, e))?;
+                    copied += n as u64;
+                }
+                let _ = progress_tx.send(BurnProgress::Copying { copied, total });
             }
-            let _ = progress_tx.send(BurnProgress::Copying { copied, total });
         }
         fs.unmount().map_err(|e| format!("Failed to finish SPRUCEOS: {}", e))?;
     }
