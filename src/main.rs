@@ -21,6 +21,7 @@ mod github;
 mod mame_db;
 mod manifest;
 mod preserve;
+mod single_card;
 
 #[cfg(target_os = "macos")]
 mod mac;

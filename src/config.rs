@@ -359,7 +359,7 @@ pub const REPO_OPTIONS: &[RepoOption] = &[
         // Placeholder name; the manifest's display_name is what the popups use.
         name: "TF1 Image",
         url: "spruceUI/spruceOS-Installer",
-        info: "Base system card for two-card devices: Anbernic RG XX, Powkiddy RGB30 / RGB20SX, Miniloong Pocket 1, MagicX Zero 28 / Zero 40 / XU20.\nThe list comes from manifest.json on the installer's latest release.\nRaw disk image; erases the entire card. spruceOS then goes on the second card from the Stable tab.",
+        info: "Base system card for two-card devices: Anbernic RG XX, Powkiddy RGB30 / RGB20SX, Miniloong Pocket 1, MagicX Zero 28 / Zero 40 / XU20.\nThe list comes from manifest.json on the installer's latest release.\nRaw disk image; erases the entire card. spruceOS then goes on the second card from the Stable tab.\nOne-slot devices (Powkiddy V10): the latest spruceOS Stable is installed on the same card.",
         display_name: Some("TF1 image"),
         supports_update_mode: false,  // Raw disk images always do a full burn
         update_directories: &[],

@@ -15,6 +15,8 @@ const ARCHIVE_CHUNK_SIZE: usize = 1024 * 1024; // 1MB
 pub enum BurnProgress {
     Started { total_bytes: u64 },
     Writing { written: u64, total: u64 },
+    Formatting,
+    Copying { copied: u64, total: u64 },
     Completed,
     #[allow(dead_code)]
     Cancelled,
@@ -541,6 +543,7 @@ pub async fn burn_image(
     device_path: &str,
     progress_tx: UnboundedSender<BurnProgress>,
     cancel_token: CancellationToken,
+    single_card: Option<crate::single_card::SingleCard>,
 ) -> Result<(), String> {
     crate::debug::log_section("Image Burning");
     crate::debug::log(&format!("Image: {:?}", image_path));
@@ -672,13 +675,13 @@ pub async fn burn_image(
     // Platform-specific burn implementation
     // Returns the actual number of bytes written (decompressed size)
     #[cfg(target_os = "windows")]
-    let result = burn_image_windows(image_path, device_path, image_size, &progress_tx, &cancel_token).await;
+    let result = burn_image_windows(image_path, device_path, image_size, &progress_tx, &cancel_token, single_card).await;
 
     #[cfg(target_os = "linux")]
-    let result = burn_image_linux(image_path, device_path, image_size, &progress_tx, &cancel_token).await;
+    let result = burn_image_linux(image_path, device_path, image_size, &progress_tx, &cancel_token, single_card).await;
 
     #[cfg(target_os = "macos")]
-    let result = burn_image_macos(image_path, device_path, image_size, &progress_tx, &cancel_token).await;
+    let result = burn_image_macos(image_path, device_path, image_size, &progress_tx, &cancel_token, single_card).await;
 
     match result {
         Ok(actual_bytes_written) => {
@@ -742,6 +745,7 @@ async fn burn_image_windows(
     image_size: u64,
     progress_tx: &UnboundedSender<BurnProgress>,
     cancel_token: &CancellationToken,
+    single_card: Option<crate::single_card::SingleCard>,
 ) -> Result<u64, String> {
     // Device path should already be in \\.\PhysicalDriveN format from drives.rs
     crate::debug::log(&format!("Opening physical drive: {}", device_path));
@@ -1097,6 +1101,42 @@ async fn burn_image_windows(
 
             crate::debug::log(&format!("Write complete: {} bytes written", total_written));
 
+            if let Some(card) = &single_card {
+                use std::os::windows::io::FromRawHandle;
+
+                #[repr(C)]
+                #[derive(Default)]
+                struct GetLengthInfo {
+                    length: i64,
+                }
+                let mut length_info = GetLengthInfo::default();
+                let mut bytes_returned = 0u32;
+                let length_result = unsafe {
+                    DeviceIoControl(
+                        handle,
+                        IOCTL_DISK_GET_LENGTH_INFO,
+                        None,
+                        0,
+                        Some(&mut length_info as *mut _ as *mut _),
+                        std::mem::size_of::<GetLengthInfo>() as u32,
+                        Some(&mut bytes_returned),
+                        None,
+                    )
+                };
+                let result = if length_result.is_err() || length_info.length <= 0 {
+                    Err("Failed to read the card size".to_string())
+                } else {
+                    // Borrowed, not owned: the handle is closed below as before.
+                    let mut device = std::mem::ManuallyDrop::new(unsafe { std::fs::File::from_raw_handle(handle.0 as _) });
+                    crate::single_card::install(&mut *device, length_info.length as u64, card, &progress_tx, &cancel_token)
+                };
+                if let Err(e) = result {
+                    unsafe { let _ = CloseHandle(handle); }
+                    cleanup_volumes(&volume_handles);
+                    return Err(e);
+                }
+            }
+
             // Close the physical drive handle
             unsafe {
                 let _ = CloseHandle(handle);
@@ -1164,6 +1204,7 @@ async fn burn_image_linux(
     image_size: u64,
     progress_tx: &UnboundedSender<BurnProgress>,
     cancel_token: &CancellationToken,
+    single_card: Option<crate::single_card::SingleCard>,
 ) -> Result<u64, String> {
     use std::os::unix::fs::OpenOptionsExt;
     use std::io::{Read, Write};
@@ -1179,6 +1220,7 @@ async fn burn_image_linux(
         move || -> Result<u64, String> {
             // Open device with O_WRONLY | O_SYNC | O_DIRECT flags
             let mut device = std::fs::OpenOptions::new()
+                .read(true)
                 .write(true)
                 .custom_flags(libc::O_SYNC)
                 .open(&device_path)
@@ -1217,6 +1259,15 @@ async fn burn_image_linux(
                 .map_err(|e| format!("Failed to sync device: {}", e))?;
 
             crate::debug::log(&format!("Write complete: {} bytes written", total_written));
+
+            if let Some(card) = &single_card {
+                use std::io::Seek;
+                let disk_bytes = device.seek(std::io::SeekFrom::End(0))
+                    .map_err(|e| format!("Failed to read the card size: {}", e))?;
+                crate::single_card::install(&mut device, disk_bytes, card, &progress_tx, &cancel_token)?;
+                device.sync_all()
+                    .map_err(|e| format!("Failed to sync device: {}", e))?;
+            }
             Ok(total_written)
         }
     })
@@ -1272,6 +1323,7 @@ async fn burn_image_macos(
     image_size: u64,
     progress_tx: &UnboundedSender<BurnProgress>,
     cancel_token: &CancellationToken,
+    single_card: Option<crate::single_card::SingleCard>,
 ) -> Result<u64, String> {
     use std::io::{Read, Write};
 
@@ -1409,6 +1461,21 @@ async fn burn_image_macos(
             }
 
             crate::debug::log(&format!("Write complete: {} bytes written", total_written));
+
+            if let Some(card) = &single_card {
+                use std::os::unix::io::AsRawFd;
+                const DKIOCGETBLOCKSIZE: libc::c_ulong = 0x40046418;
+                const DKIOCGETBLOCKCOUNT: libc::c_ulong = 0x40086419;
+                let (mut block_size, mut block_count) = (0u32, 0u64);
+                let ok = unsafe {
+                    libc::ioctl(device.as_raw_fd(), DKIOCGETBLOCKSIZE, &mut block_size as *mut u32) == 0
+                        && libc::ioctl(device.as_raw_fd(), DKIOCGETBLOCKCOUNT, &mut block_count as *mut u64) == 0
+                };
+                if !ok || block_size == 0 || block_count == 0 {
+                    return Err("Failed to read the card size".to_string());
+                }
+                crate::single_card::install(&mut device, block_size as u64 * block_count, card, &progress_tx, &cancel_token)?;
+            }
             Ok(total_written)
         } // <-- Close the closure
     }) // <-- Close spawn_blocking

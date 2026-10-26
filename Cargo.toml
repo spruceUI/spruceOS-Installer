@@ -36,6 +36,10 @@ flate2 = "1.0"
 # compression stack; the default encoder and lzip features are not needed.
 lzma-rust2 = { version = "0.20", default-features = false, features = ["std", "xz", "optimization"] }
 zip = { version = "2", default-features = false, features = ["deflate"] }
+# Formats and fills the SPRUCEOS partition on single-slot cards through the
+# raw device, so no OS has to mount it.
+fatfs = "0.3"
+crc32fast = "1"
 arboard = "3.4"
 regex = "1"
 which = "6.0"

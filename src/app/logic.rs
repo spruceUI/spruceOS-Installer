@@ -26,8 +26,11 @@ use crate::format::{format_drive_fat32, FormatProgress};
 use crate::github::{asset_file_paths, download_asset_group, get_latest_release, split_volume_suffix, DownloadProgress, Asset};
 use crate::preserve::{backup_preserve_paths, restore_preserve_paths, backup_dynamic_configs, restore_and_merge_configs, PreserveProgress};
 use crate::boxart_scraper::{BoxArtScraper, ScrapeProgress};
+use crate::single_card::SingleCard;
+use super::state::ProgressInfo;
 use eframe::egui;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
@@ -189,6 +192,7 @@ impl InstallerApp {
                 browser_download_url: first.browser_download_url.clone(),
                 display_name: first.display_name.clone(),
                 devices: first.devices.clone(),
+                single_card_rootfs_gib: first.single_card_rootfs_gib,
                 volumes: parts
                     .iter()
                     .map(|(_, a)| crate::github::AssetVolume {
@@ -981,6 +985,59 @@ impl InstallerApp {
                 crate::debug::log_section("Raw Image Mode");
                 write_card_log("Download complete, preparing to burn image...");
 
+                // Single-slot device: spruce is downloaded and unpacked before the
+                // card is touched, then written into its own partition by the burn.
+                let mut single_card = None;
+                let mut spruce_files: Vec<PathBuf> = Vec::new();
+                if let Some(gib) = asset.single_card_rootfs_gib {
+                    log("This device has one card slot: spruceOS goes on the same card");
+                    match fetch_spruce_for_single_card(&temp_dir, progress.clone(), ctx_clone.clone(), cancel_token_clone.clone(), pause_token_clone.clone()).await {
+                        Ok((dir, files)) => {
+                            spruce_files = files;
+                            single_card = Some(SingleCard { spruce_dir: dir, rootfs_bytes: gib << 30 });
+                        }
+                        Err(e) => {
+                            for path in &download_files {
+                                let _ = tokio::fs::remove_file(path).await;
+                            }
+                            if e.contains("cancelled") {
+                                log("Cancelled");
+                                let _ = state_tx_clone.send(AppState::Idle);
+                            } else {
+                                log(&format!("spruceOS download error: {}", e));
+                                let _ = state_tx_clone.send(AppState::Error);
+                            }
+                            let _ = drive_poll_tx_clone.send(true);
+                            return;
+                        }
+                    }
+
+                    // Windows reports the size of the card's first volume, not the
+                    // card, so there the check waits for the burn, which reads the
+                    // real size.
+                    #[cfg(not(target_os = "windows"))]
+                    {
+                        if let Some(card) = &single_card {
+                            let needed = (gib << 30) + 256 * 1024 * 1024
+                                + crate::single_card::space_needed(&card.spruce_dir).unwrap_or(0);
+                            if drive.size_bytes < needed {
+                                log(&format!(
+                                    "This card is too small for dArkMoss and spruceOS together: {:.1} GB needed",
+                                    needed as f64 / 1e9
+                                ));
+                                for path in download_files.iter().chain(&spruce_files) {
+                                    let _ = tokio::fs::remove_file(path).await;
+                                }
+                                let _ = tokio::fs::remove_dir_all(&card.spruce_dir).await;
+                                let _ = state_tx_clone.send(AppState::Error);
+                                let _ = drive_poll_tx_clone.send(true);
+                                return;
+                            }
+                        }
+                    }
+                }
+                let spruce_dir = single_card.as_ref().map(|c| c.spruce_dir.clone());
+
                 // Step 3: Burn image to device (burn.rs handles .gz decompression automatically)
                 let _ = state_tx_clone.send(AppState::Burning);
                 log(&format!("Burning image to {}...", drive.name));
@@ -1009,6 +1066,15 @@ impl InstallerApp {
                                     let mb_total = total / 1_048_576;
                                     p.message = format!("Writing... {}% ({}/{} MB)", pct, mb_written, mb_total);
                                 }
+                                BurnProgress::Formatting => {
+                                    p.message = "Formatting SPRUCEOS...".to_string();
+                                }
+                                BurnProgress::Copying { copied, total } => {
+                                    p.current = copied;
+                                    p.total = total;
+                                    let pct = (copied as f64 / total.max(1) as f64 * 100.0) as u32;
+                                    p.message = format!("Copying spruceOS... {}%", pct);
+                                }
                                 BurnProgress::Completed => {
                                     p.current = p.total;
                                     p.message = "Burn complete".to_string();
@@ -1025,7 +1091,8 @@ impl InstallerApp {
                     }
                 });
 
-                if let Err(e) = burn_image(&download_path, &drive.device_path, burn_tx, cancel_token_clone.clone()).await {
+                if let Err(e) = burn_image(&download_path, &drive.device_path, burn_tx, cancel_token_clone.clone(), single_card).await {
+                    remove_temp(&spruce_files, spruce_dir.as_deref()).await;
                     if e.contains("cancelled") {
                         log("Burn cancelled");
                         for path in &download_files {
@@ -1052,6 +1119,7 @@ impl InstallerApp {
                 for path in &download_files {
                     let _ = tokio::fs::remove_file(path).await;
                 }
+                remove_temp(&spruce_files, spruce_dir.as_deref()).await;
                 crate::debug::log("Cleaned up temp files");
 
                 log("Installation complete! You can now safely eject the drive.");
@@ -1657,4 +1725,90 @@ pub(super) async fn get_mount_path_after_format(drive: &DriveInfo, volume_label:
 #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
 pub(super) async fn get_mount_path_after_format(_drive: &DriveInfo, _volume_label: &str) -> Result<PathBuf, String> {
     Err("Mounting not supported on this platform".to_string())
+}
+
+async fn remove_temp(files: &[PathBuf], dir: Option<&Path>) {
+    for path in files {
+        let _ = tokio::fs::remove_file(path).await;
+    }
+    if let Some(dir) = dir {
+        let _ = tokio::fs::remove_dir_all(dir).await;
+    }
+}
+
+/// Downloads and unpacks the latest spruceOS Stable for a single-slot card.
+/// Returns the unpacked tree and the downloaded files; cleans up after itself
+/// on failure.
+async fn fetch_spruce_for_single_card(
+    temp_dir: &Path,
+    progress: Arc<Mutex<ProgressInfo>>,
+    ctx: egui::Context,
+    cancel_token: CancellationToken,
+    pause_token: CancellationToken,
+) -> Result<(PathBuf, Vec<PathBuf>), String> {
+    let stable = &REPO_OPTIONS[0];
+    let release = get_latest_release(stable.url).await?;
+    let tag = release.tag_name.clone();
+    let asset = release
+        .assets
+        .into_iter()
+        .find(|a| a.name.ends_with(".7z") && !a.name.contains("OTA"))
+        .ok_or_else(|| format!("No spruceOS archive in {} {}", stable.url, tag))?;
+    crate::debug::log(&format!("Single-card spruceOS: {} {} ({} bytes)", tag, asset.name, asset.size));
+
+    let files = asset_file_paths(&asset, temp_dir);
+    let dir = temp_dir.join(format!("{}_single_card", TEMP_PREFIX));
+    if let Err(e) = unpack_spruce(&asset, tag, temp_dir, &dir, progress, ctx, cancel_token, pause_token).await {
+        remove_temp(&files, Some(&dir)).await;
+        return Err(e);
+    }
+    Ok((dir, files))
+}
+
+async fn unpack_spruce(
+    asset: &Asset,
+    tag: String,
+    temp_dir: &Path,
+    dir: &Path,
+    progress: Arc<Mutex<ProgressInfo>>,
+    ctx: egui::Context,
+    cancel_token: CancellationToken,
+    pause_token: CancellationToken,
+) -> Result<(), String> {
+    let (dl_tx, mut dl_rx) = mpsc::unbounded_channel::<DownloadProgress>();
+    let (dl_progress, dl_ctx) = (progress.clone(), ctx.clone());
+    let dl_handle = tokio::spawn(async move {
+        while let Some(prog) = dl_rx.recv().await {
+            if let DownloadProgress::Progress { downloaded, total } = prog {
+                if let Ok(mut p) = dl_progress.lock() {
+                    p.current = downloaded;
+                    p.total = total;
+                    p.message = format!("Downloading spruceOS {}... {}%", tag, downloaded * 100 / total.max(1));
+                }
+                dl_ctx.request_repaint();
+            }
+        }
+    });
+    let archive = download_asset_group(asset, temp_dir, dl_tx, cancel_token.clone(), pause_token).await;
+    let _ = dl_handle.await;
+    let archive = archive?;
+
+    let _ = std::fs::remove_dir_all(dir);
+    std::fs::create_dir_all(dir).map_err(|e| format!("Failed to create {:?}: {}", dir, e))?;
+    let (ex_tx, mut ex_rx) = mpsc::unbounded_channel::<ExtractProgress>();
+    let ex_handle = tokio::spawn(async move {
+        while let Some(prog) = ex_rx.recv().await {
+            if let ExtractProgress::Progress { percent } = prog {
+                if let Ok(mut p) = progress.lock() {
+                    p.current = percent as u64;
+                    p.total = 100;
+                    p.message = format!("Extracting spruceOS... {}%", percent);
+                }
+                ctx.request_repaint();
+            }
+        }
+    });
+    let extracted = extract_7z_with_progress(&archive, dir, ex_tx, cancel_token).await;
+    let _ = ex_handle.await;
+    extracted
 }

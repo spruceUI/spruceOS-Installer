@@ -24,6 +24,10 @@ SOURCES = [
         },
         "aliases": {"_RGB30_": {"_RGB20SX_": "Powkiddy RGB20SX"}},
         "note": "Debian base for TF1; spruceOS goes on TF2",
+        # One card slot: the installer adds SPRUCEOS behind a rootfs of this
+        # many GiB (dArkMoss firstboot's size) and puts spruceOS on it.
+        "single_card": {"_V10_": 11},
+        "single_card_note": "Debian base; spruceOS shares the same card",
     },
     {
         "repo": "pvaibhav/BaseOS",
@@ -76,14 +80,19 @@ def main():
             for key, aliases in source.get("aliases", {}).items():
                 if key in name:
                     entries += [(name.replace(key, alias), label) for alias, label in aliases.items()]
+            rootfs_gib = next((gib for key, gib in source.get("single_card", {}).items() if key in name), None)
+            note = source["single_card_note"] if rootfs_gib else source["note"]
             for entry_name, label in entries:
-                assets.append({
+                entry = {
                     "name": entry_name,
                     "url": asset["browser_download_url"],
                     "size": asset["size"],
                     "display_name": label,
-                    "devices": f"{source['os']} {tag}: {source['note']}",
-                })
+                    "devices": f"{source['os']} {tag}: {note}",
+                }
+                if rootfs_gib:
+                    entry["single_card_rootfs_gib"] = rootfs_gib
+                assets.append(entry)
     assets.sort(key=lambda a: (a["display_name"], a["name"]))
     manifest = {"version": "1.0", "display_name": "TF1 image", "assets": assets}
     with open("manifest/manifest.json", "w", encoding="utf-8") as f:

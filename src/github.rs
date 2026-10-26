@@ -43,6 +43,9 @@ pub struct Asset {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub devices: Option<String>,
 
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub single_card_rootfs_gib: Option<u64>,
+
     /// Volumes of a multi-part archive, in order. Empty for an ordinary
     /// single-file asset. Never present in a GitHub API response or a
     /// manifest -- `group_multipart_assets` fills this in after filtering.
@@ -156,6 +159,7 @@ impl From<crate::manifest::ManifestAsset> for Asset {
             browser_download_url: manifest_asset.url,
             display_name: manifest_asset.display_name,
             devices: manifest_asset.devices,
+            single_card_rootfs_gib: manifest_asset.single_card_rootfs_gib,
             volumes: Vec::new(),
         }
     }
@@ -308,6 +312,7 @@ pub async fn download_asset_group(
             browser_download_url: vol.browser_download_url.clone(),
             display_name: None,
             devices: None,
+            single_card_rootfs_gib: None,
             volumes: Vec::new(),
         };
 

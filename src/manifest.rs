@@ -41,4 +41,9 @@ pub struct ManifestAsset {
     /// Optional compatible devices description (e.g., "Anbernic RG351P/V/M, Odroid Go Advance")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub devices: Option<String>,
+
+    /// Single-slot device: after the burn, spruce goes on a SPRUCEOS partition
+    /// behind a rootfs of this many GiB (where the image's firstboot expects it)
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub single_card_rootfs_gib: Option<u64>,
 }
