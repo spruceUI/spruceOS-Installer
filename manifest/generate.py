@@ -24,6 +24,9 @@ SOURCES = [
         },
         "aliases": {"_RGB30_": {"_RGB20SX_": "Powkiddy RGB20SX"}},
         "note": "Debian base for TF1; spruceOS goes on TF2",
+        "notes": {
+            "_V10_": "flash to TF1, do a first boot, then install spruceOS on the spruce partition",
+        },
     },
     {
         "repo": "pvaibhav/BaseOS",
@@ -68,10 +71,12 @@ def main():
             name = asset["name"]
             if not re.search(source["match"], name):
                 continue
-            device = next((label for key, label in source["devices"].items() if key in name), None)
-            if device is None:
+            match_key = next((key for key in source["devices"] if key in name), None)
+            if match_key is None:
                 print(f"skipping {name}: no device mapping")
                 continue
+            device = source["devices"][match_key]
+            note = source.get("notes", {}).get(match_key, source["note"])
             entries = [(name, device)]
             for key, aliases in source.get("aliases", {}).items():
                 if key in name:
@@ -82,7 +87,7 @@ def main():
                     "url": asset["browser_download_url"],
                     "size": asset["size"],
                     "display_name": label,
-                    "devices": f"{source['os']} {tag}: {source['note']}",
+                    "devices": f"{source['os']} {tag}: {note}",
                 })
     assets.sort(key=lambda a: (a["display_name"], a["name"]))
     manifest = {"version": "1.0", "display_name": "TF1 image", "assets": assets}
