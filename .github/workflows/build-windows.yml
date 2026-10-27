@@ -5,6 +5,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # main's binaries become releases, which read manifest.json off the latest release.
+  TF1_RELEASE_TAG: ${{ github.ref_name != 'main' && format('beta-{0}', github.ref_name) || '' }}
 
 jobs:
   build:

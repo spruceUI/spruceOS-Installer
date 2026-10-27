@@ -5,6 +5,7 @@
 # Run from the repo root: python3 manifest/generate.py
 
 import json
+import os
 import re
 import subprocess
 
@@ -12,6 +13,8 @@ SOURCES = [
     {
         "repo": "spruceUI/dArkMoss",
         "os": "dArkMoss",
+        # Set to a dArkMoss beta tag (beta-spruce) to test its images in a branch beta.
+        "tag_env": "DARKMOSS_TAG",
         "match": r"\.img\.7z\.\d{3}$",
         "devices": {
             "_RGB30_": "Powkiddy RGB30",
@@ -58,15 +61,16 @@ SOURCES = [
 ]
 
 
-def latest_release(repo):
-    out = subprocess.check_output(["gh", "api", f"repos/{repo}/releases/latest"])
+def get_release(repo, tag):
+    which = f"tags/{tag}" if tag else "latest"
+    out = subprocess.check_output(["gh", "api", f"repos/{repo}/releases/{which}"])
     return json.loads(out)
 
 
 def main():
     assets = []
     for source in SOURCES:
-        release = latest_release(source["repo"])
+        release = get_release(source["repo"], os.environ.get(source.get("tag_env", "")))
         tag = release["tag_name"]
         for asset in release["assets"]:
             name = asset["name"]

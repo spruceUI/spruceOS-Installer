@@ -66,8 +66,13 @@ pub enum DownloadProgress {
 }
 
 pub async fn get_latest_release(repo_url: &str) -> Result<Release, String> {
+    get_release(repo_url, None).await
+}
+
+pub async fn get_release(repo_url: &str, tag: Option<&str>) -> Result<Release, String> {
     let (owner, repo) = parse_github_url(repo_url)?;
-    let api_url = format!("https://api.github.com/repos/{}/{}/releases/latest", owner, repo);
+    let which = tag.map_or("latest".to_string(), |t| format!("tags/{}", t));
+    let api_url = format!("https://api.github.com/repos/{}/{}/releases/{}", owner, repo, which);
 
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(30))

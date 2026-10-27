@@ -23,7 +23,7 @@ use crate::delete::{delete_directories, DeleteProgress};
 use crate::drives::{default_drive_index, DriveInfo};
 use crate::extract::{extract_7z_with_progress, ExtractProgress};
 use crate::format::{format_drive_fat32, FormatProgress};
-use crate::github::{asset_file_paths, download_asset_group, get_latest_release, split_volume_suffix, DownloadProgress, Asset};
+use crate::github::{asset_file_paths, download_asset_group, get_latest_release, get_release, split_volume_suffix, DownloadProgress, Asset};
 use crate::preserve::{backup_preserve_paths, restore_preserve_paths, backup_dynamic_configs, restore_and_merge_configs, PreserveProgress};
 use crate::boxart_scraper::{BoxArtScraper, ScrapeProgress};
 use crate::single_card::SingleCard;
@@ -290,6 +290,9 @@ impl InstallerApp {
 
         let repo = &REPO_OPTIONS[self.selected_repo_idx];
         let repo_url = repo.url;
+        // A branch beta reads the manifest.json on its own release; releases build without a tag.
+        let tag = option_env!("TF1_RELEASE_TAG")
+            .filter(|t| !t.is_empty() && repo_url == "spruceUI/spruceOS-Installer");
         let progress = self.progress.clone();
         let ctx_clone = ctx.clone();
 
@@ -304,7 +307,7 @@ impl InstallerApp {
             }
             ctx_clone.request_repaint();
 
-            let result = get_latest_release(repo_url).await;
+            let result = get_release(repo_url, tag).await;
             let _ = tx.send(result);
             ctx_clone.request_repaint();
         });

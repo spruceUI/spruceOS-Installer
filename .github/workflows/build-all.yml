@@ -2,6 +2,11 @@ name: Build All Platforms
 
 on:
   workflow_dispatch:
+    inputs:
+      darkmoss_tag:
+        description: 'dArkMoss release for the TF1 manifest (empty = latest)'
+        required: false
+        default: ''
 
 jobs:
   create-release:
@@ -15,6 +20,7 @@ jobs:
       - name: Generate the manifest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DARKMOSS_TAG: ${{ inputs.darkmoss_tag }}
         run: python3 manifest/generate.py && jq empty manifest/manifest.json
 
       - name: Create Beta Release
