@@ -1,0 +1,33 @@
+name: Test FAT32 initialization
+
+on:
+  pull_request:
+    paths:
+      - 'src/fat32.rs'
+      - 'src/fat32/**'
+      - '.github/workflows/test-fat32.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/fat32.rs'
+      - 'src/fat32/**'
+      - '.github/workflows/test-fat32.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      # Exercise the production table writer without GUI dependencies or disks.
+      - name: Compile regression tests
+        run: rustc --edition 2021 --test src/fat32/tables.rs -o fat32-tests.exe
+      - name: Run regression tests
+        run: ./fat32-tests.exe

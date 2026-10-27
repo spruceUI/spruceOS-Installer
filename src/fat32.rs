@@ -9,8 +9,10 @@ use tokio::sync::mpsc;
 
 use crate::format::FormatProgress;
 
+#[cfg(any(windows, test))]
+mod tables;
 #[cfg(windows)]
-const SECTOR_SIZE: u32 = 512;
+use tables::SECTOR_SIZE;
 #[cfg(windows)]
 const RESERVED_SECTORS: u16 = 32;
 #[cfg(windows)]
@@ -199,22 +201,6 @@ fn create_fsinfo_sector() -> [u8; 512] {
     fsinfo
 }
 
-#[cfg(windows)]
-fn create_fat_sector_with_entries() -> [u8; 512] {
-    let mut fat = [0u8; 512];
-
-    // Entry 0: Media type
-    fat[0..4].copy_from_slice(&0x0FFFFFF8u32.to_le_bytes());
-
-    // Entry 1: End of chain marker
-    fat[4..8].copy_from_slice(&0x0FFFFFFFu32.to_le_bytes());
-
-    // Entry 2: End of chain for root directory
-    fat[8..12].copy_from_slice(&0x0FFFFFFFu32.to_le_bytes());
-
-    fat
-}
-
 /// Format using physical disk access (works even when volume isn't mounted)
 #[cfg(windows)]
 pub async fn format_fat32_large(
@@ -274,7 +260,7 @@ pub async fn format_fat32_large(
     };
 
     // Helper to write a sector at a specific position
-    let write_sector = |h: HANDLE, offset: u64, data: &[u8; 512]| -> Result<(), String> {
+    let write_sector = |h: HANDLE, offset: u64, data: &[u8]| -> Result<(), String> {
         let mut new_pos = 0i64;
         unsafe {
             SetFilePointerEx(h, offset as i64, Some(&mut new_pos), FILE_BEGIN)
@@ -284,7 +270,7 @@ pub async fn format_fat32_large(
             WriteFile(h, Some(data), Some(&mut written), None)
                 .map_err(|e| format!("Write failed: {}", e))?;
 
-            if written != 512 {
+            if written as usize != data.len() {
                 return Err(format!("Incomplete write: {} bytes", written));
             }
         }
@@ -314,29 +300,10 @@ pub async fn format_fat32_large(
 
     // Write FAT tables
     let fat_start = partition_offset + RESERVED_SECTORS as u64 * SECTOR_SIZE as u64;
-    let fat_first_sector = create_fat_sector_with_entries();
+    tables::initialize_fat_tables(fat_start, params.fat_size_sectors, NUM_FATS, |offset, data| {
+        write_sector(handle, offset, data)
+    })?;
     let zero_sector = [0u8; 512];
-
-    // First FAT - first sector with entries
-    write_sector(handle, fat_start, &fat_first_sector)
-        .map_err(|e| format!("Failed to write FAT1: {}", e))?;
-
-    // Clear a few more sectors of FAT1
-    for i in 1..16.min(params.fat_size_sectors) {
-        write_sector(handle, fat_start + i as u64 * SECTOR_SIZE as u64, &zero_sector)
-            .map_err(|e| format!("Failed to clear FAT1: {}", e))?;
-    }
-
-    // Second FAT
-    let fat2_start = fat_start + params.fat_size_sectors as u64 * SECTOR_SIZE as u64;
-    write_sector(handle, fat2_start, &fat_first_sector)
-        .map_err(|e| format!("Failed to write FAT2: {}", e))?;
-
-    // Clear a few more sectors of FAT2
-    for i in 1..16.min(params.fat_size_sectors) {
-        write_sector(handle, fat2_start + i as u64 * SECTOR_SIZE as u64, &zero_sector)
-            .map_err(|e| format!("Failed to clear FAT2: {}", e))?;
-    }
 
     // Write root directory cluster
     let data_start = fat_start + (NUM_FATS as u64 * params.fat_size_sectors as u64 * SECTOR_SIZE as u64);
