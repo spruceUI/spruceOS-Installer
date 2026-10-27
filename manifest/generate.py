@@ -31,6 +31,9 @@ SOURCES = [
         # many GiB (dArkMoss firstboot's size) and puts spruceOS on it.
         "single_card": {"_V10_": 11},
         "single_card_note": "Debian base; spruceOS shares the same card",
+        "notes": {
+            "_V10_": "flash to TF1, do a first boot, then install spruceOS on the spruce partition",
+        },
     },
     {
         "repo": "pvaibhav/BaseOS",
@@ -76,16 +79,19 @@ def main():
             name = asset["name"]
             if not re.search(source["match"], name):
                 continue
-            device = next((label for key, label in source["devices"].items() if key in name), None)
-            if device is None:
+            match_key = next((key for key in source["devices"] if key in name), None)
+            if match_key is None:
                 print(f"skipping {name}: no device mapping")
                 continue
+            device = source["devices"][match_key]
+            note = source.get("notes", {}).get(match_key, source["note"])
             entries = [(name, device)]
             for key, aliases in source.get("aliases", {}).items():
                 if key in name:
                     entries += [(name.replace(key, alias), label) for alias, label in aliases.items()]
-            rootfs_gib = next((gib for key, gib in source.get("single_card", {}).items() if key in name), None)
-            note = source["single_card_note"] if rootfs_gib else source["note"]
+            rootfs_gib = source.get("single_card", {}).get(match_key)
+            if rootfs_gib:
+                note = source["single_card_note"]
             for entry_name, label in entries:
                 entry = {
                     "name": entry_name,
