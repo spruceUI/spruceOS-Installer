@@ -109,7 +109,13 @@ impl BoxArtScraper {
         matches!(
             sys_name.to_uppercase().as_str(),
             "ARCADE" | "NEOGEO" | "CPS1" | "CPS2" | "CPS3" | "FBNEO" | "MAME2003PLUS"
-        )
+        ) || Self::is_disc_arcade_system(sys_name)
+    }
+
+    /// Arcade systems whose ROMs may also be full-title disc images, so a name
+    /// missing from the MAME database falls back to filename matching instead of being skipped
+    fn is_disc_arcade_system(sys_name: &str) -> bool {
+        matches!(sys_name.to_uppercase().as_str(), "ATOMISWAVE" | "NAOMI")
     }
 
     /// Find the best matching image name for a given ROM
@@ -146,6 +152,7 @@ impl BoxArtScraper {
                     ));
                     display_name
                 }
+                None if Self::is_disc_arcade_system(sys_name) => rom_without_ext,
                 None => {
                     crate::debug::log(&format!(
                         "MAME lookup: {} not found in database, skipping",
