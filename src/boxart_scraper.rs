@@ -57,6 +57,53 @@ impl BoxArtScraper {
         Self::get_system_mapping(sys_name).map(|m| m.libretro_name)
     }
 
+    /// Systems whose game lists are also tried when a ROM has no match in its own
+    fn cross_system_fallbacks(sys_name: &str) -> &'static [&'static str] {
+        match sys_name.to_uppercase().as_str() {
+            "FC" => &["FDS"],
+            "FDS" => &["FC"],
+            "GB" => &["GBC"],
+            "GBC" => &["GB"],
+            "PCE" => &["PCECD"],
+            "PCECD" => &["PCE"],
+            "MD" => &["SEGACD", "THIRTYTWOX"],
+            "NDS" => &["NDSI"],
+            "NDSI" => &["NDS"],
+            "NGP" => &["NGPC"],
+            "NGPC" => &["NGP"],
+            "SEGACD" => &["MD"],
+            "SATELLAVIEW" => &["SFC"],
+            "SFC" => &["SATELLAVIEW", "SUFAMI"],
+            "THIRTYTWOX" => &["MD"],
+            "ODYSSEY" => &["VIDEOPAC"],
+            "VIDEOPAC" => &["ODYSSEY"],
+            "WS" => &["WSC"],
+            "WSC" => &["WS"],
+            _ => &[],
+        }
+    }
+
+    /// Find a match in the system's own list, then in its cross-system fallbacks.
+    /// Returns the system that matched along with the image name.
+    fn find_image_with_fallback(&mut self, sys_name: &str, rom_name: &str) -> Option<(String, String)> {
+        if let Some(img) = self.find_image_name(sys_name, rom_name) {
+            return Some((sys_name.to_string(), img));
+        }
+        for fallback_sys in Self::cross_system_fallbacks(sys_name) {
+            if Self::get_ra_alias(fallback_sys).is_none() {
+                continue;
+            }
+            if let Some(img) = self.find_image_name(fallback_sys, rom_name) {
+                crate::debug::log(&format!(
+                    "Boxart scraper: Matched {} via {} fallback",
+                    rom_name, fallback_sys
+                ));
+                return Some((fallback_sys.to_string(), img));
+            }
+        }
+        None
+    }
+
     /// Check if a system uses MAME-style ROM naming (requires XML lookup)
     fn is_arcade_system(sys_name: &str) -> bool {
         matches!(
@@ -152,13 +199,16 @@ impl BoxArtScraper {
 
         // Abbreviation expansion
         let abbreviations: HashMap<&str, &str> = [
+            ("dq", "dragon quest"),
             ("ff", "final fantasy"),
             ("zelda", "legend of zelda"),
+            ("tloz", "legend of zelda"),
             ("mario", "super mario"),
             ("smb", "super mario bros"),
             ("smw", "super mario world"),
             ("sf", "street fighter"),
             ("mk", "mortal kombat"),
+            ("dk", "donkey kong"),
             ("dkc", "donkey kong country"),
             ("cv", "castlevania"),
             ("mm", "mega man"),
@@ -481,15 +531,14 @@ impl BoxArtScraper {
 
         for (idx, (sys_name, rom_name, dest_path)) in tasks.into_iter().enumerate() {
             let permit = semaphore.clone().acquire_owned().await.map_err(|e| e.to_string())?;
-            let image_name = self.find_image_name(&sys_name, &rom_name);
+            let image_match = self.find_image_with_fallback(&sys_name, &rom_name);
             let progress_tx = progress_tx.clone();
             let client = client.clone();
             let dest_path = dest_path.clone();
-            let sys_name = sys_name.clone();
 
             let handle = tokio::spawn(async move {
-                let result = if let Some(img_name) = image_name {
-                    BoxArtScraper::download_boxart(&client, &sys_name, &img_name, &dest_path).await
+                let result = if let Some((match_sys, img_name)) = image_match {
+                    BoxArtScraper::download_boxart(&client, &match_sys, &img_name, &dest_path).await
                 } else {
                     Err("No matching image found".to_string())
                 };
