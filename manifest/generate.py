@@ -30,7 +30,7 @@ SOURCES = [
         # One card slot: the installer adds SPRUCEOS behind a rootfs of this
         # many GiB (dArkMoss firstboot's size) and puts spruceOS on it.
         "single_card": {"_V10_": 11},
-        "single_card_note": "Debian base; spruceOS shares the same card",
+        "single_card_note": "installer 2.0.1 or newer adds spruceOS to this card. Older installers: do a first boot, then install spruceOS on the spruce partition",
         "notes": {
             "_V10_": "flash to TF1, do a first boot, then install spruceOS on the spruce partition",
         },
