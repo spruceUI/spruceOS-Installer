@@ -509,6 +509,21 @@ impl InstallerApp {
             // need very different amounts of room.
             let is_raw_image = Self::is_raw_image_asset(&asset.name);
 
+            // Single-slot device: the latest spruceOS goes on the same card.
+            let spruce_for_card = if asset.single_card_rootfs_gib.is_some() {
+                match latest_spruce_asset().await {
+                    Ok(found) => Some(found),
+                    Err(e) => {
+                        log(&format!("spruceOS lookup error: {}", e));
+                        let _ = state_tx_clone.send(AppState::Error);
+                        let _ = drive_poll_tx_clone.send(true);
+                        return;
+                    }
+                }
+            } else {
+                None
+            };
+
             // Check available disk space before starting.
             //
             // `asset.size` is the whole download -- for a multi-part archive it
@@ -519,9 +534,11 @@ impl InstallerApp {
             // A raw image is streamed straight to the device while it decompresses
             // and never lands on disk uncompressed, so it only needs the download
             // itself plus a little slack. Charging it 4x would demand tens of
-            // gigabytes for an image that needs none of them.
+            // gigabytes for an image that needs none of them. A single-slot card
+            // also unpacks spruceOS, which is charged like an archive install.
             let required_space = if is_raw_image {
                 asset.size + asset.size / 10
+                    + spruce_for_card.as_ref().map_or(0, |(_, spruce)| spruce.size * 4)
             } else {
                 asset.size * 4 // 4x for safety margin
             };
@@ -992,9 +1009,9 @@ impl InstallerApp {
                 // card is touched, then written into its own partition by the burn.
                 let mut single_card = None;
                 let mut spruce_files: Vec<PathBuf> = Vec::new();
-                if let Some(gib) = asset.single_card_rootfs_gib {
+                if let (Some(gib), Some((tag, spruce))) = (asset.single_card_rootfs_gib, spruce_for_card) {
                     log("This device has one card slot: spruceOS goes on the same card");
-                    match fetch_spruce_for_single_card(&temp_dir, progress.clone(), ctx_clone.clone(), cancel_token_clone.clone(), pause_token_clone.clone()).await {
+                    match fetch_spruce_for_single_card(tag, spruce, &temp_dir, progress.clone(), ctx_clone.clone(), cancel_token_clone.clone(), pause_token_clone.clone()).await {
                         Ok((dir, files)) => {
                             spruce_files = files;
                             single_card = Some(SingleCard { spruce_dir: dir, rootfs_bytes: gib << 30 });
@@ -1739,16 +1756,8 @@ async fn remove_temp(files: &[PathBuf], dir: Option<&Path>) {
     }
 }
 
-/// Downloads and unpacks the latest spruceOS Stable for a single-slot card.
-/// Returns the unpacked tree and the downloaded files; cleans up after itself
-/// on failure.
-async fn fetch_spruce_for_single_card(
-    temp_dir: &Path,
-    progress: Arc<Mutex<ProgressInfo>>,
-    ctx: egui::Context,
-    cancel_token: CancellationToken,
-    pause_token: CancellationToken,
-) -> Result<(PathBuf, Vec<PathBuf>), String> {
+/// The latest spruceOS Stable's tag and full-install archive.
+async fn latest_spruce_asset() -> Result<(String, Asset), String> {
     let stable = &REPO_OPTIONS[0];
     let release = get_latest_release(stable.url).await?;
     let tag = release.tag_name.clone();
@@ -1757,6 +1766,20 @@ async fn fetch_spruce_for_single_card(
         .into_iter()
         .find(|a| a.name.ends_with(".7z") && !a.name.contains("OTA"))
         .ok_or_else(|| format!("No spruceOS archive in {} {}", stable.url, tag))?;
+    Ok((tag, asset))
+}
+
+/// Downloads and unpacks spruceOS for a single-slot card. Returns the unpacked
+/// tree and the downloaded files; cleans up after itself on failure.
+async fn fetch_spruce_for_single_card(
+    tag: String,
+    asset: Asset,
+    temp_dir: &Path,
+    progress: Arc<Mutex<ProgressInfo>>,
+    ctx: egui::Context,
+    cancel_token: CancellationToken,
+    pause_token: CancellationToken,
+) -> Result<(PathBuf, Vec<PathBuf>), String> {
     crate::debug::log(&format!("Single-card spruceOS: {} {} ({} bytes)", tag, asset.name, asset.size));
 
     let files = asset_file_paths(&asset, temp_dir);
