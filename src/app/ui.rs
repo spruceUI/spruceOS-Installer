@@ -33,6 +33,11 @@ use tokio::sync::mpsc;
 /// menu still shows full names.
 const DRIVE_PICKER_MAX_WIDTH: f32 = 260.0;
 
+/// Narrowest the install dialogs get. An auto-sized egui window otherwise
+/// wraps text at its default width (about 320 points), which splits sentences
+/// that used to fit on one line, more so in longer languages.
+const MODAL_MIN_WIDTH: f32 = 440.0;
+
 impl eframe::App for InstallerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         // Show modal dialogs for confirmation or status
@@ -357,6 +362,7 @@ impl eframe::App for InstallerApp {
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .frame(window_frame)
                 .show(ctx, |ui| {
+                    ui.set_min_width(MODAL_MIN_WIDTH);
                     ui.vertical_centered(|ui| {
                         match self.state {
                             AppState::SelectingAsset => {
@@ -467,45 +473,31 @@ impl eframe::App for InstallerApp {
                                 ui.separator();
                                 ui.add_space(8.0);
 
-                                ui.columns(2, |columns| {
-                                    columns[0].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button(t!("common.cancel")).clicked() {
-                                                self.state = AppState::Idle;
-                                                self.fetched_release = None;
-                                                self.available_assets.clear();
-                                                self.selected_asset_idx = None;
-                                                self.manifest_display_name = None;
-                                            }
-                                        },
-                                    );
+                                let can_continue = self.selected_asset_idx.is_some();
+                                match centered_buttons(ui, &[(&t!("common.cancel"), true), (&t!("common.continue"), can_continue)]) {
+                                    Some(0) => {
+                                        self.state = AppState::Idle;
+                                        self.fetched_release = None;
+                                        self.available_assets.clear();
+                                        self.selected_asset_idx = None;
+                                        self.manifest_display_name = None;
+                                    }
+                                    Some(_) => {
+                                        // Check if selected asset is a raw image
+                                        let is_raw_image = self.selected_asset_idx.is_some_and(|idx| {
+                                            Self::is_raw_image_asset(&self.available_assets[idx].name)
+                                        });
 
-                                    columns[1].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::left_to_right(egui::Align::Center),
-                                        |ui| {
-                                            let can_continue = self.selected_asset_idx.is_some();
-                                            ui.add_enabled_ui(can_continue, |ui| {
-                                                if ui.button(t!("common.continue")).clicked() {
-                                                    // Check if selected asset is a raw image
-                                                    let is_raw_image = self.selected_asset_idx.is_some_and(|idx| {
-                                                        Self::is_raw_image_asset(&self.available_assets[idx].name)
-                                                    });
-
-                                                    // If update mode and NOT a raw image, show preview; otherwise go to confirmation
-                                                    if self.update_mode && !is_raw_image {
-                                                        self.state = AppState::PreviewingUpdate;
-                                                    } else {
-                                                        // Skip preview for image mode (update mode doesn't apply to raw images)
-                                                        self.state = AppState::AwaitingConfirmation;
-                                                    }
-                                                }
-                                            });
-                                        },
-                                    );
-                                });
+                                        // If update mode and NOT a raw image, show preview; otherwise go to confirmation
+                                        if self.update_mode && !is_raw_image {
+                                            self.state = AppState::PreviewingUpdate;
+                                        } else {
+                                            // Skip preview for image mode (update mode doesn't apply to raw images)
+                                            self.state = AppState::AwaitingConfirmation;
+                                        }
+                                    }
+                                    None => {}
+                                }
                             }
                             AppState::PreviewingUpdate => {
                                 ui.add_space(12.0);
@@ -559,32 +551,18 @@ impl eframe::App for InstallerApp {
                                 ui.separator();
                                 ui.add_space(8.0);
 
-                                ui.columns(2, |columns| {
-                                    columns[0].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button(t!("common.cancel")).clicked() {
-                                                self.state = AppState::Idle;
-                                                self.update_mode = false;
-                                                self.fetched_release = None;
-                                                self.available_assets.clear();
-                                                self.selected_asset_idx = None;
-                                                self.manifest_display_name = None;
-                                            }
-                                        },
-                                    );
-
-                                    columns[1].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::left_to_right(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button(t!("common.continue")).clicked() {
-                                                self.state = AppState::AwaitingConfirmation;
-                                            }
-                                        },
-                                    );
-                                });
+                                match centered_buttons(ui, &[(&t!("common.cancel"), true), (&t!("common.continue"), true)]) {
+                                    Some(0) => {
+                                        self.state = AppState::Idle;
+                                        self.update_mode = false;
+                                        self.fetched_release = None;
+                                        self.available_assets.clear();
+                                        self.selected_asset_idx = None;
+                                        self.manifest_display_name = None;
+                                    }
+                                    Some(_) => self.state = AppState::AwaitingConfirmation,
+                                    None => {}
+                                }
                             }
                             AppState::AwaitingConfirmation => {
                                 ui.add_space(12.0);
@@ -613,33 +591,19 @@ impl eframe::App for InstallerApp {
                                 ui.separator();
                                 ui.add_space(8.0);
 
-                                ui.columns(2, |columns| {
-                                    columns[0].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button(t!("common.cancel")).clicked() {
-                                                self.state = AppState::Idle;
-                                                self.update_mode = false;
-                                            }
-                                        },
-                                    );
-
-                                    columns[1].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::left_to_right(egui::Align::Center),
-                                        |ui| {
-                                            let button_text = if self.update_mode {
-                                                t!("confirm.yes_update")
-                                            } else {
-                                                t!("confirm.yes_install")
-                                            };
-                                            if ui.button(button_text).clicked() {
-                                                self.start_installation(ctx.clone());
-                                            }
-                                        },
-                                    );
-                                });
+                                let confirm_text = if self.update_mode {
+                                    t!("confirm.yes_update")
+                                } else {
+                                    t!("confirm.yes_install")
+                                };
+                                match centered_buttons(ui, &[(&t!("common.cancel"), true), (&confirm_text, true)]) {
+                                    Some(0) => {
+                                        self.state = AppState::Idle;
+                                        self.update_mode = false;
+                                    }
+                                    Some(_) => self.start_installation(ctx.clone()),
+                                    None => {}
+                                }
                             }
                             AppState::Complete => {
                                 ui.add_space(12.0);
@@ -655,48 +619,36 @@ impl eframe::App for InstallerApp {
                                 ui.separator();
                                 ui.add_space(8.0);
 
-                                ui.columns(2, |columns| {
-                                    columns[0].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button(t!("common.close")).clicked() {
-                                                self.state = AppState::Idle;
-                                                self.manifest_display_name = None;
-                                            }
-                                        },
-                                    );
+                                match centered_buttons(ui, &[(&t!("common.close"), true), (&t!("complete.eject"), true)]) {
+                                    Some(0) => {
+                                        self.state = AppState::Idle;
+                                        self.manifest_display_name = None;
+                                    }
+                                    Some(_) => {
+                                        if let Some(drive) = self.installed_drive.clone() {
+                                            self.state = AppState::Ejecting;
+                                            self.log("Ejecting SD card...");
 
-                                    columns[1].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::left_to_right(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button(t!("complete.eject")).clicked() {
-                                                if let Some(drive) = self.installed_drive.clone() {
-                                                    self.state = AppState::Ejecting;
-                                                    self.log("Ejecting SD card...");
+                                            let progress = self.progress.clone();
+                                            let ctx_clone = ctx.clone();
 
-                                                    let progress = self.progress.clone();
-                                                    let ctx_clone = ctx.clone();
+                                            self.runtime.spawn(async move {
+                                                let result = tokio::task::spawn_blocking(move || {
+                                                    eject_drive(&drive)
+                                                }).await.unwrap();
 
-                                                    self.runtime.spawn(async move {
-                                                        let result = tokio::task::spawn_blocking(move || {
-                                                            eject_drive(&drive)
-                                                        }).await.unwrap();
-
-                                                        if let Ok(mut progress) = progress.lock() {
-                                                            match result {
-                                                                Ok(()) => progress.message = "EJECT_SUCCESS".to_string(),
-                                                                Err(e) => progress.message = format!("EJECT_ERROR: {}", e),
-                                                            }
-                                                        }
-                                                        ctx_clone.request_repaint();
-                                                    });
+                                                if let Ok(mut progress) = progress.lock() {
+                                                    match result {
+                                                        Ok(()) => progress.message = "EJECT_SUCCESS".to_string(),
+                                                        Err(e) => progress.message = format!("EJECT_ERROR: {}", e),
+                                                    }
                                                 }
-                                            }
-                                        },
-                                    );
-                                });
+                                                ctx_clone.request_repaint();
+                                            });
+                                        }
+                                    }
+                                    None => {}
+                                }
                             }
                             AppState::Ejecting => {
                                 ui.add_space(12.0);
