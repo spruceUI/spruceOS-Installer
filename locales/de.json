@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "Abbrechen",
+  "common.continue": "Weiter",
+  "common.close": "Schließen",
+  "common.ok": "OK",
+
+  "main.install": "Installieren",
+  "main.resume": "Fortsetzen",
+  "main.pause": "Pausieren",
+  "main.partial_download": "(unvollständiger Download erkannt)",
+  "main.no_sd_card": "Keine SD-Karte",
+  "main.select_drive": "Laufwerk wählen",
+  "main.refresh_drives": "Laufwerksliste aktualisieren",
+  "main.toggle_log": "Protokoll ein-/ausblenden",
+  "main.update_mode": "Bestehende Installation aktualisieren (ohne Formatieren)",
+  "main.preserve_data": "Benutzerdaten behalten",
+  "main.newer_version": "%{version} verfügbar",
+
+  "select_asset.heading": "Datei zum Installieren auswählen:",
+
+  "update_preview.heading": "Update-Vorschau",
+  "update_preview.deleted_dirs": "Diese Ordner werden gelöscht:",
+  "update_preview.preserved": "Diese Benutzerdaten bleiben erhalten:",
+  "update_preview.preserved_retroarch": "RetroArch-Einstellungen & Overlays",
+  "update_preview.preserved_emulators": "Emulator-Spielstände & Einstellungen",
+  "update_preview.preserved_syncthing": "Syncthing-Einstellungen & SSH-Schlüssel",
+  "update_preview.preserved_spruce": "Spruce-Einstellungen & Theme-Sicherungen",
+  "update_preview.preserve_disabled": "Das Behalten der Benutzerdaten ist deaktiviert.",
+  "update_preview.customizations_lost": "Emulator- und RetroArch-Einstellungen sowie andere Anpassungen\nin den gelöschten Ordnern gehen verloren.",
+  "update_preview.still_kept": "Roms, BIOS und Saves bleiben trotzdem erhalten.",
+
+  "confirm.warning": "WARNUNG",
+  "confirm.update_deletes_dirs": "Die ausgewählten Ordner werden gelöscht.",
+  "confirm.update_question": "Mit dem Update fortfahren?",
+  "confirm.erase_warning": "Dadurch werden ALLE DATEN auf dem ausgewählten Laufwerk GELÖSCHT:",
+  "confirm.erase_question": "Möchtest du wirklich fortfahren?",
+  "confirm.yes_update": "Ja, aktualisieren",
+  "confirm.yes_install": "Ja, installieren",
+
+  "complete.title": "ERFOLGREICH",
+  "complete.message": "%{name} wurde erfolgreich installiert.",
+  "complete.eject": "Sicher auswerfen",
+
+  "eject.ejecting": "SD-Karte wird ausgeworfen...",
+  "eject.ejected": "SD-Karte ausgeworfen!",
+  "eject.safe_to_remove": "Du kannst sie jetzt sicher entfernen.",
+
+  "error.title": "FEHLGESCHLAGEN",
+  "error.message": "Die Installation von %{name} ist fehlgeschlagen.",
+  "error.check_log": "Details findest du im Protokoll.",
+
+  "scraper.title": "Cover herunterladen",
+  "scraper.selected_drive": "Ausgewähltes Laufwerk: %{drive}",
+  "scraper.roms_path": "Roms: %{path}",
+  "scraper.select_all": "Alle auswählen",
+  "scraper.deselect_all": "Auswahl aufheben",
+  "scraper.no_folders": "Keine unterstützten ROM-Ordner gefunden.",
+  "scraper.complete": "Cover-Download abgeschlossen!",
+  "scraper.total": "%{count} insgesamt",
+  "scraper.downloaded": "%{count} heruntergeladen",
+  "scraper.skipped": "%{count} übersprungen (bereits vorhanden)",
+  "scraper.failed": "%{count} fehlgeschlagen",
+  "scraper.start": "Download starten",
+
+  "log.title": "Debug-Protokoll",
+  "log.close": "Protokoll schließen",
+  "log.copy": "In die Zwischenablage kopieren",
+  "log.file": "Protokoll: %{file}",
+  "log.read_failed": "Protokolldatei konnte nicht gelesen werden: %{error}",
+
+  "update_notice.title": "Update verfügbar",
+  "update_notice.message": "%{latest} ist erschienen. Du hast v%{current}.",
+  "update_notice.get_latest": "Neueste Version herunterladen:",
+  "update_notice.copy_link": "Link kopieren"
+}

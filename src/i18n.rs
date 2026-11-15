@@ -166,7 +166,7 @@ mod tests {
     fn lookups_use_the_chosen_language_and_fall_back_to_english() {
         assert_eq!(t!("common.cancel", locale = "en"), "Cancel");
         assert_eq!(t!("common.cancel", locale = "ca"), "Cancel·la");
-        assert_eq!(t!("common.cancel", locale = "fr"), "Cancel");
+        assert_eq!(t!("common.cancel", locale = "ja"), "Cancel");
         assert_eq!(
             t!("complete.message", locale = "ca", name = "spruceOS Stable"),
             "S'ha instal·lat spruceOS Stable correctament."

@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "Annulla",
+  "common.continue": "Continua",
+  "common.close": "Chiudi",
+  "common.ok": "OK",
+
+  "main.install": "Installa",
+  "main.resume": "Riprendi",
+  "main.pause": "Pausa",
+  "main.partial_download": "(rilevato download parziale)",
+  "main.no_sd_card": "Nessuna scheda SD",
+  "main.select_drive": "Seleziona unità",
+  "main.refresh_drives": "Aggiorna l'elenco delle unità",
+  "main.toggle_log": "Mostra/nascondi registro",
+  "main.update_mode": "Aggiorna l'installazione esistente (senza formattare)",
+  "main.preserve_data": "Conserva i dati utente",
+  "main.newer_version": "%{version} disponibile",
+
+  "select_asset.heading": "Seleziona il file da installare:",
+
+  "update_preview.heading": "Anteprima dell'aggiornamento",
+  "update_preview.deleted_dirs": "Verranno eliminate queste cartelle:",
+  "update_preview.preserved": "Verranno conservati questi dati utente:",
+  "update_preview.preserved_retroarch": "Configurazioni e overlay di RetroArch",
+  "update_preview.preserved_emulators": "Salvataggi e impostazioni degli emulatori",
+  "update_preview.preserved_syncthing": "Configurazione di Syncthing e chiavi SSH",
+  "update_preview.preserved_spruce": "Configurazione di Spruce e backup dei temi",
+  "update_preview.preserve_disabled": "La conservazione dei dati utente è disattivata.",
+  "update_preview.customizations_lost": "Le configurazioni degli emulatori, le impostazioni di RetroArch e le altre\npersonalizzazioni nelle cartelle eliminate andranno perse.",
+  "update_preview.still_kept": "Le cartelle Roms, BIOS e Saves verranno comunque conservate.",
+
+  "confirm.warning": "ATTENZIONE",
+  "confirm.update_deletes_dirs": "Le cartelle selezionate verranno eliminate.",
+  "confirm.update_question": "Continuare con l'aggiornamento?",
+  "confirm.erase_warning": "Verranno CANCELLATI TUTTI I DATI dell'unità selezionata:",
+  "confirm.erase_question": "Vuoi davvero continuare?",
+  "confirm.yes_update": "Sì, aggiorna",
+  "confirm.yes_install": "Sì, installa",
+
+  "complete.title": "COMPLETATO",
+  "complete.message": "%{name} è stato installato correttamente.",
+  "complete.eject": "Espelli in sicurezza",
+
+  "eject.ejecting": "Espulsione della scheda SD...",
+  "eject.ejected": "Scheda SD espulsa!",
+  "eject.safe_to_remove": "Ora puoi rimuoverla in sicurezza.",
+
+  "error.title": "NON RIUSCITO",
+  "error.message": "L'installazione di %{name} non è riuscita.",
+  "error.check_log": "Controlla il registro per i dettagli.",
+
+  "scraper.title": "Scarica copertine",
+  "scraper.selected_drive": "Unità selezionata: %{drive}",
+  "scraper.roms_path": "Roms: %{path}",
+  "scraper.select_all": "Seleziona tutto",
+  "scraper.deselect_all": "Deseleziona tutto",
+  "scraper.no_folders": "Nessuna cartella ROM supportata trovata.",
+  "scraper.complete": "Download delle copertine completato!",
+  "scraper.total": "%{count} in totale",
+  "scraper.downloaded": "%{count} scaricate",
+  "scraper.skipped": "%{count} saltate (già presenti)",
+  "scraper.failed": "%{count} non riuscite",
+  "scraper.start": "Avvia il download",
+
+  "log.title": "Registro di debug",
+  "log.close": "Chiudi registro",
+  "log.copy": "Copia negli appunti",
+  "log.file": "Registro: %{file}",
+  "log.read_failed": "Impossibile leggere il file di registro: %{error}",
+
+  "update_notice.title": "Aggiornamento disponibile",
+  "update_notice.message": "È uscita la %{latest}. Hai la v%{current}.",
+  "update_notice.get_latest": "Scarica la versione più recente:",
+  "update_notice.copy_link": "Copia link"
+}

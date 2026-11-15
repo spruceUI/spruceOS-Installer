@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "Annuler",
+  "common.continue": "Continuer",
+  "common.close": "Fermer",
+  "common.ok": "OK",
+
+  "main.install": "Installer",
+  "main.resume": "Reprendre",
+  "main.pause": "Pause",
+  "main.partial_download": "(téléchargement partiel détecté)",
+  "main.no_sd_card": "Aucune carte SD",
+  "main.select_drive": "Choisir un lecteur",
+  "main.refresh_drives": "Actualiser la liste des lecteurs",
+  "main.toggle_log": "Afficher/masquer le journal",
+  "main.update_mode": "Mettre à jour l'installation existante (sans formater)",
+  "main.preserve_data": "Conserver les données utilisateur",
+  "main.newer_version": "%{version} disponible",
+
+  "select_asset.heading": "Choisissez le fichier à installer :",
+
+  "update_preview.heading": "Aperçu de la mise à jour",
+  "update_preview.deleted_dirs": "Les dossiers suivants seront supprimés :",
+  "update_preview.preserved": "Les données utilisateur suivantes seront conservées :",
+  "update_preview.preserved_retroarch": "Configurations et overlays de RetroArch",
+  "update_preview.preserved_emulators": "Sauvegardes et paramètres des émulateurs",
+  "update_preview.preserved_syncthing": "Configuration de Syncthing et clés SSH",
+  "update_preview.preserved_spruce": "Configuration de Spruce et sauvegardes des thèmes",
+  "update_preview.preserve_disabled": "La conservation des données utilisateur est désactivée.",
+  "update_preview.customizations_lost": "Les configurations des émulateurs, les paramètres de RetroArch et les autres\npersonnalisations des dossiers supprimés seront perdus.",
+  "update_preview.still_kept": "Les dossiers Roms, BIOS et Saves seront tout de même conservés.",
+
+  "confirm.warning": "ATTENTION",
+  "confirm.update_deletes_dirs": "Les dossiers sélectionnés seront supprimés.",
+  "confirm.update_question": "Continuer la mise à jour ?",
+  "confirm.erase_warning": "Cette opération va EFFACER TOUTES LES DONNÉES du lecteur sélectionné :",
+  "confirm.erase_question": "Voulez-vous vraiment continuer ?",
+  "confirm.yes_update": "Oui, mettre à jour",
+  "confirm.yes_install": "Oui, installer",
+
+  "complete.title": "RÉUSSI",
+  "complete.message": "%{name} a été installé avec succès.",
+  "complete.eject": "Éjecter en toute sécurité",
+
+  "eject.ejecting": "Éjection de la carte SD...",
+  "eject.ejected": "Carte SD éjectée !",
+  "eject.safe_to_remove": "Vous pouvez maintenant la retirer en toute sécurité.",
+
+  "error.title": "ÉCHEC",
+  "error.message": "L'installation de %{name} a échoué.",
+  "error.check_log": "Consultez le journal pour plus de détails.",
+
+  "scraper.title": "Télécharger les jaquettes",
+  "scraper.selected_drive": "Lecteur sélectionné : %{drive}",
+  "scraper.roms_path": "Roms : %{path}",
+  "scraper.select_all": "Tout sélectionner",
+  "scraper.deselect_all": "Tout désélectionner",
+  "scraper.no_folders": "Aucun dossier de ROM compatible trouvé.",
+  "scraper.complete": "Téléchargement des jaquettes terminé !",
+  "scraper.total": "%{count} au total",
+  "scraper.downloaded": "%{count} téléchargées",
+  "scraper.skipped": "%{count} ignorées (déjà présentes)",
+  "scraper.failed": "%{count} en échec",
+  "scraper.start": "Lancer le téléchargement",
+
+  "log.title": "Journal de débogage",
+  "log.close": "Fermer le journal",
+  "log.copy": "Copier dans le presse-papiers",
+  "log.file": "Journal : %{file}",
+  "log.read_failed": "Impossible de lire le fichier journal : %{error}",
+
+  "update_notice.title": "Mise à jour disponible",
+  "update_notice.message": "La %{latest} est sortie. Vous avez la v%{current}.",
+  "update_notice.get_latest": "Téléchargez la dernière version :",
+  "update_notice.copy_link": "Copier le lien"
+}
