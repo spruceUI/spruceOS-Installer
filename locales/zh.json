@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "取消",
+  "common.continue": "继续",
+  "common.close": "关闭",
+  "common.ok": "确定",
+
+  "main.install": "安装",
+  "main.resume": "继续",
+  "main.pause": "暂停",
+  "main.partial_download": "（检测到未完成的下载）",
+  "main.no_sd_card": "未检测到 SD 卡",
+  "main.select_drive": "选择驱动器",
+  "main.refresh_drives": "刷新驱动器列表",
+  "main.toggle_log": "显示/隐藏日志",
+  "main.update_mode": "更新现有安装（不格式化）",
+  "main.preserve_data": "保留用户数据",
+  "main.newer_version": "%{version} 已发布",
+
+  "select_asset.heading": "选择要安装的文件：",
+
+  "update_preview.heading": "更新预览",
+  "update_preview.deleted_dirs": "以下文件夹将被删除：",
+  "update_preview.preserved": "以下用户数据将被保留：",
+  "update_preview.preserved_retroarch": "RetroArch 配置和遮罩",
+  "update_preview.preserved_emulators": "模拟器存档和设置",
+  "update_preview.preserved_syncthing": "Syncthing 配置和 SSH 密钥",
+  "update_preview.preserved_spruce": "Spruce 配置和主题备份",
+  "update_preview.preserve_disabled": "用户数据保留已关闭。",
+  "update_preview.customizations_lost": "被删除文件夹中的模拟器配置、RetroArch 设置\n及其他自定义内容将会丢失。",
+  "update_preview.still_kept": "Roms、BIOS 和 Saves 文件夹仍会保留。",
+
+  "confirm.warning": "警告",
+  "confirm.update_deletes_dirs": "所选文件夹将被删除。",
+  "confirm.update_question": "是否继续更新？",
+  "confirm.erase_warning": "这将删除所选驱动器上的所有数据：",
+  "confirm.erase_question": "确定要继续吗？",
+  "confirm.yes_update": "是，更新",
+  "confirm.yes_install": "是，安装",
+
+  "complete.title": "成功",
+  "complete.message": "%{name} 已成功安装。",
+  "complete.eject": "安全弹出",
+
+  "eject.ejecting": "正在弹出 SD 卡...",
+  "eject.ejected": "SD 卡已弹出！",
+  "eject.safe_to_remove": "现在可以安全地取出了。",
+
+  "error.title": "失败",
+  "error.message": "%{name} 安装失败。",
+  "error.check_log": "详情请查看日志。",
+
+  "scraper.title": "抓取封面",
+  "scraper.selected_drive": "已选驱动器：%{drive}",
+  "scraper.roms_path": "Roms：%{path}",
+  "scraper.select_all": "全选",
+  "scraper.deselect_all": "取消全选",
+  "scraper.no_folders": "未找到支持的 ROM 文件夹。",
+  "scraper.complete": "封面抓取完成！",
+  "scraper.total": "共 %{count} 个",
+  "scraper.downloaded": "已下载 %{count} 个",
+  "scraper.skipped": "已跳过 %{count} 个（已存在）",
+  "scraper.failed": "失败 %{count} 个",
+  "scraper.start": "开始抓取",
+
+  "log.title": "调试日志",
+  "log.close": "关闭日志",
+  "log.copy": "复制到剪贴板",
+  "log.file": "日志：%{file}",
+  "log.read_failed": "无法读取日志文件：%{error}",
+
+  "update_notice.title": "有可用更新",
+  "update_notice.message": "%{latest} 已发布。你当前的版本是 v%{current}。",
+  "update_notice.get_latest": "获取最新版本：",
+  "update_notice.copy_link": "复制链接"
+}

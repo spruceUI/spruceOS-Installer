@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "キャンセル",
+  "common.continue": "続行",
+  "common.close": "閉じる",
+  "common.ok": "OK",
+
+  "main.install": "インストール",
+  "main.resume": "再開",
+  "main.pause": "一時停止",
+  "main.partial_download": "（途中までのダウンロードがあります）",
+  "main.no_sd_card": "SDカードがありません",
+  "main.select_drive": "ドライブを選択",
+  "main.refresh_drives": "ドライブ一覧を更新",
+  "main.toggle_log": "ログの表示/非表示",
+  "main.update_mode": "既存のインストールを更新（フォーマットしない）",
+  "main.preserve_data": "ユーザーデータを保持",
+  "main.newer_version": "%{version} が利用可能",
+
+  "select_asset.heading": "インストールするファイルを選択してください：",
+
+  "update_preview.heading": "アップデートのプレビュー",
+  "update_preview.deleted_dirs": "次のフォルダが削除されます：",
+  "update_preview.preserved": "次のユーザーデータは保持されます：",
+  "update_preview.preserved_retroarch": "RetroArch の設定とオーバーレイ",
+  "update_preview.preserved_emulators": "エミュレーターのセーブデータと設定",
+  "update_preview.preserved_syncthing": "Syncthing の設定と SSH キー",
+  "update_preview.preserved_spruce": "Spruce の設定とテーマのバックアップ",
+  "update_preview.preserve_disabled": "ユーザーデータの保持は無効です。",
+  "update_preview.customizations_lost": "削除されるフォルダ内のエミュレーター設定、RetroArch の設定、\nその他のカスタマイズは失われます。",
+  "update_preview.still_kept": "Roms、BIOS、Saves フォルダはそのまま残ります。",
+
+  "confirm.warning": "警告",
+  "confirm.update_deletes_dirs": "選択したフォルダが削除されます。",
+  "confirm.update_question": "アップデートを続行しますか？",
+  "confirm.erase_warning": "選択したドライブのデータはすべて消去されます：",
+  "confirm.erase_question": "本当に続行しますか？",
+  "confirm.yes_update": "はい、アップデートします",
+  "confirm.yes_install": "はい、インストールします",
+
+  "complete.title": "完了",
+  "complete.message": "%{name} のインストールが完了しました。",
+  "complete.eject": "安全に取り外す",
+
+  "eject.ejecting": "SDカードを取り外しています...",
+  "eject.ejected": "SDカードを取り外しました！",
+  "eject.safe_to_remove": "安全に抜き取れます。",
+
+  "error.title": "失敗",
+  "error.message": "%{name} のインストールに失敗しました。",
+  "error.check_log": "詳しくはログを確認してください。",
+
+  "scraper.title": "ボックスアートを取得",
+  "scraper.selected_drive": "選択中のドライブ：%{drive}",
+  "scraper.roms_path": "Roms：%{path}",
+  "scraper.select_all": "すべて選択",
+  "scraper.deselect_all": "すべて解除",
+  "scraper.no_folders": "対応する ROM フォルダが見つかりません。",
+  "scraper.complete": "ボックスアートの取得が完了しました！",
+  "scraper.total": "合計 %{count} 件",
+  "scraper.downloaded": "%{count} 件ダウンロード",
+  "scraper.skipped": "%{count} 件スキップ（既存）",
+  "scraper.failed": "%{count} 件失敗",
+  "scraper.start": "取得を開始",
+
+  "log.title": "デバッグログ",
+  "log.close": "ログを閉じる",
+  "log.copy": "クリップボードにコピー",
+  "log.file": "ログ：%{file}",
+  "log.read_failed": "ログファイルを読み込めません：%{error}",
+
+  "update_notice.title": "アップデートがあります",
+  "update_notice.message": "%{latest} が公開されています。現在のバージョンは v%{current} です。",
+  "update_notice.get_latest": "最新版の入手先：",
+  "update_notice.copy_link": "リンクをコピー"
+}

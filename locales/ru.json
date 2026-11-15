@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "Отмена",
+  "common.continue": "Продолжить",
+  "common.close": "Закрыть",
+  "common.ok": "ОК",
+
+  "main.install": "Установить",
+  "main.resume": "Продолжить",
+  "main.pause": "Пауза",
+  "main.partial_download": "(обнаружена частичная загрузка)",
+  "main.no_sd_card": "Нет SD-карты",
+  "main.select_drive": "Выберите диск",
+  "main.refresh_drives": "Обновить список дисков",
+  "main.toggle_log": "Показать/скрыть журнал",
+  "main.update_mode": "Обновить существующую установку (без форматирования)",
+  "main.preserve_data": "Сохранить пользовательские данные",
+  "main.newer_version": "Доступна %{version}",
+
+  "select_asset.heading": "Выберите файл для установки:",
+
+  "update_preview.heading": "Предпросмотр обновления",
+  "update_preview.deleted_dirs": "Будут удалены следующие папки:",
+  "update_preview.preserved": "Будут сохранены следующие пользовательские данные:",
+  "update_preview.preserved_retroarch": "Настройки и оверлеи RetroArch",
+  "update_preview.preserved_emulators": "Сохранения и настройки эмуляторов",
+  "update_preview.preserved_syncthing": "Настройки Syncthing и ключи SSH",
+  "update_preview.preserved_spruce": "Настройки Spruce и резервные копии тем",
+  "update_preview.preserve_disabled": "Сохранение пользовательских данных отключено.",
+  "update_preview.customizations_lost": "Настройки эмуляторов, RetroArch и другие пользовательские изменения\nв удаляемых папках будут потеряны.",
+  "update_preview.still_kept": "Папки Roms, BIOS и Saves всё равно сохранятся.",
+
+  "confirm.warning": "ВНИМАНИЕ",
+  "confirm.update_deletes_dirs": "Выбранные папки будут удалены.",
+  "confirm.update_question": "Продолжить обновление?",
+  "confirm.erase_warning": "ВСЕ ДАННЫЕ на выбранном диске будут УДАЛЕНЫ:",
+  "confirm.erase_question": "Вы уверены, что хотите продолжить?",
+  "confirm.yes_update": "Да, обновить",
+  "confirm.yes_install": "Да, установить",
+
+  "complete.title": "ГОТОВО",
+  "complete.message": "%{name} успешно установлен.",
+  "complete.eject": "Безопасно извлечь",
+
+  "eject.ejecting": "Извлечение SD-карты...",
+  "eject.ejected": "SD-карта извлечена!",
+  "eject.safe_to_remove": "Теперь её можно безопасно вынуть.",
+
+  "error.title": "ОШИБКА",
+  "error.message": "Не удалось установить %{name}.",
+  "error.check_log": "Подробности смотрите в журнале.",
+
+  "scraper.title": "Загрузить обложки",
+  "scraper.selected_drive": "Выбранный диск: %{drive}",
+  "scraper.roms_path": "Roms: %{path}",
+  "scraper.select_all": "Выбрать все",
+  "scraper.deselect_all": "Снять выделение",
+  "scraper.no_folders": "Поддерживаемые папки с ROM не найдены.",
+  "scraper.complete": "Загрузка обложек завершена!",
+  "scraper.total": "Всего: %{count}",
+  "scraper.downloaded": "Загружено: %{count}",
+  "scraper.skipped": "Пропущено (уже есть): %{count}",
+  "scraper.failed": "Ошибок: %{count}",
+  "scraper.start": "Начать загрузку",
+
+  "log.title": "Журнал отладки",
+  "log.close": "Закрыть журнал",
+  "log.copy": "Копировать в буфер обмена",
+  "log.file": "Журнал: %{file}",
+  "log.read_failed": "Не удалось прочитать файл журнала: %{error}",
+
+  "update_notice.title": "Доступно обновление",
+  "update_notice.message": "Вышла %{latest}. У вас v%{current}.",
+  "update_notice.get_latest": "Скачать последнюю версию:",
+  "update_notice.copy_link": "Копировать ссылку"
+}

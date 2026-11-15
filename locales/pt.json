@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "Cancelar",
+  "common.continue": "Continuar",
+  "common.close": "Fechar",
+  "common.ok": "OK",
+
+  "main.install": "Instalar",
+  "main.resume": "Retomar",
+  "main.pause": "Pausar",
+  "main.partial_download": "(download parcial detectado)",
+  "main.no_sd_card": "Nenhum cartão SD",
+  "main.select_drive": "Selecionar unidade",
+  "main.refresh_drives": "Atualizar lista de unidades",
+  "main.toggle_log": "Mostrar/ocultar registro",
+  "main.update_mode": "Atualizar instalação existente (sem formatar)",
+  "main.preserve_data": "Preservar dados do usuário",
+  "main.newer_version": "%{version} disponível",
+
+  "select_asset.heading": "Selecione o arquivo para instalar:",
+
+  "update_preview.heading": "Prévia da atualização",
+  "update_preview.deleted_dirs": "As seguintes pastas serão excluídas:",
+  "update_preview.preserved": "Os seguintes dados do usuário serão preservados:",
+  "update_preview.preserved_retroarch": "Configurações e overlays do RetroArch",
+  "update_preview.preserved_emulators": "Jogos salvos e configurações dos emuladores",
+  "update_preview.preserved_syncthing": "Configuração do Syncthing e chaves SSH",
+  "update_preview.preserved_spruce": "Configuração do Spruce e backups de temas",
+  "update_preview.preserve_disabled": "A preservação dos dados do usuário está desativada.",
+  "update_preview.customizations_lost": "As configurações dos emuladores, do RetroArch e outras personalizações\nnas pastas excluídas serão perdidas.",
+  "update_preview.still_kept": "As pastas Roms, BIOS e Saves continuarão preservadas.",
+
+  "confirm.warning": "AVISO",
+  "confirm.update_deletes_dirs": "As pastas selecionadas serão excluídas.",
+  "confirm.update_question": "Continuar com a atualização?",
+  "confirm.erase_warning": "Isso vai APAGAR TODOS OS DADOS da unidade selecionada:",
+  "confirm.erase_question": "Tem certeza de que deseja continuar?",
+  "confirm.yes_update": "Sim, atualizar",
+  "confirm.yes_install": "Sim, instalar",
+
+  "complete.title": "SUCESSO",
+  "complete.message": "%{name} foi instalado com sucesso.",
+  "complete.eject": "Ejetar com segurança",
+
+  "eject.ejecting": "Ejetando o cartão SD...",
+  "eject.ejected": "Cartão SD ejetado!",
+  "eject.safe_to_remove": "Agora você pode removê-lo com segurança.",
+
+  "error.title": "FALHOU",
+  "error.message": "A instalação do %{name} falhou.",
+  "error.check_log": "Verifique o registro para mais detalhes.",
+
+  "scraper.title": "Baixar capas",
+  "scraper.selected_drive": "Unidade selecionada: %{drive}",
+  "scraper.roms_path": "Roms: %{path}",
+  "scraper.select_all": "Selecionar tudo",
+  "scraper.deselect_all": "Desmarcar tudo",
+  "scraper.no_folders": "Nenhuma pasta de ROMs compatível encontrada.",
+  "scraper.complete": "Download das capas concluído!",
+  "scraper.total": "%{count} no total",
+  "scraper.downloaded": "%{count} baixadas",
+  "scraper.skipped": "%{count} ignoradas (já existiam)",
+  "scraper.failed": "%{count} com falha",
+  "scraper.start": "Iniciar download",
+
+  "log.title": "Registro de depuração",
+  "log.close": "Fechar registro",
+  "log.copy": "Copiar para a área de transferência",
+  "log.file": "Registro: %{file}",
+  "log.read_failed": "Falha ao ler o arquivo de registro: %{error}",
+
+  "update_notice.title": "Atualização disponível",
+  "update_notice.message": "A %{latest} foi lançada. Você tem a v%{current}.",
+  "update_notice.get_latest": "Baixe a versão mais recente:",
+  "update_notice.copy_link": "Copiar link"
+}
