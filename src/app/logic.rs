@@ -28,6 +28,7 @@ use crate::preserve::{backup_preserve_paths, restore_preserve_paths, backup_dyna
 use crate::boxart_scraper::{BoxArtScraper, ScrapeProgress};
 use crate::single_card::SingleCard;
 use super::state::ProgressInfo;
+use rust_i18n::t;
 use eframe::egui;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -303,7 +304,7 @@ impl InstallerApp {
         // Spawn async task to fetch release
         self.runtime.spawn(async move {
             if let Ok(mut p) = progress.lock() {
-                p.message = "Fetching release info...".to_string();
+                p.message = t!("status.fetching_release_info").into_owned();
             }
             ctx_clone.request_repaint();
 
@@ -595,7 +596,7 @@ impl InstallerApp {
                             if let Ok(mut p) = progress_clone.lock() {
                                 p.total = total_bytes;
                                 p.current = 0;
-                                p.message = "Downloading...".to_string();
+                                p.message = t!("status.downloading").into_owned();
                             }
                         }
                         DownloadProgress::Progress { downloaded, total } => {
@@ -603,22 +604,22 @@ impl InstallerApp {
                                 p.current = downloaded;
                                 p.total = total;
                                 let pct = (downloaded as f64 / total as f64 * 100.0) as u32;
-                                p.message = format!("Downloading... {}%", pct);
+                                p.message = t!("status.downloading_percent", percent = pct).into_owned();
                             }
                         }
                         DownloadProgress::Completed => {
                             if let Ok(mut p) = progress_clone.lock() {
-                                p.message = "Download complete".to_string();
+                                p.message = t!("status.download_complete").into_owned();
                             }
                         }
                         DownloadProgress::Cancelled => {
                             if let Ok(mut p) = progress_clone.lock() {
-                                p.message = "Download cancelled".to_string();
+                                p.message = t!("status.download_cancelled").into_owned();
                             }
                         }
                         DownloadProgress::Error(e) => {
                             if let Ok(mut p) = progress_clone.lock() {
-                                p.message = format!("Download error: {}", e);
+                                p.message = t!("status.download_error", error = e).into_owned();
                             }
                         }
                         DownloadProgress::Paused { downloaded, total } => {
@@ -626,7 +627,7 @@ impl InstallerApp {
                                 p.current = downloaded;
                                 p.total = total;
                                 let pct = (downloaded as f64 / total as f64 * 100.0) as u32;
-                                p.message = format!("Download paused at {}%", pct);
+                                p.message = t!("status.download_paused", percent = pct).into_owned();
                             }
                         }
                         DownloadProgress::Resuming { downloaded, total } => {
@@ -634,7 +635,7 @@ impl InstallerApp {
                                 p.current = downloaded;
                                 p.total = total;
                                 let pct = (downloaded as f64 / total as f64 * 100.0) as u32;
-                                p.message = format!("Resuming from {}%...", pct);
+                                p.message = t!("status.download_resuming", percent = pct).into_owned();
                             }
                         }
                     }
@@ -691,7 +692,7 @@ impl InstallerApp {
             let _ = state_tx_clone.send(AppState::Formatting);
             log(&format!("Formatting {}...", drive.name));
             crate::debug::log_section("Formatting Drive");
-            set_progress(0, 100, "Formatting drive...");
+            set_progress(0, 100, &t!("status.formatting_drive"));
 
             let (fmt_tx, mut fmt_rx) = mpsc::unbounded_channel::<FormatProgress>();
             let progress_fmt = progress.clone();
@@ -703,37 +704,37 @@ impl InstallerApp {
                     if let Ok(mut p) = progress_fmt.lock() {
                         match prog {
                             FormatProgress::Started => {
-                                p.message = "Starting format...".to_string();
+                                p.message = t!("status.format_starting").into_owned();
                             }
                             FormatProgress::Unmounting => {
-                                p.message = "Unmounting drive...".to_string();
+                                p.message = t!("status.format_unmounting").into_owned();
                             }
                             #[cfg(not(target_os = "macos"))]
                             FormatProgress::CleaningDisk => {
-                                p.message = "Cleaning disk...".to_string();
+                                p.message = t!("status.format_cleaning").into_owned();
                             }
                             #[cfg(not(target_os = "macos"))]
                             FormatProgress::CreatingPartition => {
-                                p.message = "Creating partition...".to_string();
+                                p.message = t!("status.format_partitioning").into_owned();
                             }
                             FormatProgress::Formatting => {
-                                p.message = "Formatting to FAT32...".to_string();
+                                p.message = t!("status.format_fat32").into_owned();
                             }
                             FormatProgress::Progress { percent } => {
                                 p.current = percent as u64;
                                 p.total = 100;
-                                p.message = format!("Formatting... {}%", percent);
+                                p.message = t!("status.format_percent", percent = percent).into_owned();
                             }
                             FormatProgress::Completed => {
                                 p.current = 100;
                                 p.total = 100;
-                                p.message = "Format complete".to_string();
+                                p.message = t!("status.format_complete").into_owned();
                             }
                             FormatProgress::Cancelled => {
-                                p.message = "Format cancelled".to_string();
+                                p.message = t!("status.format_cancelled").into_owned();
                             }
                             FormatProgress::Error(ref e) => {
-                                p.message = format!("Format error: {}", e);
+                                p.message = t!("status.format_error", error = e).into_owned();
                             }
                         }
                     }
@@ -786,7 +787,7 @@ impl InstallerApp {
                 if preserve_data {
                     let _ = state_tx_clone.send(AppState::BackingUp);
                     log("Backing up user data...");
-                    set_progress(0, 100, "Backing up user data...");
+                    set_progress(0, 100, &t!("status.backing_up_user_data"));
 
                     // Clean up any previous backup
                     let _ = tokio::fs::remove_dir_all(&temp_backup_dir).await;
@@ -802,21 +803,21 @@ impl InstallerApp {
                                     PreserveProgress::Started { total_paths } => {
                                         p.current = 0;
                                         p.total = total_paths as u64;
-                                        p.message = format!("Backing up {} paths...", total_paths);
+                                        p.message = t!("status.backup_started", count = total_paths).into_owned();
                                     }
                                     PreserveProgress::BackingUp { ref path } => {
-                                        p.message = format!("Backing up: {}", path);
+                                        p.message = t!("status.backup_item", path = path).into_owned();
                                     }
                                     PreserveProgress::Restoring { .. } => {}
                                     PreserveProgress::Completed => {
                                         p.current = p.total;
-                                        p.message = "Backup complete".to_string();
+                                        p.message = t!("status.backup_complete").into_owned();
                                     }
                                     PreserveProgress::Cancelled => {
-                                        p.message = "Backup cancelled".to_string();
+                                        p.message = t!("status.backup_cancelled").into_owned();
                                     }
                                     PreserveProgress::Error(ref e) => {
-                                        p.message = format!("Backup error: {}", e);
+                                        p.message = t!("status.backup_error", error = e).into_owned();
                                     }
                                 }
                             }
@@ -845,7 +846,7 @@ impl InstallerApp {
 
                     // Backup dynamic configs (emu settings, spruce config, theme configs)
                     log("Backing up dynamic configs...");
-                    set_progress(0, 100, "Backing up dynamic configs...");
+                    set_progress(0, 100, &t!("status.backing_up_configs"));
 
                     let (dbak_tx, mut dbak_rx) = mpsc::unbounded_channel::<PreserveProgress>();
                     let progress_dbak = progress.clone();
@@ -856,10 +857,10 @@ impl InstallerApp {
                             if let Ok(mut p) = progress_dbak.lock() {
                                 match &prog {
                                     PreserveProgress::BackingUp { path } => {
-                                        p.message = format!("Backing up: {}", path);
+                                        p.message = t!("status.backup_item", path = path).into_owned();
                                     }
                                     PreserveProgress::Cancelled => {
-                                        p.message = "Backup cancelled".to_string();
+                                        p.message = t!("status.backup_cancelled").into_owned();
                                     }
                                     _ => {}
                                 }
@@ -888,7 +889,7 @@ impl InstallerApp {
                 let _ = state_tx_clone.send(AppState::Deleting);
                 log("Deleting old directories...");
                 crate::debug::log_section("Deleting Directories");
-                set_progress(0, 100, "Deleting old directories...");
+                set_progress(0, 100, &t!("status.deleting_old_dirs"));
 
                 let (del_tx, mut del_rx) = mpsc::unbounded_channel::<DeleteProgress>();
                 let progress_del = progress.clone();
@@ -902,20 +903,20 @@ impl InstallerApp {
                                 DeleteProgress::Started { total_dirs } => {
                                     p.current = 0;
                                     p.total = total_dirs as u64;
-                                    p.message = format!("Deleting {} directories...", total_dirs);
+                                    p.message = t!("status.delete_started", count = total_dirs).into_owned();
                                 }
                                 DeleteProgress::DeletingDirectory { ref name } => {
-                                    p.message = format!("Deleting: {}", name);
+                                    p.message = t!("status.delete_item", name = name).into_owned();
                                 }
                                 DeleteProgress::Completed => {
                                     p.current = p.total;
-                                    p.message = "Directory deletion complete".to_string();
+                                    p.message = t!("status.delete_complete").into_owned();
                                 }
                                 DeleteProgress::Cancelled => {
-                                    p.message = "Deletion cancelled".to_string();
+                                    p.message = t!("status.delete_cancelled").into_owned();
                                 }
                                 DeleteProgress::Error(ref e) => {
-                                    p.message = format!("Deletion error: {}", e);
+                                    p.message = t!("status.delete_error", error = e).into_owned();
                                 }
                             }
                         }
@@ -1076,7 +1077,7 @@ impl InstallerApp {
                                 BurnProgress::Started { total_bytes } => {
                                     p.total = total_bytes;
                                     p.current = 0;
-                                    p.message = "Starting burn...".to_string();
+                                    p.message = t!("status.burn_starting").into_owned();
                                 }
                                 BurnProgress::Writing { written, total } => {
                                     p.current = written;
@@ -1084,26 +1085,26 @@ impl InstallerApp {
                                     let pct = (written as f64 / total as f64 * 100.0) as u32;
                                     let mb_written = written / 1_048_576;
                                     let mb_total = total / 1_048_576;
-                                    p.message = format!("Writing... {}% ({}/{} MB)", pct, mb_written, mb_total);
+                                    p.message = t!("status.burn_writing", percent = pct, written = mb_written, total = mb_total).into_owned();
                                 }
                                 BurnProgress::Formatting => {
-                                    p.message = "Formatting SPRUCEOS...".to_string();
+                                    p.message = t!("status.burn_formatting", label = VOLUME_LABEL).into_owned();
                                 }
                                 BurnProgress::Copying { copied, total } => {
                                     p.current = copied;
                                     p.total = total;
                                     let pct = (copied as f64 / total.max(1) as f64 * 100.0) as u32;
-                                    p.message = format!("Copying spruceOS... {}%", pct);
+                                    p.message = t!("status.burn_copying", percent = pct).into_owned();
                                 }
                                 BurnProgress::Completed => {
                                     p.current = p.total;
-                                    p.message = "Burn complete".to_string();
+                                    p.message = t!("status.burn_complete").into_owned();
                                 }
                                 BurnProgress::Cancelled => {
-                                    p.message = "Burn cancelled".to_string();
+                                    p.message = t!("status.burn_cancelled").into_owned();
                                 }
                                 BurnProgress::Error(e) => {
-                                    p.message = format!("Burn error: {}", e);
+                                    p.message = t!("status.burn_error", error = e).into_owned();
                                 }
                             }
                         }
@@ -1167,7 +1168,7 @@ impl InstallerApp {
             log("Extracting files to local temp folder...");
             crate::debug::log_section("Extracting Files");
             crate::debug::log(&format!("Temp extract dir: {:?}", temp_extract_dir));
-            set_progress(0, 100, "Extracting files...");
+            set_progress(0, 100, &t!("status.extracting_files"));
 
             // Clean up any previous extraction
             let _ = std::fs::remove_dir_all(&temp_extract_dir);
@@ -1190,26 +1191,26 @@ impl InstallerApp {
                     if let Ok(mut p) = progress_ext.lock() {
                         match prog {
                             ExtractProgress::Started => {
-                                p.message = "Starting extraction...".to_string();
+                                p.message = t!("status.extract_starting").into_owned();
                             }
                             ExtractProgress::Extracting => {
-                                p.message = "Extracting files...".to_string();
+                                p.message = t!("status.extracting_files").into_owned();
                             }
                             ExtractProgress::Progress { percent } => {
                                 p.current = percent as u64;
                                 p.total = 100;
-                                p.message = format!("Extracting... {}%", percent);
+                                p.message = t!("status.extract_percent", percent = percent).into_owned();
                             }
                             ExtractProgress::Completed => {
                                 p.current = 100;
                                 p.total = 100;
-                                p.message = "Extraction complete".to_string();
+                                p.message = t!("status.extract_complete").into_owned();
                             }
                             ExtractProgress::Cancelled => {
-                                p.message = "Extraction cancelled".to_string();
+                                p.message = t!("status.extract_cancelled").into_owned();
                             }
                             ExtractProgress::Error(e) => {
-                                p.message = format!("Extract error: {}", e);
+                                p.message = t!("status.extract_error", error = e).into_owned();
                             }
                         }
                     }
@@ -1256,7 +1257,7 @@ impl InstallerApp {
             let _ = state_tx_clone.send(AppState::Copying);
             log("Copying files to SD card...");
             crate::debug::log_section("Copying Files");
-            set_progress(0, 100, "Copying files...");
+            set_progress(0, 100, &t!("status.copying_files"));
 
             let (copy_tx, mut copy_rx) = mpsc::unbounded_channel::<CopyProgress>();
             let progress_copy = progress.clone();
@@ -1268,12 +1269,12 @@ impl InstallerApp {
                     if let Ok(mut p) = progress_copy.lock() {
                         match prog {
                             CopyProgress::Counting => {
-                                p.message = "Counting files...".to_string();
+                                p.message = t!("status.copy_counting").into_owned();
                             }
                             CopyProgress::Started { total_bytes, total_files } => {
                                 p.total = total_bytes;
                                 p.current = 0;
-                                p.message = format!("Copying {} files...", total_files);
+                                p.message = t!("status.copy_started", count = total_files).into_owned();
                             }
                             CopyProgress::Progress { copied_bytes, total_bytes, current_file } => {
                                 p.current = copied_bytes;
@@ -1284,7 +1285,7 @@ impl InstallerApp {
                                     0
                                 };
                                 if current_file.is_empty() {
-                                    p.message = format!("Copying... {}%", pct);
+                                    p.message = t!("status.copy_percent", percent = pct).into_owned();
                                 } else {
                                     // Truncate filename if too long
                                     let display_file = if current_file.len() > 40 {
@@ -1292,18 +1293,18 @@ impl InstallerApp {
                                     } else {
                                         current_file
                                     };
-                                    p.message = format!("{}% - {}", pct, display_file);
+                                    p.message = t!("status.copy_file", percent = pct, file = display_file).into_owned();
                                 }
                             }
                             CopyProgress::Completed => {
                                 p.current = p.total;
-                                p.message = "Copy complete".to_string();
+                                p.message = t!("status.copy_complete").into_owned();
                             }
                             CopyProgress::Cancelled => {
-                                p.message = "Copy cancelled".to_string();
+                                p.message = t!("status.copy_cancelled").into_owned();
                             }
                             CopyProgress::Error(e) => {
-                                p.message = format!("Copy error: {}", e);
+                                p.message = t!("status.copy_error", error = e).into_owned();
                             }
                         }
                     }
@@ -1363,7 +1364,7 @@ impl InstallerApp {
             if update_mode && preserve_data && temp_backup_dir.exists() {
                 let _ = state_tx_clone.send(AppState::Restoring);
                 log("Restoring user data...");
-                set_progress(0, 100, "Restoring user data...");
+                set_progress(0, 100, &t!("status.restoring_user_data"));
 
                 let dest_for_restore = dest_path.as_ref().expect("dest_path should be Some in archive mode").clone();
 
@@ -1378,21 +1379,21 @@ impl InstallerApp {
                                 PreserveProgress::Started { total_paths } => {
                                     p.current = 0;
                                     p.total = total_paths as u64;
-                                    p.message = format!("Restoring {} files...", total_paths);
+                                    p.message = t!("status.restore_started", count = total_paths).into_owned();
                                 }
                                 PreserveProgress::BackingUp { .. } => {}
                                 PreserveProgress::Restoring { ref path } => {
-                                    p.message = format!("Restoring: {}", path);
+                                    p.message = t!("status.restore_item", path = path).into_owned();
                                 }
                                 PreserveProgress::Completed => {
                                     p.current = p.total;
-                                    p.message = "Restore complete".to_string();
+                                    p.message = t!("status.restore_complete").into_owned();
                                 }
                                 PreserveProgress::Cancelled => {
-                                    p.message = "Restore cancelled".to_string();
+                                    p.message = t!("status.restore_cancelled").into_owned();
                                 }
                                 PreserveProgress::Error(ref e) => {
-                                    p.message = format!("Restore error: {}", e);
+                                    p.message = t!("status.restore_error", error = e).into_owned();
                                 }
                             }
                         }
@@ -1464,24 +1465,26 @@ impl InstallerApp {
         let ctx_state = ctx.clone();
         self.runtime.spawn(async move {
             while let Some(new_state) = state_rx.recv().await {
-                // We can't directly update self.state from here, but we can use the progress message
-                // to communicate state. The UI will poll the progress message.
+                // We can't update self.state from here, so the new step goes in
+                // progress.stage for the UI to pick up. The message is only the
+                // text shown to the user, in the user's language.
                 if let Ok(mut p) = progress.lock() {
-                    p.message = match new_state {
-                        AppState::FetchingRelease => "Fetching release...".to_string(),
-                        AppState::Downloading => "Downloading...".to_string(),
-                        AppState::Formatting => "Formatting...".to_string(),
-                        AppState::BackingUp => "Backing up user data...".to_string(),
-                        AppState::Deleting => "Deleting old directories...".to_string(),
-                        AppState::Extracting => "Extracting...".to_string(),
-                        AppState::Copying => "Copying...".to_string(),
-                        AppState::Restoring => "Restoring user data...".to_string(),
-                        AppState::Burning => "Burning image...".to_string(),
-                        AppState::Complete => "COMPLETE".to_string(),
-                        AppState::Error => "ERROR".to_string(),
-                        AppState::Idle => "CANCELLED".to_string(),
-                        _ => p.message.clone(),
+                    let message = match new_state {
+                        AppState::FetchingRelease => Some(t!("status.fetching_release")),
+                        AppState::Downloading => Some(t!("status.downloading")),
+                        AppState::Formatting => Some(t!("status.formatting")),
+                        AppState::BackingUp => Some(t!("status.backing_up_user_data")),
+                        AppState::Deleting => Some(t!("status.deleting_old_dirs")),
+                        AppState::Extracting => Some(t!("status.extracting")),
+                        AppState::Copying => Some(t!("status.copying")),
+                        AppState::Restoring => Some(t!("status.restoring_user_data")),
+                        AppState::Burning => Some(t!("status.burning")),
+                        _ => None,
                     };
+                    if let Some(message) = message {
+                        p.message = message.into_owned();
+                    }
+                    p.stage = Some(new_state);
                 }
                 ctx_state.request_repaint();
             }
@@ -1537,7 +1540,7 @@ impl InstallerApp {
                         ScrapeProgress::Started { total } => {
                             p.total = total as u64;
                             p.current = 0;
-                            p.message = format!("Starting scrape... ({} ROMs found)", total);
+                            p.message = t!("status.scrape_starting", count = total).into_owned();
                         }
                         ScrapeProgress::Progress { current, rom_name, status } => {
                             p.current = current as u64;
@@ -1546,12 +1549,11 @@ impl InstallerApp {
                             } else {
                                 rom_name.clone()
                             };
-                            p.message = format!("Scraping... ({}/{}) - {}: {}",
-                                current, p.total, truncated_name, status);
+                            p.message = t!("status.scrape_progress", current = current, total = p.total, game = truncated_name, status = status).into_owned();
                         }
                         ScrapeProgress::Completed(stats) => {
                             p.current = p.total;
-                            p.message = "Scraping complete!".to_string();
+                            p.message = t!("scraper.complete").into_owned();
 
                             // Store stats
                             if let Ok(mut holder) = stats_holder_clone.lock() {
@@ -1801,6 +1803,9 @@ async fn unpack_spruce(
     cancel_token: CancellationToken,
     pause_token: CancellationToken,
 ) -> Result<(), String> {
+    if let Ok(mut p) = progress.lock() {
+        p.stage = Some(AppState::Downloading);
+    }
     let (dl_tx, mut dl_rx) = mpsc::unbounded_channel::<DownloadProgress>();
     let (dl_progress, dl_ctx) = (progress.clone(), ctx.clone());
     let dl_handle = tokio::spawn(async move {
@@ -1809,7 +1814,7 @@ async fn unpack_spruce(
                 if let Ok(mut p) = dl_progress.lock() {
                     p.current = downloaded;
                     p.total = total;
-                    p.message = format!("Downloading spruceOS {}... {}%", tag, downloaded * 100 / total.max(1));
+                    p.message = t!("status.single_card_downloading", version = tag, percent = downloaded * 100 / total.max(1)).into_owned();
                 }
                 dl_ctx.request_repaint();
             }
@@ -1821,6 +1826,9 @@ async fn unpack_spruce(
 
     let _ = std::fs::remove_dir_all(dir);
     std::fs::create_dir_all(dir).map_err(|e| format!("Failed to create {:?}: {}", dir, e))?;
+    if let Ok(mut p) = progress.lock() {
+        p.stage = Some(AppState::Extracting);
+    }
     let (ex_tx, mut ex_rx) = mpsc::unbounded_channel::<ExtractProgress>();
     let ex_handle = tokio::spawn(async move {
         while let Some(prog) = ex_rx.recv().await {
@@ -1828,7 +1836,7 @@ async fn unpack_spruce(
                 if let Ok(mut p) = progress.lock() {
                     p.current = percent as u64;
                     p.total = 100;
-                    p.message = format!("Extracting spruceOS... {}%", percent);
+                    p.message = t!("status.single_card_extracting", percent = percent).into_owned();
                 }
                 ctx.request_repaint();
             }

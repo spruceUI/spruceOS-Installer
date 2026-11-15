@@ -270,15 +270,14 @@ Works identically on Windows, Linux, and macOS with no configuration needed.
 
 ## Translations
 
-The installer's UI follows the system language when a translation exists, and falls back to English otherwise. Bundled: Catalan (`ca`), Dutch (`nl`), English (`en`), French (`fr`), German (`de`), Italian (`it`), Japanese (`ja`), Korean (`ko`), Polish (`pl`), Brazilian Portuguese (`pt`), Russian (`ru`), Simplified Chinese (`zh`), Spanish (`es`), Turkish (`tr`) and Ukrainian (`uk`).
+The whole UI is translatable, including the status line during an install and the repository tabs. Bundled: Catalan (`ca`), Dutch (`nl`), English (`en`), French (`fr`), German (`de`), Italian (`it`), Japanese (`ja`), Korean (`ko`), Polish (`pl`), Brazilian Portuguese (`pt`), Russian (`ru`), Simplified Chinese (`zh`), Spanish (`es`), Turkish (`tr`) and Ukrainian (`uk`).
 
+- **Which language:** the one picked in the 🌐 menu (top right), else the system's preferred languages, else English. The menu's choice is saved in the user's config folder (`spruceos-installer/language`); its "System language" entry deletes it. `INSTALLER_LANG=<code>` overrides both, e.g. `INSTALLER_LANG=ca cargo run` to try a translation.
 - UI text lives in `locales/<code>.json`, with `locales/en.json` as the reference. Code looks it up with `t!("key")`, or `t!("key", name = value)` for `%{name}` placeholders.
-- **Adding a language:** copy `locales/en.json` to `locales/<code>.json` (two-letter ISO 639-1 code, e.g. `es`, `fr`) and translate the values. Keep every `%{placeholder}` and `\n` line break; `cargo test` checks both, and that no key is missing or extra.
-- **Trying a translation:** set `INSTALLER_LANG=<code>` to override the system language, e.g. `INSTALLER_LANG=ca cargo run`.
-- The debug log stays in English on purpose, so bug reports stay readable for maintainers.
-- Status messages during an install, the repository tabs and their info text are not translated yet.
+- **Adding a language:** copy `locales/en.json` to `locales/<code>.json` (two-letter ISO 639-1 code, e.g. `es`, `fr`), set `language.name` to the language's own name and translate the values. Keep every `%{placeholder}`, `\n` line break and `[link](url)` target; `cargo test` checks them, and that no key is missing or extra.
+- The debug log stays in English on purpose, so bug reports stay readable for maintainers. Errors coming from the system or the network are shown as they arrive, inside a translated sentence.
 
-**Rebranding:** text you change in the UI now lives in `locales/en.json` (and the other languages), not in `src/app/ui.rs`.
+**Rebranding:** UI text lives in `locales/en.json` (and the other languages), not in `src/app/ui.rs`. Repository tabs are still edited in `src/config.rs`: `en.json` repeats their English under `repo.<url>.name`, `.info` and `.display_name`, and a translation only shows while that copy matches `config.rs`. So after changing a tab, update `en.json` (`cargo test` points at the mismatch) or delete its `repo.<url>.*` keys, and the tab shows your English in every language.
 
 ---
 

@@ -38,7 +38,12 @@ pub enum AppState {
 pub struct ProgressInfo {
     pub current: u64,
     pub total: u64,
+    /// Text shown to the user, already translated. Never parsed: the UI does
+    /// not work out what is happening from it.
     pub message: String,
+    /// The step the install task has moved to (or Complete / Error / Idle when
+    /// it ends), set once per change. The UI applies it and clears it.
+    pub stage: Option<AppState>,
 }
 
 pub struct InstallerApp {
@@ -233,6 +238,7 @@ impl InstallerApp {
                 current: 0,
                 total: 100,
                 message: String::new(),
+                stage: None,
             })),
             log_messages: Arc::new(Mutex::new(Vec::new())),
             installed_drive: None,
