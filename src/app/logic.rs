@@ -657,7 +657,7 @@ impl InstallerApp {
                     if e.contains("cancelled") {
                         log("Download cancelled");
                         for path in &download_files {
-                            let _ = tokio::fs::remove_file(path).await;
+                            remove_download(path).await;
                         }
                         crate::debug::log("Cleaned up partial download files");
                         let _ = state_tx_clone.send(AppState::Idle);
@@ -673,7 +673,7 @@ impl InstallerApp {
                     }
                     log(&format!("Download error: {}", e));
                     for path in &download_files {
-                        let _ = tokio::fs::remove_file(path).await;
+                        remove_download(path).await;
                     }
                     crate::debug::log("Cleaned up partial download files");
                     let _ = state_tx_clone.send(AppState::Error);
@@ -1019,7 +1019,7 @@ impl InstallerApp {
                         }
                         Err(e) => {
                             for path in &download_files {
-                                let _ = tokio::fs::remove_file(path).await;
+                                remove_download(path).await;
                             }
                             if e.contains("cancelled") {
                                 log("Cancelled");
@@ -1047,7 +1047,7 @@ impl InstallerApp {
                                     needed as f64 / 1e9
                                 ));
                                 for path in download_files.iter().chain(&spruce_files) {
-                                    let _ = tokio::fs::remove_file(path).await;
+                                    remove_download(path).await;
                                 }
                                 let _ = tokio::fs::remove_dir_all(&card.spruce_dir).await;
                                 let _ = state_tx_clone.send(AppState::Error);
@@ -1117,7 +1117,7 @@ impl InstallerApp {
                     if e.contains("cancelled") {
                         log("Burn cancelled");
                         for path in &download_files {
-                            let _ = tokio::fs::remove_file(path).await;
+                            remove_download(path).await;
                         }
                         let _ = state_tx_clone.send(AppState::Idle);
                         let _ = drive_poll_tx_clone.send(true);
@@ -1125,7 +1125,7 @@ impl InstallerApp {
                     }
                     log(&format!("Burn error: {}", e));
                     for path in &download_files {
-                        let _ = tokio::fs::remove_file(path).await;
+                        remove_download(path).await;
                     }
                     let _ = state_tx_clone.send(AppState::Error);
                     let _ = drive_poll_tx_clone.send(true);
@@ -1138,7 +1138,7 @@ impl InstallerApp {
 
                 // Clean up downloaded image
                 for path in &download_files {
-                    let _ = tokio::fs::remove_file(path).await;
+                    remove_download(path).await;
                 }
                 remove_temp(&spruce_files, spruce_dir.as_deref()).await;
                 crate::debug::log("Cleaned up temp files");
@@ -1229,7 +1229,7 @@ impl InstallerApp {
                     log("Extraction cancelled");
                     let _ = std::fs::remove_dir_all(&temp_extract_dir);
                     for path in &download_files {
-                        let _ = tokio::fs::remove_file(path).await;
+                        remove_download(path).await;
                     }
                     crate::debug::log("Cleaned up download file after cancellation");
                     let _ = state_tx_clone.send(AppState::Idle);
@@ -1240,7 +1240,7 @@ impl InstallerApp {
                 log(&format!("Extract error: {}", e));
                 let _ = std::fs::remove_dir_all(&temp_extract_dir);
                 for path in &download_files {
-                    let _ = tokio::fs::remove_file(path).await;
+                    remove_download(path).await;
                 }
                 crate::debug::log("Cleaned up download file after error");
                 let _ = state_tx_clone.send(AppState::Error);
@@ -1325,7 +1325,7 @@ impl InstallerApp {
                     log("Copy cancelled");
                     let _ = std::fs::remove_dir_all(&temp_extract_dir);
                     for path in &download_files {
-                        let _ = tokio::fs::remove_file(path).await;
+                        remove_download(path).await;
                     }
                     crate::debug::log("Cleaned up download file after cancellation");
                     let _ = state_tx_clone.send(AppState::Idle);
@@ -1336,7 +1336,7 @@ impl InstallerApp {
                 log(&format!("Copy error: {}", e));
                 let _ = std::fs::remove_dir_all(&temp_extract_dir);
                 for path in &download_files {
-                    let _ = tokio::fs::remove_file(path).await;
+                    remove_download(path).await;
                 }
                 crate::debug::log("Cleaned up download file after error");
                 let _ = state_tx_clone.send(AppState::Error);
@@ -1355,7 +1355,7 @@ impl InstallerApp {
 
             // Cleanup temp file
             for path in &download_files {
-                let _ = tokio::fs::remove_file(path).await;
+                remove_download(path).await;
             }
             write_card_log("Cleaned up temp download file");
             crate::debug::log("Cleaned up temp download file");
@@ -1749,9 +1749,17 @@ pub(super) async fn get_mount_path_after_format(_drive: &DriveInfo, _volume_labe
     Err("Mounting not supported on this platform".to_string())
 }
 
+/// Deletes a downloaded file and its `.partial` resume record. Leaving the
+/// record behind made the next install "resume" into a new, empty file, so the
+/// start of the archive was never downloaded.
+async fn remove_download(path: &Path) {
+    let _ = tokio::fs::remove_file(path).await;
+    crate::download_state::DownloadState::delete_state_file(path);
+}
+
 async fn remove_temp(files: &[PathBuf], dir: Option<&Path>) {
     for path in files {
-        let _ = tokio::fs::remove_file(path).await;
+        remove_download(path).await;
     }
     if let Some(dir) = dir {
         let _ = tokio::fs::remove_dir_all(dir).await;

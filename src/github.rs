@@ -404,25 +404,27 @@ pub async fn download_asset(
         })?;
 
     // Check for existing partial download
-    let existing_state = DownloadState::load(dest_path).ok();
+    let mut existing_state = DownloadState::load(dest_path).ok();
 
-    if let Some(ref state) = existing_state {
-        // Verify URL matches
-        if state.url == asset.browser_download_url {
-            crate::debug::log(&format!(
-                "Found partial download: {:.1}% complete ({} / {} bytes)",
-                state.completion_percentage(),
-                state.downloaded_bytes,
-                state.total_size
-            ));
-            let _ = progress_tx.send(DownloadProgress::Resuming {
-                downloaded: state.downloaded_bytes,
-                total: state.total_size,
-            });
-        } else {
-            crate::debug::log("Partial download URL mismatch - starting fresh");
+    if let Some(state) = &existing_state {
+        if let Err(why) = resume_state_usable(state, &asset.browser_download_url, dest_path) {
+            crate::debug::log(&format!("Partial download not resumable ({}) - starting fresh", why));
             DownloadState::delete_state_file(dest_path);
+            existing_state = None;
         }
+    }
+
+    if let Some(state) = &existing_state {
+        crate::debug::log(&format!(
+            "Found partial download: {:.1}% complete ({} / {} bytes)",
+            state.completion_percentage(),
+            state.downloaded_bytes,
+            state.total_size
+        ));
+        let _ = progress_tx.send(DownloadProgress::Resuming {
+            downloaded: state.downloaded_bytes,
+            total: state.total_size,
+        });
     }
 
     // Send HEAD request to check for Range support and get file size
@@ -448,11 +450,10 @@ pub async fn download_asset(
     };
 
     // Verify size matches if resuming
-    if let Some(ref state) = existing_state {
-        if state.total_size != total_size {
-            crate::debug::log("File size mismatch - starting fresh");
-            DownloadState::delete_state_file(dest_path);
-        }
+    if existing_state.as_ref().is_some_and(|state| state.total_size != total_size) {
+        crate::debug::log("File size mismatch - starting fresh");
+        DownloadState::delete_state_file(dest_path);
+        existing_state = None;
     }
 
     let accepts_ranges = head_response
@@ -502,6 +503,27 @@ pub async fn download_asset(
     }
 
     result
+}
+
+/// Whether a saved `.partial` state can be resumed into `dest_path`.
+///
+/// The state records which chunks are already in the file, so it is only worth
+/// anything for the same URL and next to that file at its preallocated full
+/// size. Without the file, resuming would skip the chunks marked done and leave
+/// them zeroed: a cancelled download used to delete the file but keep the state.
+fn resume_state_usable(
+    state: &crate::download_state::DownloadState,
+    url: &str,
+    dest_path: &Path,
+) -> Result<(), String> {
+    if state.url != url {
+        return Err("URL mismatch".to_string());
+    }
+    match std::fs::metadata(dest_path) {
+        Ok(meta) if meta.len() == state.total_size => Ok(()),
+        Ok(meta) => Err(format!("file is {} bytes, expected {}", meta.len(), state.total_size)),
+        Err(_) => Err("file missing".to_string()),
+    }
 }
 
 /// Download using parallel connections (8 chunks)
@@ -903,5 +925,34 @@ mod tests {
             parse_github_url("owner/repo").unwrap(),
             ("owner".to_string(), "repo".to_string())
         );
+    }
+}
+
+#[cfg(test)]
+mod resume_tests {
+    use super::resume_state_usable;
+    use crate::download_state::DownloadState;
+
+    const URL: &str = "https://example.com/os.7z";
+
+    fn state_for(path: &std::path::Path, size: u64) -> DownloadState {
+        DownloadState::new(URL.to_string(), size, path.to_path_buf(), 8)
+    }
+
+    #[test]
+    fn resumes_only_into_the_file_the_state_describes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("os.7z");
+        let state = state_for(&path, 1024);
+
+        // Cancel used to delete the file and keep the state
+        assert!(resume_state_usable(&state, URL, &path).is_err());
+
+        std::fs::write(&path, vec![0u8; 100]).unwrap();
+        assert!(resume_state_usable(&state, URL, &path).is_err(), "wrong size");
+
+        std::fs::File::create(&path).unwrap().set_len(1024).unwrap();
+        assert!(resume_state_usable(&state, URL, &path).is_ok());
+        assert!(resume_state_usable(&state, "https://example.com/other.7z", &path).is_err());
     }
 }
