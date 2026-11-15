@@ -1,6 +1,7 @@
 // Copyright (C) 2026 SpruceOS Team
 // Licensed under CC BY-NC 4.0 (Creative Commons Attribution-NonCommercial 4.0 International)
 
+use rust_i18n::t;
 use std::collections::{HashMap, HashSet};
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -553,11 +554,11 @@ impl BoxArtScraper {
                 let status = match &result {
                     Ok(_) => {
                         crate::debug::log(&format!("Boxart scraper: Downloaded {}", rom_name));
-                        "Success".to_string()
+                        t!("scraper.status_success").into_owned()
                     }
                     Err(e) => {
                         crate::debug::log(&format!("Boxart scraper: Failed {} - {}", rom_name, e));
-                        format!("Failed: {}", e)
+                        t!("scraper.status_failed", error = e).into_owned()
                     }
                 };
 

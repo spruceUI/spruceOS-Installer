@@ -26,6 +26,7 @@ use crate::eject::eject_drive;
 use eframe::egui;
 use egui_thematic::render_theme_panel;
 use rust_i18n::t;
+use std::borrow::Cow;
 use tokio::sync::mpsc;
 
 /// Widest the drive picker may grow; a longer selection is cut off with an
@@ -226,27 +227,35 @@ impl eframe::App for InstallerApp {
 
         // Check for state updates from main installation process
         if let Ok(mut progress) = self.progress.lock() {
-            if progress.message == "COMPLETE" {
-                self.state = AppState::Complete;
-                self.cancel_token = None;
-                self.update_mode = false; // Reset update mode
-                self.preserve_data = true; // Reset preserve data to default
-                self.was_just_paused = false; // Clear pause flag on completion
-                progress.message.clear();
-            } else if progress.message == "ERROR" {
-                self.state = AppState::Error;
-                self.cancel_token = None;
-                self.update_mode = false; // Reset update mode
-                self.preserve_data = true; // Reset preserve data to default
-                self.was_just_paused = false; // Clear pause flag on error
-                progress.message.clear();
-            } else if progress.message == "CANCELLED" || progress.message.contains("Download paused at") {
-                self.state = AppState::Idle;
-                self.cancel_token = None;
-                self.update_mode = false; // Reset update mode
-                self.preserve_data = true; // Reset preserve data to default
-                self.manifest_display_name = None;
-                progress.message.clear();
+            if let Some(stage) = progress.stage.take() {
+                match stage {
+                    AppState::Complete => {
+                        self.state = AppState::Complete;
+                        self.cancel_token = None;
+                        self.update_mode = false; // Reset update mode
+                        self.preserve_data = true; // Reset preserve data to default
+                        self.was_just_paused = false; // Clear pause flag on completion
+                        progress.message.clear();
+                    }
+                    AppState::Error => {
+                        self.state = AppState::Error;
+                        self.cancel_token = None;
+                        self.update_mode = false; // Reset update mode
+                        self.preserve_data = true; // Reset preserve data to default
+                        self.was_just_paused = false; // Clear pause flag on error
+                        progress.message.clear();
+                    }
+                    // Cancelled, or the download was paused
+                    AppState::Idle => {
+                        self.state = AppState::Idle;
+                        self.cancel_token = None;
+                        self.update_mode = false; // Reset update mode
+                        self.preserve_data = true; // Reset preserve data to default
+                        self.manifest_display_name = None;
+                        progress.message.clear();
+                    }
+                    step => self.state = step,
+                }
             } else if progress.message.starts_with("SCRAPE_COMPLETE") {
                 // Parse stats from message
                 let stats = if let Some(stats_str) = progress.message.strip_prefix("SCRAPE_COMPLETE:") {
@@ -272,33 +281,6 @@ impl eframe::App for InstallerApp {
                 self.state = AppState::Idle;
                 self.cancel_token = None;
                 progress.message.clear();
-            } else {
-                // Update state based on progress message
-                if progress.message.contains("Downloading") {
-                    self.state = AppState::Downloading;
-                } else if progress.message.contains("Formatting")
-                    || progress.message.contains("format")
-                    || progress.message.contains("Unmounting")
-                    || progress.message.contains("Cleaning")
-                    || progress.message.contains("partition")
-                {
-                    self.state = AppState::Formatting;
-                } else if progress.message.contains("Backing up") || progress.message.contains("Backup")
-                {
-                    self.state = AppState::BackingUp;
-                } else if progress.message.contains("Deleting") || progress.message.contains("deletion")
-                {
-                    self.state = AppState::Deleting;
-                } else if progress.message.contains("Extracting") || progress.message.contains("Extract")
-                {
-                    self.state = AppState::Extracting;
-                } else if progress.message.contains("Copying") || progress.message.contains("Copy")
-                {
-                    self.state = AppState::Copying;
-                } else if progress.message.contains("Restoring") || progress.message.contains("Restore")
-                {
-                    self.state = AppState::Restoring;
-                }
             }
         }
 
@@ -315,6 +297,7 @@ impl eframe::App for InstallerApp {
                 | AppState::Extracting
                 | AppState::Copying
                 | AppState::Restoring
+                | AppState::Burning
                 | AppState::Ejecting
                 | AppState::Cancelling
                 | AppState::ScrapingBoxart
@@ -340,7 +323,7 @@ impl eframe::App for InstallerApp {
                 AppState::SelectingAsset => "Select Download".to_string(),
                 AppState::PreviewingUpdate => "Update Confirmation".to_string(),
                 AppState::AwaitingConfirmation => {
-                    let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].name;
+                    let selected_repo_name = REPO_OPTIONS[self.selected_repo_idx].name; // egui id only, never shown
                     if self.update_mode {
                         format!("Confirm {} Update", selected_repo_name)
                     } else {
@@ -612,8 +595,8 @@ impl eframe::App for InstallerApp {
                                 let repo = &REPO_OPTIONS[self.selected_repo_idx];
                                 // Fallback chain: manifest display_name → config.rs display_name → repo name
                                 let display_name = self.manifest_display_name.as_deref()
-                                    .or(repo.display_name)
-                                    .unwrap_or(repo.name);
+                                    .map(Cow::Borrowed)
+                                    .unwrap_or_else(|| crate::i18n::repo_display_name(repo));
                                 ui.label(t!("complete.message", name = display_name));
                                 ui.add_space(15.0);
                                 ui.separator();
@@ -675,8 +658,8 @@ impl eframe::App for InstallerApp {
                                 let repo = &REPO_OPTIONS[self.selected_repo_idx];
                                 // Fallback chain: manifest display_name → config.rs display_name → repo name
                                 let display_name = self.manifest_display_name.as_deref()
-                                    .or(repo.display_name)
-                                    .unwrap_or(repo.name);
+                                    .map(Cow::Borrowed)
+                                    .unwrap_or_else(|| crate::i18n::repo_display_name(repo));
                                 ui.label(t!("error.message", name = display_name));
                                 ui.add_space(8.0);
                                 ui.label(t!("error.check_log"));
@@ -916,6 +899,7 @@ impl eframe::App for InstallerApp {
                             | AppState::Extracting
                             | AppState::Copying
                             | AppState::Restoring
+                            | AppState::Burning
                             | AppState::Cancelling
                     );
 
@@ -1005,6 +989,29 @@ impl eframe::App for InstallerApp {
                                     self.scraper_stats = None;
                                 }
                             });
+
+                            // Language menu: the system's language, or one picked here,
+                            // which is remembered for the next launch
+                            let language_button = egui::RichText::new("🌐").size(24.0);
+                            ui.menu_button(language_button, |ui| {
+                                let current = crate::i18n::current();
+                                let follows_system = crate::i18n::follows_system();
+                                if ui.radio(follows_system, t!("main.language_system")).clicked() {
+                                    crate::i18n::set_language(None);
+                                    ui.close();
+                                }
+                                ui.separator();
+                                for code in crate::i18n::languages() {
+                                    // Each language in its own name, so it can be found
+                                    // whatever language the UI is in now
+                                    let name = t!("language.name", locale = &code);
+                                    let selected = !follows_system && current == code;
+                                    if ui.radio(selected, name).clicked() {
+                                        crate::i18n::set_language(Some(&code));
+                                        ui.close();
+                                    }
+                                }
+                            }).response.on_hover_text(t!("main.language"));
                             },
                     );
                 });
@@ -1082,7 +1089,7 @@ impl eframe::App for InstallerApp {
 
                                         if ui.add(egui::Button::selectable(
                                             self.selected_repo_idx == idx,
-                                            repo.name,
+                                            crate::i18n::repo_name(repo),
                                         ).frame_when_inactive(true)).clicked() {
                                             self.selected_repo_idx = idx;
                                         }
@@ -1237,6 +1244,7 @@ impl eframe::App for InstallerApp {
                                 | AppState::Extracting
                                 | AppState::Copying
                                 | AppState::Restoring
+                                | AppState::Burning
                                 | AppState::AwaitingConfirmation
                                 | AppState::Ejecting
                                 | AppState::Cancelling
@@ -1283,6 +1291,7 @@ impl eframe::App for InstallerApp {
                         | AppState::Extracting
                         | AppState::Copying
                         | AppState::Restoring
+                        | AppState::Burning
                 ) && self.cancel_token.is_some();
 
                 if can_cancel {
@@ -1313,7 +1322,7 @@ impl eframe::App for InstallerApp {
                 if !show_progress {
                     ui.add_space(8.0);
                     ui.vertical_centered(|ui| {
-                        let repo_info = REPO_OPTIONS[self.selected_repo_idx].info;
+                        let repo_info = crate::i18n::repo_info(&REPO_OPTIONS[self.selected_repo_idx]);
                         let text_color = egui::Color32::from_rgba_unmultiplied(251, 241, 199, 255);
 
                         // Split by \n and display each line
