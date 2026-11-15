@@ -268,6 +268,20 @@ Works identically on Windows, Linux, and macOS with no configuration needed.
 
 ---
 
+## Translations
+
+The installer's UI follows the system language when a translation exists, and falls back to English otherwise. Bundled: English (`en`) and Catalan (`ca`).
+
+- UI text lives in `locales/<code>.json`, with `locales/en.json` as the reference. Code looks it up with `t!("key")`, or `t!("key", name = value)` for `%{name}` placeholders.
+- **Adding a language:** copy `locales/en.json` to `locales/<code>.json` (two-letter ISO 639-1 code, e.g. `es`, `fr`) and translate the values. Keep every `%{placeholder}` and `\n` line break; `cargo test` checks both, and that no key is missing or extra.
+- **Trying a translation:** set `INSTALLER_LANG=<code>` to override the system language, e.g. `INSTALLER_LANG=ca cargo run`.
+- The debug log stays in English on purpose, so bug reports stay readable for maintainers.
+- Status messages during an install, the repository tabs and their info text are not translated yet.
+
+**Rebranding:** text you change in the UI now lives in `locales/en.json` (and the other languages), not in `src/app/ui.rs`.
+
+---
+
 ## For End Users
 
 ### Windows/Linux Users
@@ -1374,6 +1388,7 @@ The installer uses a modular architecture (refactored from a single ~2300 line f
 src/
 ├── main.rs              - Entry point, privilege escalation
 ├── config.rs            - ⚠️ BRANDING: App name, repos, constants
+├── i18n.rs              - UI language selection (strings in locales/*.json)
 ├── app/                 - Main application (modular)
 │   ├── mod.rs           - Module coordinator
 │   ├── state.rs         - AppState enum, InstallerApp struct

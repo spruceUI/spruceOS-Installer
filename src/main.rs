@@ -18,6 +18,7 @@ mod extract;
 mod fat32;
 mod format;
 mod github;
+mod i18n;
 mod mame_db;
 mod manifest;
 mod preserve;
@@ -31,6 +32,13 @@ use config::{load_app_icon, load_custom_fonts, WINDOW_MIN_SIZE, WINDOW_SIZE, WIN
 use eframe::egui;
 use std::path::Path;
 use std::sync::Arc;
+
+#[macro_use]
+extern crate rust_i18n;
+
+// UI text from locales/*.json, English when a key has no translation.
+// See src/i18n.rs for how the language is picked and how to add one.
+i18n!("locales", fallback = "en");
 
 // Helper function to launch with pkexec
 #[cfg(all(not(windows), not(target_os = "macos")))]
@@ -58,6 +66,13 @@ fn launch_with_pkexec(exe_path: &Path) -> Result<(), String> {
     }
     if let Ok(xdg_runtime) = std::env::var("XDG_RUNTIME_DIR") {
         cmd.arg(format!("XDG_RUNTIME_DIR={}", xdg_runtime));
+    }
+
+    // And the language, or the relaunched installer comes up in English
+    for var in ["LANG", "LANGUAGE", "LC_ALL", "LC_MESSAGES", i18n::LANG_ENV_VAR] {
+        if let Ok(value) = std::env::var(var) {
+            cmd.arg(format!("{}={}", var, value));
+        }
     }
 
     cmd.arg(exe_path);
@@ -208,6 +223,8 @@ fn main() -> eframe::Result<()> {
     // Call the privilege check at the very beginning of main (not needed on Windows due to manifest)
     #[cfg(not(windows))]
     check_and_request_privileges();
+
+    i18n::init();
 
     let mut viewport = egui::ViewportBuilder::default()
         .with_inner_size([WINDOW_SIZE.0, WINDOW_SIZE.1])

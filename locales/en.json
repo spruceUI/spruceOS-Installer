@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "Cancel",
+  "common.continue": "Continue",
+  "common.close": "Close",
+  "common.ok": "OK",
+
+  "main.install": "Install",
+  "main.resume": "Resume",
+  "main.pause": "Pause",
+  "main.partial_download": "(partial download detected)",
+  "main.no_sd_card": "No SD card",
+  "main.select_drive": "Select Drive",
+  "main.refresh_drives": "Refresh drive list",
+  "main.toggle_log": "Toggle Log Area",
+  "main.update_mode": "Update existing installation (skip format)",
+  "main.preserve_data": "Preserve user data",
+  "main.newer_version": "%{version} available",
+
+  "select_asset.heading": "Select a file to install:",
+
+  "update_preview.heading": "Update Preview",
+  "update_preview.deleted_dirs": "The following directories will be deleted:",
+  "update_preview.preserved": "The following user data will be preserved:",
+  "update_preview.preserved_retroarch": "RetroArch configs & overlays",
+  "update_preview.preserved_emulators": "Emulator saves & settings",
+  "update_preview.preserved_syncthing": "Syncthing config & SSH keys",
+  "update_preview.preserved_spruce": "Spruce config & theme backups",
+  "update_preview.preserve_disabled": "User data preservation is disabled.",
+  "update_preview.customizations_lost": "Emulator configs, RetroArch settings, and other user\ncustomizations within deleted directories will be lost.",
+  "update_preview.still_kept": "Roms, BIOS, and Saves will still be kept.",
+
+  "confirm.warning": "WARNING",
+  "confirm.update_deletes_dirs": "The selected directories will be deleted.",
+  "confirm.update_question": "Continue with the update?",
+  "confirm.erase_warning": "This will DELETE ALL DATA on the selected drive:",
+  "confirm.erase_question": "Are you sure you want to continue?",
+  "confirm.yes_update": "Yes, update",
+  "confirm.yes_install": "Yes, install",
+
+  "complete.title": "SUCCESS",
+  "complete.message": "%{name} has been successfully installed.",
+  "complete.eject": "Safely Eject",
+
+  "eject.ejecting": "Ejecting SD card...",
+  "eject.ejected": "SD card ejected!",
+  "eject.safe_to_remove": "You may now safely remove it.",
+
+  "error.title": "FAILED",
+  "error.message": "%{name} installation failed.",
+  "error.check_log": "Check the log for details.",
+
+  "scraper.title": "Scrape Boxart",
+  "scraper.selected_drive": "Selected Drive: %{drive}",
+  "scraper.roms_path": "Roms: %{path}",
+  "scraper.select_all": "Select All",
+  "scraper.deselect_all": "Deselect All",
+  "scraper.no_folders": "No supported ROM folders found.",
+  "scraper.complete": "Scraping complete!",
+  "scraper.total": "%{count} total",
+  "scraper.downloaded": "%{count} downloaded",
+  "scraper.skipped": "%{count} skipped (already existed)",
+  "scraper.failed": "%{count} failed",
+  "scraper.start": "Start Scraping",
+
+  "log.title": "Debug Log",
+  "log.close": "Close Log",
+  "log.copy": "Copy to Clipboard",
+  "log.file": "Log: %{file}",
+  "log.read_failed": "Failed to read log file: %{error}",
+
+  "update_notice.title": "Update available",
+  "update_notice.message": "%{latest} is out. You have v%{current}.",
+  "update_notice.get_latest": "Get the latest version:",
+  "update_notice.copy_link": "Copy link"
+}

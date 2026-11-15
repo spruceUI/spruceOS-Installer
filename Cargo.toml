@@ -43,6 +43,8 @@ crc32fast = "1"
 arboard = "3.4"
 regex = "1"
 which = "6.0"
+rust-i18n = "4.2.4"
+sys-locale = "0.3.2"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
