@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "Cancel·la",
+  "common.continue": "Continua",
+  "common.close": "Tanca",
+  "common.ok": "D'acord",
+
+  "main.install": "Instal·la",
+  "main.resume": "Reprèn",
+  "main.pause": "Pausa",
+  "main.partial_download": "(s'ha detectat una descàrrega parcial)",
+  "main.no_sd_card": "Cap targeta SD",
+  "main.select_drive": "Tria la unitat",
+  "main.refresh_drives": "Actualitza la llista d'unitats",
+  "main.toggle_log": "Mostra o amaga el registre",
+  "main.update_mode": "Actualitza la instal·lació existent (sense formatar)",
+  "main.preserve_data": "Conserva les dades d'usuari",
+  "main.newer_version": "%{version} disponible",
+
+  "select_asset.heading": "Tria el fitxer que vols instal·lar:",
+
+  "update_preview.heading": "Previsualització de l'actualització",
+  "update_preview.deleted_dirs": "S'eliminaran aquestes carpetes:",
+  "update_preview.preserved": "Es conservaran aquestes dades d'usuari:",
+  "update_preview.preserved_retroarch": "Configuració i superposicions de RetroArch",
+  "update_preview.preserved_emulators": "Partides guardades i configuració dels emuladors",
+  "update_preview.preserved_syncthing": "Configuració de Syncthing i claus SSH",
+  "update_preview.preserved_spruce": "Configuració de Spruce i còpies de seguretat dels temes",
+  "update_preview.preserve_disabled": "La conservació de les dades d'usuari està desactivada.",
+  "update_preview.customizations_lost": "Es perdran la configuració dels emuladors, la de RetroArch i altres\npersonalitzacions de les carpetes que s'eliminin.",
+  "update_preview.still_kept": "Les carpetes Roms, BIOS i Saves es conservaran igualment.",
+
+  "confirm.warning": "AVÍS",
+  "confirm.update_deletes_dirs": "S'eliminaran les carpetes seleccionades.",
+  "confirm.update_question": "Vols continuar amb l'actualització?",
+  "confirm.erase_warning": "S'ESBORRARAN TOTES LES DADES de la unitat seleccionada:",
+  "confirm.erase_question": "Segur que vols continuar?",
+  "confirm.yes_update": "Sí, actualitza",
+  "confirm.yes_install": "Sí, instal·la",
+
+  "complete.title": "FET",
+  "complete.message": "S'ha instal·lat %{name} correctament.",
+  "complete.eject": "Expulsa amb seguretat",
+
+  "eject.ejecting": "S'està expulsant la targeta SD...",
+  "eject.ejected": "S'ha expulsat la targeta SD.",
+  "eject.safe_to_remove": "Ja la pots treure amb seguretat.",
+
+  "error.title": "ERROR",
+  "error.message": "La instal·lació de %{name} ha fallat.",
+  "error.check_log": "Consulta el registre per veure'n els detalls.",
+
+  "scraper.title": "Descarrega caràtules",
+  "scraper.selected_drive": "Unitat seleccionada: %{drive}",
+  "scraper.roms_path": "Roms: %{path}",
+  "scraper.select_all": "Selecciona-ho tot",
+  "scraper.deselect_all": "Desselecciona-ho tot",
+  "scraper.no_folders": "No s'ha trobat cap carpeta de ROM compatible.",
+  "scraper.complete": "S'han acabat de descarregar les caràtules.",
+  "scraper.total": "%{count} en total",
+  "scraper.downloaded": "%{count} descarregades",
+  "scraper.skipped": "%{count} omeses (ja hi eren)",
+  "scraper.failed": "%{count} amb errors",
+  "scraper.start": "Comença la descàrrega",
+
+  "log.title": "Registre de depuració",
+  "log.close": "Tanca el registre",
+  "log.copy": "Copia al porta-retalls",
+  "log.file": "Registre: %{file}",
+  "log.read_failed": "No s'ha pogut llegir el fitxer de registre: %{error}",
+
+  "update_notice.title": "Actualització disponible",
+  "update_notice.message": "Ja ha sortit la %{latest}. Tens la v%{current}.",
+  "update_notice.get_latest": "Descarrega la versió més recent:",
+  "update_notice.copy_link": "Copia l'enllaç"
+}

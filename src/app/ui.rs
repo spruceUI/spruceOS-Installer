@@ -16,7 +16,8 @@
 //      - true for archives (.7z, .zip) that support updates
 //      - false for raw images (.img.gz) that always do full burns
 //   2. Hide completely: Search for "Update existing installation (skip format)"
-//      and comment out the entire checkbox block
+//      (the comment beside the main.update_mode checkbox) and comment out the
+//      entire checkbox block
 // ============================================================================
 
 use super::{InstallerApp, AppState};
@@ -24,12 +25,18 @@ use crate::config::REPO_OPTIONS;
 use crate::eject::eject_drive;
 use eframe::egui;
 use egui_thematic::render_theme_panel;
+use rust_i18n::t;
 use tokio::sync::mpsc;
 
 /// Widest the drive picker may grow; a longer selection is cut off with an
 /// ellipsis so the refresh button beside it stays in the window. The open
 /// menu still shows full names.
 const DRIVE_PICKER_MAX_WIDTH: f32 = 260.0;
+
+/// Narrowest the install dialogs get. An auto-sized egui window otherwise
+/// wraps text at its default width (about 320 points), which splits sentences
+/// that used to fit on one line, more so in longer languages.
+const MODAL_MIN_WIDTH: f32 = 440.0;
 
 impl eframe::App for InstallerApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
@@ -355,11 +362,12 @@ impl eframe::App for InstallerApp {
                 .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
                 .frame(window_frame)
                 .show(ctx, |ui| {
+                    ui.set_min_width(MODAL_MIN_WIDTH);
                     ui.vertical_centered(|ui| {
                         match self.state {
                             AppState::SelectingAsset => {
                                 ui.add_space(12.0);
-                                ui.heading("Select a file to install:");
+                                ui.heading(t!("select_asset.heading"));
                                 ui.add_space(12.0);
 
                                 // Get display mappings from current repo
@@ -465,52 +473,38 @@ impl eframe::App for InstallerApp {
                                 ui.separator();
                                 ui.add_space(8.0);
 
-                                ui.columns(2, |columns| {
-                                    columns[0].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button("Cancel").clicked() {
-                                                self.state = AppState::Idle;
-                                                self.fetched_release = None;
-                                                self.available_assets.clear();
-                                                self.selected_asset_idx = None;
-                                                self.manifest_display_name = None;
-                                            }
-                                        },
-                                    );
+                                let can_continue = self.selected_asset_idx.is_some();
+                                match centered_buttons(ui, &[(&t!("common.cancel"), true), (&t!("common.continue"), can_continue)]) {
+                                    Some(0) => {
+                                        self.state = AppState::Idle;
+                                        self.fetched_release = None;
+                                        self.available_assets.clear();
+                                        self.selected_asset_idx = None;
+                                        self.manifest_display_name = None;
+                                    }
+                                    Some(_) => {
+                                        // Check if selected asset is a raw image
+                                        let is_raw_image = self.selected_asset_idx.is_some_and(|idx| {
+                                            Self::is_raw_image_asset(&self.available_assets[idx].name)
+                                        });
 
-                                    columns[1].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::left_to_right(egui::Align::Center),
-                                        |ui| {
-                                            let can_continue = self.selected_asset_idx.is_some();
-                                            ui.add_enabled_ui(can_continue, |ui| {
-                                                if ui.button("Continue").clicked() {
-                                                    // Check if selected asset is a raw image
-                                                    let is_raw_image = self.selected_asset_idx.is_some_and(|idx| {
-                                                        Self::is_raw_image_asset(&self.available_assets[idx].name)
-                                                    });
-
-                                                    // If update mode and NOT a raw image, show preview; otherwise go to confirmation
-                                                    if self.update_mode && !is_raw_image {
-                                                        self.state = AppState::PreviewingUpdate;
-                                                    } else {
-                                                        // Skip preview for image mode (update mode doesn't apply to raw images)
-                                                        self.state = AppState::AwaitingConfirmation;
-                                                    }
-                                                }
-                                            });
-                                        },
-                                    );
-                                });
+                                        // If update mode and NOT a raw image, show preview; otherwise go to confirmation
+                                        if self.update_mode && !is_raw_image {
+                                            self.state = AppState::PreviewingUpdate;
+                                        } else {
+                                            // Skip preview for image mode (update mode doesn't apply to raw images)
+                                            self.state = AppState::AwaitingConfirmation;
+                                        }
+                                    }
+                                    None => {}
+                                }
                             }
                             AppState::PreviewingUpdate => {
                                 ui.add_space(12.0);
-                                ui.heading("Update Preview");
+                                ui.heading(t!("update_preview.heading"));
                                 ui.add_space(12.0);
 
-                                ui.label("The following directories will be deleted:");
+                                ui.label(t!("update_preview.deleted_dirs"));
                                 ui.add_space(8.0);
 
                                 // Show directories to be deleted
@@ -528,68 +522,59 @@ impl eframe::App for InstallerApp {
                                 if self.preserve_data {
                                     ui.colored_label(
                                         egui::Color32::from_rgb(104, 157, 106),
-                                        "The following user data will be preserved:"
+                                        t!("update_preview.preserved")
                                     );
                                     ui.add_space(4.0);
-                                    ui.label("  \u{2022} RetroArch configs & overlays");
-                                    ui.label("  \u{2022} Emulator saves & settings");
-                                    ui.label("  \u{2022} Syncthing config & SSH keys");
-                                    ui.label("  \u{2022} Spruce config & theme backups");
+                                    for item in [
+                                        "update_preview.preserved_retroarch",
+                                        "update_preview.preserved_emulators",
+                                        "update_preview.preserved_syncthing",
+                                        "update_preview.preserved_spruce",
+                                    ] {
+                                        ui.label(format!("  \u{2022} {}", t!(item)));
+                                    }
                                 } else {
                                     ui.colored_label(
                                         ui.visuals().warn_fg_color,
-                                        "\u{26A0} User data preservation is disabled."
+                                        format!("\u{26A0} {}", t!("update_preview.preserve_disabled"))
                                     );
                                     ui.add_space(4.0);
-                                    ui.label("Emulator configs, RetroArch settings, and other user");
-                                    ui.label("customizations within deleted directories will be lost.");
+                                    // One string with its own line break, so a translation can
+                                    // reorder the sentence and choose where it wraps
+                                    ui.label(t!("update_preview.customizations_lost"));
                                     ui.colored_label(
                                         egui::Color32::from_rgb(104, 157, 106),
-                                        "Roms, BIOS, and Saves will still be kept."
+                                        t!("update_preview.still_kept")
                                     );
                                 }
                                 ui.add_space(12.0);
                                 ui.separator();
                                 ui.add_space(8.0);
 
-                                ui.columns(2, |columns| {
-                                    columns[0].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button("Cancel").clicked() {
-                                                self.state = AppState::Idle;
-                                                self.update_mode = false;
-                                                self.fetched_release = None;
-                                                self.available_assets.clear();
-                                                self.selected_asset_idx = None;
-                                                self.manifest_display_name = None;
-                                            }
-                                        },
-                                    );
-
-                                    columns[1].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::left_to_right(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button("Continue").clicked() {
-                                                self.state = AppState::AwaitingConfirmation;
-                                            }
-                                        },
-                                    );
-                                });
+                                match centered_buttons(ui, &[(&t!("common.cancel"), true), (&t!("common.continue"), true)]) {
+                                    Some(0) => {
+                                        self.state = AppState::Idle;
+                                        self.update_mode = false;
+                                        self.fetched_release = None;
+                                        self.available_assets.clear();
+                                        self.selected_asset_idx = None;
+                                        self.manifest_display_name = None;
+                                    }
+                                    Some(_) => self.state = AppState::AwaitingConfirmation,
+                                    None => {}
+                                }
                             }
                             AppState::AwaitingConfirmation => {
                                 ui.add_space(12.0);
-                                ui.colored_label(ui.visuals().warn_fg_color, "WARNING");
+                                ui.colored_label(ui.visuals().warn_fg_color, t!("confirm.warning"));
                                 ui.add_space(12.0);
 
                                 if self.update_mode {
-                                    ui.label("The selected directories will be deleted.");
+                                    ui.label(t!("confirm.update_deletes_dirs"));
                                     ui.add_space(8.0);
-                                    ui.label("Continue with the update?");
+                                    ui.label(t!("confirm.update_question"));
                                 } else {
-                                    ui.label("This will DELETE ALL DATA on the selected drive:");
+                                    ui.label(t!("confirm.erase_warning"));
                                     ui.add_space(8.0);
 
                                     if let Some(idx) = self.selected_drive_idx {
@@ -599,130 +584,104 @@ impl eframe::App for InstallerApp {
                                     }
 
                                     ui.add_space(12.0);
-                                    ui.label("Are you sure you want to continue?");
+                                    ui.label(t!("confirm.erase_question"));
                                 }
 
                                 ui.add_space(12.0);
                                 ui.separator();
                                 ui.add_space(8.0);
 
-                                ui.columns(2, |columns| {
-                                    columns[0].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button("Cancel").clicked() {
-                                                self.state = AppState::Idle;
-                                                self.update_mode = false;
-                                            }
-                                        },
-                                    );
-
-                                    columns[1].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::left_to_right(egui::Align::Center),
-                                        |ui| {
-                                            let button_text = if self.update_mode {
-                                                "Yes, update"
-                                            } else {
-                                                "Yes, install"
-                                            };
-                                            if ui.button(button_text).clicked() {
-                                                self.start_installation(ctx.clone());
-                                            }
-                                        },
-                                    );
-                                });
+                                let confirm_text = if self.update_mode {
+                                    t!("confirm.yes_update")
+                                } else {
+                                    t!("confirm.yes_install")
+                                };
+                                match centered_buttons(ui, &[(&t!("common.cancel"), true), (&confirm_text, true)]) {
+                                    Some(0) => {
+                                        self.state = AppState::Idle;
+                                        self.update_mode = false;
+                                    }
+                                    Some(_) => self.start_installation(ctx.clone()),
+                                    None => {}
+                                }
                             }
                             AppState::Complete => {
                                 ui.add_space(12.0);
-                                ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "SUCCESS");
+                                ui.colored_label(egui::Color32::from_rgb(104, 157, 106), t!("complete.title"));
                                 ui.add_space(12.0);
                                 let repo = &REPO_OPTIONS[self.selected_repo_idx];
                                 // Fallback chain: manifest display_name → config.rs display_name → repo name
                                 let display_name = self.manifest_display_name.as_deref()
                                     .or(repo.display_name)
                                     .unwrap_or(repo.name);
-                                ui.label(format!("{} has been successfully installed.", display_name));
+                                ui.label(t!("complete.message", name = display_name));
                                 ui.add_space(15.0);
                                 ui.separator();
                                 ui.add_space(8.0);
 
-                                ui.columns(2, |columns| {
-                                    columns[0].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button("Close").clicked() {
-                                                self.state = AppState::Idle;
-                                                self.manifest_display_name = None;
-                                            }
-                                        },
-                                    );
+                                match centered_buttons(ui, &[(&t!("common.close"), true), (&t!("complete.eject"), true)]) {
+                                    Some(0) => {
+                                        self.state = AppState::Idle;
+                                        self.manifest_display_name = None;
+                                    }
+                                    Some(_) => {
+                                        if let Some(drive) = self.installed_drive.clone() {
+                                            self.state = AppState::Ejecting;
+                                            self.log("Ejecting SD card...");
 
-                                    columns[1].allocate_ui_with_layout(
-                                        egui::Vec2::ZERO,
-                                        egui::Layout::left_to_right(egui::Align::Center),
-                                        |ui| {
-                                            if ui.button("Safely Eject").clicked() {
-                                                if let Some(drive) = self.installed_drive.clone() {
-                                                    self.state = AppState::Ejecting;
-                                                    self.log("Ejecting SD card...");
+                                            let progress = self.progress.clone();
+                                            let ctx_clone = ctx.clone();
 
-                                                    let progress = self.progress.clone();
-                                                    let ctx_clone = ctx.clone();
+                                            self.runtime.spawn(async move {
+                                                let result = tokio::task::spawn_blocking(move || {
+                                                    eject_drive(&drive)
+                                                }).await.unwrap();
 
-                                                    self.runtime.spawn(async move {
-                                                        let result = tokio::task::spawn_blocking(move || {
-                                                            eject_drive(&drive)
-                                                        }).await.unwrap();
-
-                                                        if let Ok(mut progress) = progress.lock() {
-                                                            match result {
-                                                                Ok(()) => progress.message = "EJECT_SUCCESS".to_string(),
-                                                                Err(e) => progress.message = format!("EJECT_ERROR: {}", e),
-                                                            }
-                                                        }
-                                                        ctx_clone.request_repaint();
-                                                    });
+                                                if let Ok(mut progress) = progress.lock() {
+                                                    match result {
+                                                        Ok(()) => progress.message = "EJECT_SUCCESS".to_string(),
+                                                        Err(e) => progress.message = format!("EJECT_ERROR: {}", e),
+                                                    }
                                                 }
-                                            }
-                                        },
-                                    );
-                                });
+                                                ctx_clone.request_repaint();
+                                            });
+                                        }
+                                    }
+                                    None => {}
+                                }
                             }
                             AppState::Ejecting => {
                                 ui.add_space(12.0);
                                 ui.add(egui::Spinner::new().color(ui.visuals().selection.bg_fill));
                                 ui.add_space(8.0);
-                                ui.label("Ejecting SD card...");
+                                ui.label(t!("eject.ejecting"));
                                 ui.add_space(12.0);
                             }
                             AppState::Ejected => {
                                 ui.add_space(12.0);
-                                ui.label("SD card ejected!");
+                                ui.label(t!("eject.ejected"));
                                 ui.add_space(8.0);
-                                ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "You may now safely remove it.");
+                                ui.colored_label(egui::Color32::from_rgb(104, 157, 106), t!("eject.safe_to_remove"));
                                 ui.add_space(15.0);
-                                if ui.button("OK").clicked() {
+                                if ui.button(t!("common.ok")).clicked() {
                                     self.state = AppState::Idle;
                                     self.manifest_display_name = None;
                                 }
                             }
                             AppState::Error => {
                                 ui.add_space(12.0);
-                                ui.colored_label(ui.visuals().error_fg_color, "FAILED");
+                                ui.colored_label(ui.visuals().error_fg_color, t!("error.title"));
                                 ui.add_space(12.0);
                                 let repo = &REPO_OPTIONS[self.selected_repo_idx];
                                 // Fallback chain: manifest display_name → config.rs display_name → repo name
                                 let display_name = self.manifest_display_name.as_deref()
                                     .or(repo.display_name)
                                     .unwrap_or(repo.name);
-                                ui.label(format!("{} installation failed.", display_name));
+                                ui.label(t!("error.message", name = display_name));
                                 ui.add_space(8.0);
-                                ui.label("Check the log for details.");
+                                ui.label(t!("error.check_log"));
                                 ui.add_space(15.0);
-                                if ui.button("OK").clicked() {
+                                if ui.button(t!("common.ok")).clicked() {
                                     self.state = AppState::Idle;
                                     self.manifest_display_name = None;
                                 }
@@ -750,35 +709,31 @@ impl eframe::App for InstallerApp {
                 .show(ctx, |ui| {
                     ui.vertical_centered(|ui| {
                         ui.add_space(12.0);
-                        ui.heading("Scrape Boxart");
+                        ui.heading(t!("scraper.title"));
                         ui.add_space(12.0);
 
                         // Show selected drive
                         if let Some(idx) = self.selected_drive_idx {
                             if let Some(drive) = self.drives.get(idx) {
-                                ui.label(format!("Selected Drive: {}", drive.display_name()));
+                                ui.label(t!("scraper.selected_drive", drive = drive.display_name()));
                                 ui.add_space(8.0);
                             }
                         }
 
                         // Roms folder label
-                        ui.label(format!("Roms: {}", self.scraper_roms_path));
+                        ui.label(t!("scraper.roms_path", path = self.scraper_roms_path));
                         ui.add_space(8.0);
 
                         // Select All / Deselect All buttons
                         if !self.scraper_folders.is_empty() && !matches!(self.state, AppState::ScrapingBoxart) && self.scraper_stats.is_none() {
-                            ui.horizontal(|ui| {
-                                if ui.button("Select All").clicked() {
-                                    for folder in &mut self.scraper_folders {
-                                        folder.1 = true;
-                                    }
+                            let select_all = t!("scraper.select_all");
+                            let deselect_all = t!("scraper.deselect_all");
+                            if let Some(clicked) = centered_buttons(ui, &[(&select_all, true), (&deselect_all, true)]) {
+                                let selected = clicked == 0;
+                                for folder in &mut self.scraper_folders {
+                                    folder.1 = selected;
                                 }
-                                if ui.button("Deselect All").clicked() {
-                                    for folder in &mut self.scraper_folders {
-                                        folder.1 = false;
-                                    }
-                                }
-                            });
+                            }
                             ui.add_space(4.0);
 
                             // Scrollable checkbox list
@@ -790,7 +745,7 @@ impl eframe::App for InstallerApp {
                                     }
                                 });
                         } else if self.scraper_folders.is_empty() && !matches!(self.state, AppState::ScrapingBoxart) && self.scraper_stats.is_none() {
-                            ui.label("No supported ROM folders found.");
+                            ui.label(t!("scraper.no_folders"));
                         }
                         ui.add_space(12.0);
 
@@ -826,12 +781,12 @@ impl eframe::App for InstallerApp {
                         if let Some(ref stats) = self.scraper_stats {
                             ui.separator();
                             ui.add_space(8.0);
-                            ui.colored_label(egui::Color32::from_rgb(104, 157, 106), "Scraping complete!");
+                            ui.colored_label(egui::Color32::from_rgb(104, 157, 106), t!("scraper.complete"));
                             ui.add_space(8.0);
-                            ui.label(format!("{} total", stats.total));
-                            ui.label(format!("{} downloaded", stats.succeeded));
-                            ui.label(format!("{} skipped (already existed)", stats.skipped));
-                            ui.label(format!("{} failed", stats.failed));
+                            ui.label(t!("scraper.total", count = stats.total));
+                            ui.label(t!("scraper.downloaded", count = stats.succeeded));
+                            ui.label(t!("scraper.skipped", count = stats.skipped));
+                            ui.label(t!("scraper.failed", count = stats.failed));
                             ui.add_space(12.0);
                         }
 
@@ -845,46 +800,27 @@ impl eframe::App for InstallerApp {
                                         std::path::Path::new(&self.scraper_roms_path).exists() &&
                                         has_selection;
 
-                        ui.columns(2, |columns| {
-                            columns[0].allocate_ui_with_layout(
-                                egui::Vec2::ZERO,
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    if is_scraping {
-                                        // Show Cancel button during scraping
-                                        if ui.button("Cancel").clicked() {
-                                            self.cancel_installation();
-                                        }
-                                    } else if self.scraper_stats.is_some() {
-                                        // Show Close button when complete
-                                        if ui.button("Close").clicked() {
-                                            self.show_scraper_window = false;
-                                            self.scraper_stats = None;
-                                            self.state = AppState::Idle;
-                                        }
-                                    } else {
-                                        // Show Cancel button before scraping
-                                        if ui.button("Cancel").clicked() {
-                                            self.show_scraper_window = false;
-                                        }
-                                    }
-                                },
-                            );
-
-                            columns[1].allocate_ui_with_layout(
-                                egui::Vec2::ZERO,
-                                egui::Layout::left_to_right(egui::Align::Center),
-                                |ui| {
-                                    if !is_scraping && self.scraper_stats.is_none() {
-                                        ui.add_enabled_ui(path_valid, |ui| {
-                                            if ui.button("Start Scraping").clicked() {
-                                                self.start_boxart_scraping(ctx.clone());
-                                            }
-                                        });
-                                    }
-                                },
-                            );
-                        });
+                        let cancel = t!("common.cancel");
+                        if is_scraping {
+                            // Cancel during scraping
+                            if centered_buttons(ui, &[(&cancel, true)]).is_some() {
+                                self.cancel_installation();
+                            }
+                        } else if self.scraper_stats.is_some() {
+                            // Close when complete
+                            if centered_buttons(ui, &[(&t!("common.close"), true)]).is_some() {
+                                self.show_scraper_window = false;
+                                self.scraper_stats = None;
+                                self.state = AppState::Idle;
+                            }
+                        } else {
+                            // Cancel or start before scraping
+                            match centered_buttons(ui, &[(&cancel, true), (&t!("scraper.start"), path_valid)]) {
+                                Some(0) => self.show_scraper_window = false,
+                                Some(_) => self.start_boxart_scraping(ctx.clone()),
+                                None => {}
+                            }
+                        }
 
                         ui.add_space(8.0);
                     });
@@ -901,9 +837,9 @@ impl eframe::App for InstallerApp {
                         ui.vertical(|ui| {
                             ui.add_space(8.0);
                             ui.horizontal(|ui| {
-                                ui.heading("Debug Log");
+                                ui.heading(t!("log.title"));
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    if ui.button("X").on_hover_text("Close Log").clicked() {
+                                    if ui.button("X").on_hover_text(t!("log.close")).clicked() {
                                         self.show_log = false;
                                         let current_size = ui.ctx().content_rect().size();
                                         ui.ctx().send_viewport_cmd(egui::ViewportCommand::InnerSize(egui::vec2(current_size.x - 320.0, current_size.y)));
@@ -913,7 +849,7 @@ impl eframe::App for InstallerApp {
 
                             // Copy to Clipboard button
                             ui.horizontal(|ui| {
-                                if ui.button("📋 Copy to Clipboard").clicked() {
+                                if ui.button(format!("📋 {}", t!("log.copy"))).clicked() {
                                     let log_path = crate::debug::get_log_path();
                                     match std::fs::read_to_string(&log_path) {
                                         Ok(contents) => {
@@ -931,7 +867,7 @@ impl eframe::App for InstallerApp {
                                         }
                                     }
                                 }
-                                ui.label(format!("Log: {:?}", crate::debug::get_log_path().file_name().unwrap_or_default()));
+                                ui.label(t!("log.file", file = format!("{:?}", crate::debug::get_log_path().file_name().unwrap_or_default())));
                             });
 
                             ui.separator();
@@ -954,7 +890,7 @@ impl eframe::App for InstallerApp {
                                             );
                                         }
                                         Err(e) => {
-                                            ui.label(format!("Failed to read log file: {}", e));
+                                            ui.label(t!("log.read_failed", error = e));
                                         }
                                     }
                                 });
@@ -1018,7 +954,7 @@ impl eframe::App for InstallerApp {
                             // if ui.button("🎨").on_hover_text("Toggle Theme Editor (Ctrl+T)").clicked() {
                             //     self.show_theme_editor = !self.show_theme_editor;
                             // }
-                            if ui.button(egui::RichText::new("📜").size(24.0)).on_hover_text("Toggle Log Area").clicked() {
+                            if ui.button(egui::RichText::new("📜").size(24.0)).on_hover_text(t!("main.toggle_log")).clicked() {
                                 self.show_log = !self.show_log;
 
                                 // Adjust window size when toggling log
@@ -1035,7 +971,7 @@ impl eframe::App for InstallerApp {
                             let can_scrape = self.selected_drive_idx.is_some() &&
                                            matches!(self.state, AppState::Idle | AppState::Complete);
                             ui.add_enabled_ui(can_scrape, |ui| {
-                                if ui.button(egui::RichText::new("🖼").size(24.0)).on_hover_text("Scrape Boxart").clicked() {
+                                if ui.button(egui::RichText::new("🖼").size(24.0)).on_hover_text(t!("scraper.title")).clicked() {
                                     // Set default Roms path based on selected drive
                                     if let Some(idx) = self.selected_drive_idx {
                                         if let Some(drive) = self.drives.get(idx) {
@@ -1083,13 +1019,13 @@ impl eframe::App for InstallerApp {
                         |ui| {
                             // Drive selection
                             let (selected_text, enabled) = if self.drives.is_empty() {
-                                ("No SD card".to_string(), false)
+                                (t!("main.no_sd_card").into_owned(), false)
                             } else {
                                 (
                                     self.selected_drive_idx
                                         .and_then(|idx| self.drives.get(idx))
                                         .map(|d| d.display_name())
-                                        .unwrap_or_else(|| "Select Drive".to_string()),
+                                        .unwrap_or_else(|| t!("main.select_drive").into_owned()),
                                     !show_progress
                                 )
                             };
@@ -1113,7 +1049,7 @@ impl eframe::App for InstallerApp {
 
                             // Refresh button
                             ui.add_space(8.0);
-                            if ui.button("🔄").on_hover_text("Refresh drive list").clicked() {
+                            if ui.button("🔄").on_hover_text(t!("main.refresh_drives")).clicked() {
                                 let _ = self.manual_refresh_tx.send(());
                             }
                         }
@@ -1173,7 +1109,8 @@ impl eframe::App for InstallerApp {
                 if !show_progress && current_repo_supports_update {
                     ui.horizontal(|ui| {
                         ui.vertical_centered(|ui| {
-                            if ui.checkbox(&mut self.update_mode, "Update existing installation (skip format)").changed() {
+                            // "Update existing installation (skip format)"
+                            if ui.checkbox(&mut self.update_mode, t!("main.update_mode")).changed() {
                                 // Reset state when toggling update mode
                                 if !self.update_mode {
                                     self.fetched_release = None;
@@ -1199,7 +1136,7 @@ impl eframe::App for InstallerApp {
                 if !show_progress && self.update_mode && current_repo_supports_preserve {
                     ui.horizontal(|ui| {
                         ui.vertical_centered(|ui| {
-                            ui.checkbox(&mut self.preserve_data, "Preserve user data");
+                            ui.checkbox(&mut self.preserve_data, t!("main.preserve_data"));
                         });
                     });
                 } else if !current_repo_supports_preserve || !self.update_mode {
@@ -1309,9 +1246,9 @@ impl eframe::App for InstallerApp {
                             ui.add_enabled_ui(!is_busy && self.selected_drive_idx.is_some() && !self.drives.is_empty(), |ui| {
                                 // Use in-memory flag to show Resume (works for both Windows and Linux)
                                 let button_text = if self.was_just_paused {
-                                    "Resume"
+                                    t!("main.resume")
                                 } else {
-                                    "Install"
+                                    t!("main.install")
                                 };
 
                                 let button = egui::Button::new(button_text)
@@ -1324,7 +1261,7 @@ impl eframe::App for InstallerApp {
                                 // Show info if partial download exists
                                 if self.was_just_paused {
                                     ui.label(
-                                        egui::RichText::new("(partial download detected)")
+                                        egui::RichText::new(t!("main.partial_download"))
                                             .small()
                                             .color(egui::Color32::from_rgb(214, 93, 14))
                                     );
@@ -1353,7 +1290,7 @@ impl eframe::App for InstallerApp {
                     ui.vertical_centered(|ui| {
                         // Show Pause button only during downloads
                         if matches!(self.state, AppState::Downloading) && self.pause_token.is_some() {
-                            let pause_button = egui::Button::new("Pause")
+                            let pause_button = egui::Button::new(t!("main.pause"))
                                 .min_size(egui::vec2(96.0, 48.0))
                                 .fill(egui::Color32::from_rgb(214, 93, 14)); // Orange
                             if ui.add(pause_button).clicked() {
@@ -1363,7 +1300,7 @@ impl eframe::App for InstallerApp {
                         }
 
                         // Cancel button
-                        let cancel_button = egui::Button::new("Cancel")
+                        let cancel_button = egui::Button::new(t!("common.cancel"))
                             .min_size(egui::vec2(96.0, 48.0))
                             .fill(egui::Color32::from_rgb(251, 73, 52)); // Red
                         if ui.add(cancel_button).clicked() {
@@ -1435,7 +1372,7 @@ impl eframe::App for InstallerApp {
                         ui.add_space(4.0);
                         if let Some(tag) = self.newer_version.clone() {
                             ui.hyperlink_to(
-                                format!("{} available", tag),
+                                t!("main.newer_version", version = tag),
                                 crate::config::UPDATE_DOWNLOAD_URL,
                             );
                             ui.label("-");
@@ -1461,7 +1398,8 @@ impl InstallerApp {
             return;
         }
 
-        egui::Window::new("Update available")
+        egui::Window::new(t!("update_notice.title"))
+            .id(egui::Id::new("update_notice"))
             .order(egui::Order::Foreground)
             .collapsible(false)
             .resizable(false)
@@ -1473,54 +1411,68 @@ impl InstallerApp {
                 ui.set_max_width(320.0);
                 ui.vertical_centered(|ui| {
                     ui.add_space(8.0);
-                    ui.label(format!(
-                        "{} is out. You have v{}.",
-                        tag,
-                        crate::config::APP_VERSION
+                    ui.label(t!(
+                        "update_notice.message",
+                        latest = tag,
+                        current = crate::config::APP_VERSION
                     ));
                     ui.add_space(6.0);
-                    ui.label("Get the latest version:");
+                    ui.label(t!("update_notice.get_latest"));
                     // The URL is spelled out, not hidden behind link text:
                     // opening a browser needs xdg-open wired up, which plenty
                     // of Linux setups do not have, and then a bare "click
                     // here" leaves the user with nothing to copy.
                     ui.hyperlink(crate::config::UPDATE_DOWNLOAD_URL);
                     ui.add_space(8.0);
-                    // egui lays a row out from the cursor, and main_align only
-                    // aligns content *inside* a widget (text in a button), so a
-                    // row of widgets is centred by measuring it and padding.
-                    // A Button is its text galley plus button_padding each side.
-                    const COPY_LABEL: &str = "📋 Copy link";
-                    const CONTINUE_LABEL: &str = "Continue";
-                    let font = egui::TextStyle::Button.resolve(ui.style());
-                    let button_width = |ui: &egui::Ui, label: &str| {
-                        ui.painter()
-                            .layout_no_wrap(label.to_owned(), font.clone(), egui::Color32::WHITE)
-                            .size()
-                            .x
-                            + ui.spacing().button_padding.x * 2.0
-                    };
-                    let row_width = button_width(ui, COPY_LABEL)
-                        + button_width(ui, CONTINUE_LABEL)
-                        + ui.spacing().item_spacing.x;
-
-                    let mut copy_clicked = false;
-                    let mut continue_clicked = false;
-                    ui.horizontal(|ui| {
-                        ui.add_space(((ui.available_width() - row_width) / 2.0).max(0.0));
-                        copy_clicked = ui.button(COPY_LABEL).clicked();
-                        continue_clicked = ui.button(CONTINUE_LABEL).clicked();
-                    });
-                    if copy_clicked {
-                        if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                            let _ = clipboard.set_text(crate::config::UPDATE_DOWNLOAD_URL);
+                    let copy_label = format!("📋 {}", t!("update_notice.copy_link"));
+                    match centered_buttons(ui, &[(&copy_label, true), (&t!("common.continue"), true)]) {
+                        Some(0) => {
+                            if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                let _ = clipboard.set_text(crate::config::UPDATE_DOWNLOAD_URL);
+                            }
                         }
-                    }
-                    if continue_clicked {
-                        self.update_notice_dismissed = true;
+                        Some(_) => self.update_notice_dismissed = true,
+                        None => {}
                     }
                     ui.add_space(4.0);
                 });
             });
     }
+}
+
+/// A row of buttons centred in the available width, as `(label, enabled)`.
+/// Returns the index of the button clicked this frame.
+///
+/// egui lays a row out from the cursor, and main_align only aligns content
+/// *inside* a widget (text in a button), so a row of widgets is centred by
+/// measuring it and padding. A Button is its text galley plus button_padding
+/// each side. Measuring the actual labels keeps the row centred whatever their
+/// length, which a translation changes; two columns that each hug the middle
+/// only centre the pair when both labels happen to be the same width.
+fn centered_buttons(ui: &mut egui::Ui, buttons: &[(&str, bool)]) -> Option<usize> {
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let padding = ui.spacing().button_padding.x * 2.0;
+    let gaps = buttons.len().saturating_sub(1) as f32 * ui.spacing().item_spacing.x;
+    let row_width = gaps
+        + buttons
+            .iter()
+            .map(|(label, _)| {
+                ui.painter()
+                    .layout_no_wrap(label.to_string(), font.clone(), egui::Color32::WHITE)
+                    .size()
+                    .x
+                    + padding
+            })
+            .sum::<f32>();
+
+    let mut clicked = None;
+    ui.horizontal(|ui| {
+        ui.add_space(((ui.available_width() - row_width) / 2.0).max(0.0));
+        for (idx, (label, enabled)) in buttons.iter().enumerate() {
+            if ui.add_enabled(*enabled, egui::Button::new(*label)).clicked() {
+                clicked = Some(idx);
+            }
+        }
+    });
+    clicked
 }
