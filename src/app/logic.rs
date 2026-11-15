@@ -1018,6 +1018,12 @@ impl InstallerApp {
                             single_card = Some(SingleCard { spruce_dir: dir, rootfs_bytes: gib << 30 });
                         }
                         Err(e) => {
+                            if e.contains("paused") {
+                                log("Download paused - progress saved");
+                                let _ = state_tx_clone.send(AppState::Idle);
+                                let _ = drive_poll_tx_clone.send(true);
+                                return;
+                            }
                             for path in &download_files {
                                 remove_download(path).await;
                             }
@@ -1795,7 +1801,9 @@ async fn fetch_spruce_for_single_card(
     let files = asset_file_paths(&asset, temp_dir);
     let dir = temp_dir.join(format!("{}_single_card", TEMP_PREFIX));
     if let Err(e) = unpack_spruce(&asset, tag, temp_dir, &dir, progress, ctx, cancel_token, pause_token).await {
-        remove_temp(&files, Some(&dir)).await;
+        if !e.contains("paused") {
+            remove_temp(&files, Some(&dir)).await;
+        }
         return Err(e);
     }
     Ok((dir, files))
