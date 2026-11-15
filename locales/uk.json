@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "Скасувати",
+  "common.continue": "Продовжити",
+  "common.close": "Закрити",
+  "common.ok": "ОК",
+
+  "main.install": "Встановити",
+  "main.resume": "Продовжити",
+  "main.pause": "Пауза",
+  "main.partial_download": "(виявлено частково завантажений файл)",
+  "main.no_sd_card": "Немає SD-картки",
+  "main.select_drive": "Виберіть диск",
+  "main.refresh_drives": "Оновити список дисків",
+  "main.toggle_log": "Показати/сховати журнал",
+  "main.update_mode": "Оновити наявне встановлення (без форматування)",
+  "main.preserve_data": "Зберегти дані користувача",
+  "main.newer_version": "Доступна %{version}",
+
+  "select_asset.heading": "Виберіть файл для встановлення:",
+
+  "update_preview.heading": "Попередній перегляд оновлення",
+  "update_preview.deleted_dirs": "Буде видалено такі папки:",
+  "update_preview.preserved": "Буде збережено такі дані користувача:",
+  "update_preview.preserved_retroarch": "Налаштування та оверлеї RetroArch",
+  "update_preview.preserved_emulators": "Збереження та налаштування емуляторів",
+  "update_preview.preserved_syncthing": "Налаштування Syncthing і ключі SSH",
+  "update_preview.preserved_spruce": "Налаштування Spruce і резервні копії тем",
+  "update_preview.preserve_disabled": "Збереження даних користувача вимкнено.",
+  "update_preview.customizations_lost": "Налаштування емуляторів, RetroArch та інші зміни користувача\nу видалених папках буде втрачено.",
+  "update_preview.still_kept": "Папки Roms, BIOS і Saves однаково буде збережено.",
+
+  "confirm.warning": "УВАГА",
+  "confirm.update_deletes_dirs": "Вибрані папки буде видалено.",
+  "confirm.update_question": "Продовжити оновлення?",
+  "confirm.erase_warning": "УСІ ДАНІ на вибраному диску буде ВИДАЛЕНО:",
+  "confirm.erase_question": "Ви впевнені, що хочете продовжити?",
+  "confirm.yes_update": "Так, оновити",
+  "confirm.yes_install": "Так, встановити",
+
+  "complete.title": "ГОТОВО",
+  "complete.message": "%{name} успішно встановлено.",
+  "complete.eject": "Безпечно вилучити",
+
+  "eject.ejecting": "Вилучення SD-картки...",
+  "eject.ejected": "SD-картку вилучено!",
+  "eject.safe_to_remove": "Тепер її можна безпечно вийняти.",
+
+  "error.title": "ПОМИЛКА",
+  "error.message": "Не вдалося встановити %{name}.",
+  "error.check_log": "Подробиці дивіться в журналі.",
+
+  "scraper.title": "Завантажити обкладинки",
+  "scraper.selected_drive": "Вибраний диск: %{drive}",
+  "scraper.roms_path": "Roms: %{path}",
+  "scraper.select_all": "Вибрати все",
+  "scraper.deselect_all": "Зняти вибір",
+  "scraper.no_folders": "Не знайдено підтримуваних папок з ROM.",
+  "scraper.complete": "Завантаження обкладинок завершено!",
+  "scraper.total": "Усього: %{count}",
+  "scraper.downloaded": "Завантажено: %{count}",
+  "scraper.skipped": "Пропущено (уже є): %{count}",
+  "scraper.failed": "Помилок: %{count}",
+  "scraper.start": "Почати завантаження",
+
+  "log.title": "Журнал налагодження",
+  "log.close": "Закрити журнал",
+  "log.copy": "Копіювати в буфер обміну",
+  "log.file": "Журнал: %{file}",
+  "log.read_failed": "Не вдалося прочитати файл журналу: %{error}",
+
+  "update_notice.title": "Доступне оновлення",
+  "update_notice.message": "Вийшла %{latest}. У вас v%{current}.",
+  "update_notice.get_latest": "Завантажте найновішу версію:",
+  "update_notice.copy_link": "Копіювати посилання"
+}

@@ -270,7 +270,7 @@ Works identically on Windows, Linux, and macOS with no configuration needed.
 
 ## Translations
 
-The installer's UI follows the system language when a translation exists, and falls back to English otherwise. Bundled: English (`en`), Catalan (`ca`), German (`de`), Spanish (`es`), French (`fr`), Italian (`it`), Japanese (`ja`), Korean (`ko`), Brazilian Portuguese (`pt`), Russian (`ru`) and Simplified Chinese (`zh`).
+The installer's UI follows the system language when a translation exists, and falls back to English otherwise. Bundled: Catalan (`ca`), Dutch (`nl`), English (`en`), French (`fr`), German (`de`), Italian (`it`), Japanese (`ja`), Korean (`ko`), Polish (`pl`), Brazilian Portuguese (`pt`), Russian (`ru`), Simplified Chinese (`zh`), Spanish (`es`), Turkish (`tr`) and Ukrainian (`uk`).
 
 - UI text lives in `locales/<code>.json`, with `locales/en.json` as the reference. Code looks it up with `t!("key")`, or `t!("key", name = value)` for `%{name}` placeholders.
 - **Adding a language:** copy `locales/en.json` to `locales/<code>.json` (two-letter ISO 639-1 code, e.g. `es`, `fr`) and translate the values. Keep every `%{placeholder}` and `\n` line break; `cargo test` checks both, and that no key is missing or extra.

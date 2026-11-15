@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "Anuluj",
+  "common.continue": "Dalej",
+  "common.close": "Zamknij",
+  "common.ok": "OK",
+
+  "main.install": "Zainstaluj",
+  "main.resume": "Wznów",
+  "main.pause": "Wstrzymaj",
+  "main.partial_download": "(wykryto częściowo pobrany plik)",
+  "main.no_sd_card": "Brak karty SD",
+  "main.select_drive": "Wybierz dysk",
+  "main.refresh_drives": "Odśwież listę dysków",
+  "main.toggle_log": "Pokaż/ukryj dziennik",
+  "main.update_mode": "Zaktualizuj istniejącą instalację (bez formatowania)",
+  "main.preserve_data": "Zachowaj dane użytkownika",
+  "main.newer_version": "Dostępna jest %{version}",
+
+  "select_asset.heading": "Wybierz plik do zainstalowania:",
+
+  "update_preview.heading": "Podgląd aktualizacji",
+  "update_preview.deleted_dirs": "Następujące foldery zostaną usunięte:",
+  "update_preview.preserved": "Następujące dane użytkownika zostaną zachowane:",
+  "update_preview.preserved_retroarch": "Konfiguracja i nakładki RetroArch",
+  "update_preview.preserved_emulators": "Zapisy i ustawienia emulatorów",
+  "update_preview.preserved_syncthing": "Konfiguracja Syncthing i klucze SSH",
+  "update_preview.preserved_spruce": "Konfiguracja Spruce i kopie zapasowe motywów",
+  "update_preview.preserve_disabled": "Zachowywanie danych użytkownika jest wyłączone.",
+  "update_preview.customizations_lost": "Konfiguracje emulatorów, ustawienia RetroArch i inne dostosowania\nw usuwanych folderach zostaną utracone.",
+  "update_preview.still_kept": "Foldery Roms, BIOS i Saves i tak zostaną zachowane.",
+
+  "confirm.warning": "OSTRZEŻENIE",
+  "confirm.update_deletes_dirs": "Wybrane foldery zostaną usunięte.",
+  "confirm.update_question": "Kontynuować aktualizację?",
+  "confirm.erase_warning": "Spowoduje to USUNIĘCIE WSZYSTKICH DANYCH z wybranego dysku:",
+  "confirm.erase_question": "Czy na pewno chcesz kontynuować?",
+  "confirm.yes_update": "Tak, zaktualizuj",
+  "confirm.yes_install": "Tak, zainstaluj",
+
+  "complete.title": "SUKCES",
+  "complete.message": "Instalacja %{name} zakończyła się pomyślnie.",
+  "complete.eject": "Bezpiecznie wysuń",
+
+  "eject.ejecting": "Wysuwanie karty SD...",
+  "eject.ejected": "Karta SD została wysunięta!",
+  "eject.safe_to_remove": "Możesz ją teraz bezpiecznie wyjąć.",
+
+  "error.title": "BŁĄD",
+  "error.message": "Instalacja %{name} nie powiodła się.",
+  "error.check_log": "Szczegóły znajdziesz w dzienniku.",
+
+  "scraper.title": "Pobierz okładki",
+  "scraper.selected_drive": "Wybrany dysk: %{drive}",
+  "scraper.roms_path": "Roms: %{path}",
+  "scraper.select_all": "Zaznacz wszystko",
+  "scraper.deselect_all": "Odznacz wszystko",
+  "scraper.no_folders": "Nie znaleziono obsługiwanych folderów ROM.",
+  "scraper.complete": "Pobieranie okładek zakończone!",
+  "scraper.total": "Razem: %{count}",
+  "scraper.downloaded": "Pobrano: %{count}",
+  "scraper.skipped": "Pominięto (już istniały): %{count}",
+  "scraper.failed": "Błędy: %{count}",
+  "scraper.start": "Rozpocznij pobieranie",
+
+  "log.title": "Dziennik debugowania",
+  "log.close": "Zamknij dziennik",
+  "log.copy": "Kopiuj do schowka",
+  "log.file": "Dziennik: %{file}",
+  "log.read_failed": "Nie udało się odczytać pliku dziennika: %{error}",
+
+  "update_notice.title": "Dostępna aktualizacja",
+  "update_notice.message": "Dostępna jest %{latest}. Masz v%{current}.",
+  "update_notice.get_latest": "Pobierz najnowszą wersję:",
+  "update_notice.copy_link": "Kopiuj link"
+}

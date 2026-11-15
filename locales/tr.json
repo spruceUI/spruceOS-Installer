@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "İptal",
+  "common.continue": "Devam",
+  "common.close": "Kapat",
+  "common.ok": "Tamam",
+
+  "main.install": "Yükle",
+  "main.resume": "Sürdür",
+  "main.pause": "Duraklat",
+  "main.partial_download": "(yarım kalmış indirme algılandı)",
+  "main.no_sd_card": "SD kart yok",
+  "main.select_drive": "Sürücü seç",
+  "main.refresh_drives": "Sürücü listesini yenile",
+  "main.toggle_log": "Günlüğü göster/gizle",
+  "main.update_mode": "Mevcut kurulumu güncelle (biçimlendirmeden)",
+  "main.preserve_data": "Kullanıcı verilerini koru",
+  "main.newer_version": "%{version} mevcut",
+
+  "select_asset.heading": "Yüklenecek dosyayı seçin:",
+
+  "update_preview.heading": "Güncelleme önizlemesi",
+  "update_preview.deleted_dirs": "Aşağıdaki klasörler silinecek:",
+  "update_preview.preserved": "Aşağıdaki kullanıcı verileri korunacak:",
+  "update_preview.preserved_retroarch": "RetroArch ayarları ve kaplamaları",
+  "update_preview.preserved_emulators": "Emülatör kayıtları ve ayarları",
+  "update_preview.preserved_syncthing": "Syncthing ayarları ve SSH anahtarları",
+  "update_preview.preserved_spruce": "Spruce ayarları ve tema yedekleri",
+  "update_preview.preserve_disabled": "Kullanıcı verilerini koruma kapalı.",
+  "update_preview.customizations_lost": "Silinen klasörlerdeki emülatör ayarları, RetroArch ayarları ve diğer\nkişiselleştirmeler kaybolacak.",
+  "update_preview.still_kept": "Roms, BIOS ve Saves klasörleri yine de korunacak.",
+
+  "confirm.warning": "UYARI",
+  "confirm.update_deletes_dirs": "Seçilen klasörler silinecek.",
+  "confirm.update_question": "Güncellemeye devam edilsin mi?",
+  "confirm.erase_warning": "Bu işlem seçilen sürücüdeki TÜM VERİLERİ SİLECEK:",
+  "confirm.erase_question": "Devam etmek istediğinizden emin misiniz?",
+  "confirm.yes_update": "Evet, güncelle",
+  "confirm.yes_install": "Evet, yükle",
+
+  "complete.title": "BAŞARILI",
+  "complete.message": "%{name} başarıyla yüklendi.",
+  "complete.eject": "Güvenle çıkar",
+
+  "eject.ejecting": "SD kart çıkarılıyor...",
+  "eject.ejected": "SD kart çıkarıldı!",
+  "eject.safe_to_remove": "Kartı artık güvenle yerinden alabilirsiniz.",
+
+  "error.title": "BAŞARISIZ",
+  "error.message": "%{name} yüklenemedi.",
+  "error.check_log": "Ayrıntılar için günlüğe bakın.",
+
+  "scraper.title": "Kapak resimlerini indir",
+  "scraper.selected_drive": "Seçilen sürücü: %{drive}",
+  "scraper.roms_path": "Roms: %{path}",
+  "scraper.select_all": "Tümünü seç",
+  "scraper.deselect_all": "Seçimi kaldır",
+  "scraper.no_folders": "Desteklenen ROM klasörü bulunamadı.",
+  "scraper.complete": "Kapak indirme tamamlandı!",
+  "scraper.total": "Toplam %{count}",
+  "scraper.downloaded": "%{count} indirildi",
+  "scraper.skipped": "%{count} atlandı (zaten vardı)",
+  "scraper.failed": "%{count} başarısız",
+  "scraper.start": "İndirmeyi başlat",
+
+  "log.title": "Hata ayıklama günlüğü",
+  "log.close": "Günlüğü kapat",
+  "log.copy": "Panoya kopyala",
+  "log.file": "Günlük: %{file}",
+  "log.read_failed": "Günlük dosyası okunamadı: %{error}",
+
+  "update_notice.title": "Güncelleme mevcut",
+  "update_notice.message": "%{latest} çıktı. Sizdeki sürüm v%{current}.",
+  "update_notice.get_latest": "En son sürümü indirin:",
+  "update_notice.copy_link": "Bağlantıyı kopyala"
+}

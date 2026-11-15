@@ -1,0 +1,77 @@
+{
+  "_version": 1,
+
+  "common.cancel": "Annuleren",
+  "common.continue": "Doorgaan",
+  "common.close": "Sluiten",
+  "common.ok": "OK",
+
+  "main.install": "Installeren",
+  "main.resume": "Hervatten",
+  "main.pause": "Pauzeren",
+  "main.partial_download": "(gedeeltelijke download gevonden)",
+  "main.no_sd_card": "Geen SD-kaart",
+  "main.select_drive": "Kies een station",
+  "main.refresh_drives": "Lijst met stations vernieuwen",
+  "main.toggle_log": "Logboek tonen/verbergen",
+  "main.update_mode": "Bestaande installatie bijwerken (niet formatteren)",
+  "main.preserve_data": "Gebruikersgegevens behouden",
+  "main.newer_version": "%{version} beschikbaar",
+
+  "select_asset.heading": "Kies het bestand dat je wilt installeren:",
+
+  "update_preview.heading": "Voorbeeld van de update",
+  "update_preview.deleted_dirs": "De volgende mappen worden verwijderd:",
+  "update_preview.preserved": "De volgende gebruikersgegevens blijven behouden:",
+  "update_preview.preserved_retroarch": "RetroArch-instellingen en overlays",
+  "update_preview.preserved_emulators": "Opgeslagen spellen en instellingen van emulators",
+  "update_preview.preserved_syncthing": "Syncthing-instellingen en SSH-sleutels",
+  "update_preview.preserved_spruce": "Spruce-instellingen en back-ups van thema's",
+  "update_preview.preserve_disabled": "Het behouden van gebruikersgegevens staat uit.",
+  "update_preview.customizations_lost": "Emulatorinstellingen, RetroArch-instellingen en andere aanpassingen\nin de verwijderde mappen gaan verloren.",
+  "update_preview.still_kept": "De mappen Roms, BIOS en Saves blijven wel behouden.",
+
+  "confirm.warning": "WAARSCHUWING",
+  "confirm.update_deletes_dirs": "De geselecteerde mappen worden verwijderd.",
+  "confirm.update_question": "Doorgaan met de update?",
+  "confirm.erase_warning": "Hiermee worden ALLE GEGEVENS op het geselecteerde station GEWIST:",
+  "confirm.erase_question": "Weet je zeker dat je wilt doorgaan?",
+  "confirm.yes_update": "Ja, bijwerken",
+  "confirm.yes_install": "Ja, installeren",
+
+  "complete.title": "GELUKT",
+  "complete.message": "%{name} is geïnstalleerd.",
+  "complete.eject": "Veilig uitwerpen",
+
+  "eject.ejecting": "SD-kaart wordt uitgeworpen...",
+  "eject.ejected": "SD-kaart uitgeworpen!",
+  "eject.safe_to_remove": "Je kunt hem nu veilig verwijderen.",
+
+  "error.title": "MISLUKT",
+  "error.message": "Installatie van %{name} is mislukt.",
+  "error.check_log": "Bekijk het logboek voor details.",
+
+  "scraper.title": "Hoesafbeeldingen downloaden",
+  "scraper.selected_drive": "Geselecteerd station: %{drive}",
+  "scraper.roms_path": "Roms: %{path}",
+  "scraper.select_all": "Alles selecteren",
+  "scraper.deselect_all": "Alles deselecteren",
+  "scraper.no_folders": "Geen ondersteunde ROM-mappen gevonden.",
+  "scraper.complete": "Hoesafbeeldingen gedownload!",
+  "scraper.total": "%{count} in totaal",
+  "scraper.downloaded": "%{count} gedownload",
+  "scraper.skipped": "%{count} overgeslagen (bestonden al)",
+  "scraper.failed": "%{count} mislukt",
+  "scraper.start": "Downloaden starten",
+
+  "log.title": "Foutopsporingslogboek",
+  "log.close": "Logboek sluiten",
+  "log.copy": "Kopiëren naar klembord",
+  "log.file": "Logboek: %{file}",
+  "log.read_failed": "Kan logbestand niet lezen: %{error}",
+
+  "update_notice.title": "Update beschikbaar",
+  "update_notice.message": "%{latest} is uit. Jij hebt v%{current}.",
+  "update_notice.get_latest": "Download de nieuwste versie:",
+  "update_notice.copy_link": "Link kopiëren"
+}
