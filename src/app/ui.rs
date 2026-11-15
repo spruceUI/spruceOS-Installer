@@ -774,18 +774,14 @@ impl eframe::App for InstallerApp {
 
                         // Select All / Deselect All buttons
                         if !self.scraper_folders.is_empty() && !matches!(self.state, AppState::ScrapingBoxart) && self.scraper_stats.is_none() {
-                            ui.horizontal(|ui| {
-                                if ui.button(t!("scraper.select_all")).clicked() {
-                                    for folder in &mut self.scraper_folders {
-                                        folder.1 = true;
-                                    }
+                            let select_all = t!("scraper.select_all");
+                            let deselect_all = t!("scraper.deselect_all");
+                            if let Some(clicked) = centered_buttons(ui, &[(&select_all, true), (&deselect_all, true)]) {
+                                let selected = clicked == 0;
+                                for folder in &mut self.scraper_folders {
+                                    folder.1 = selected;
                                 }
-                                if ui.button(t!("scraper.deselect_all")).clicked() {
-                                    for folder in &mut self.scraper_folders {
-                                        folder.1 = false;
-                                    }
-                                }
-                            });
+                            }
                             ui.add_space(4.0);
 
                             // Scrollable checkbox list
@@ -852,46 +848,27 @@ impl eframe::App for InstallerApp {
                                         std::path::Path::new(&self.scraper_roms_path).exists() &&
                                         has_selection;
 
-                        ui.columns(2, |columns| {
-                            columns[0].allocate_ui_with_layout(
-                                egui::Vec2::ZERO,
-                                egui::Layout::right_to_left(egui::Align::Center),
-                                |ui| {
-                                    if is_scraping {
-                                        // Show Cancel button during scraping
-                                        if ui.button(t!("common.cancel")).clicked() {
-                                            self.cancel_installation();
-                                        }
-                                    } else if self.scraper_stats.is_some() {
-                                        // Show Close button when complete
-                                        if ui.button(t!("common.close")).clicked() {
-                                            self.show_scraper_window = false;
-                                            self.scraper_stats = None;
-                                            self.state = AppState::Idle;
-                                        }
-                                    } else {
-                                        // Show Cancel button before scraping
-                                        if ui.button(t!("common.cancel")).clicked() {
-                                            self.show_scraper_window = false;
-                                        }
-                                    }
-                                },
-                            );
-
-                            columns[1].allocate_ui_with_layout(
-                                egui::Vec2::ZERO,
-                                egui::Layout::left_to_right(egui::Align::Center),
-                                |ui| {
-                                    if !is_scraping && self.scraper_stats.is_none() {
-                                        ui.add_enabled_ui(path_valid, |ui| {
-                                            if ui.button(t!("scraper.start")).clicked() {
-                                                self.start_boxart_scraping(ctx.clone());
-                                            }
-                                        });
-                                    }
-                                },
-                            );
-                        });
+                        let cancel = t!("common.cancel");
+                        if is_scraping {
+                            // Cancel during scraping
+                            if centered_buttons(ui, &[(&cancel, true)]).is_some() {
+                                self.cancel_installation();
+                            }
+                        } else if self.scraper_stats.is_some() {
+                            // Close when complete
+                            if centered_buttons(ui, &[(&t!("common.close"), true)]).is_some() {
+                                self.show_scraper_window = false;
+                                self.scraper_stats = None;
+                                self.state = AppState::Idle;
+                            }
+                        } else {
+                            // Cancel or start before scraping
+                            match centered_buttons(ui, &[(&cancel, true), (&t!("scraper.start"), path_valid)]) {
+                                Some(0) => self.show_scraper_window = false,
+                                Some(_) => self.start_boxart_scraping(ctx.clone()),
+                                None => {}
+                            }
+                        }
 
                         ui.add_space(8.0);
                     });
@@ -1495,41 +1472,55 @@ impl InstallerApp {
                     // here" leaves the user with nothing to copy.
                     ui.hyperlink(crate::config::UPDATE_DOWNLOAD_URL);
                     ui.add_space(8.0);
-                    // egui lays a row out from the cursor, and main_align only
-                    // aligns content *inside* a widget (text in a button), so a
-                    // row of widgets is centred by measuring it and padding.
-                    // A Button is its text galley plus button_padding each side.
                     let copy_label = format!("📋 {}", t!("update_notice.copy_link"));
-                    let continue_label = t!("common.continue");
-                    let font = egui::TextStyle::Button.resolve(ui.style());
-                    let button_width = |ui: &egui::Ui, label: &str| {
-                        ui.painter()
-                            .layout_no_wrap(label.to_owned(), font.clone(), egui::Color32::WHITE)
-                            .size()
-                            .x
-                            + ui.spacing().button_padding.x * 2.0
-                    };
-                    let row_width = button_width(ui, &copy_label)
-                        + button_width(ui, &continue_label)
-                        + ui.spacing().item_spacing.x;
-
-                    let mut copy_clicked = false;
-                    let mut continue_clicked = false;
-                    ui.horizontal(|ui| {
-                        ui.add_space(((ui.available_width() - row_width) / 2.0).max(0.0));
-                        copy_clicked = ui.button(&copy_label).clicked();
-                        continue_clicked = ui.button(&*continue_label).clicked();
-                    });
-                    if copy_clicked {
-                        if let Ok(mut clipboard) = arboard::Clipboard::new() {
-                            let _ = clipboard.set_text(crate::config::UPDATE_DOWNLOAD_URL);
+                    match centered_buttons(ui, &[(&copy_label, true), (&t!("common.continue"), true)]) {
+                        Some(0) => {
+                            if let Ok(mut clipboard) = arboard::Clipboard::new() {
+                                let _ = clipboard.set_text(crate::config::UPDATE_DOWNLOAD_URL);
+                            }
                         }
-                    }
-                    if continue_clicked {
-                        self.update_notice_dismissed = true;
+                        Some(_) => self.update_notice_dismissed = true,
+                        None => {}
                     }
                     ui.add_space(4.0);
                 });
             });
     }
+}
+
+/// A row of buttons centred in the available width, as `(label, enabled)`.
+/// Returns the index of the button clicked this frame.
+///
+/// egui lays a row out from the cursor, and main_align only aligns content
+/// *inside* a widget (text in a button), so a row of widgets is centred by
+/// measuring it and padding. A Button is its text galley plus button_padding
+/// each side. Measuring the actual labels keeps the row centred whatever their
+/// length, which a translation changes; two columns that each hug the middle
+/// only centre the pair when both labels happen to be the same width.
+fn centered_buttons(ui: &mut egui::Ui, buttons: &[(&str, bool)]) -> Option<usize> {
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    let padding = ui.spacing().button_padding.x * 2.0;
+    let gaps = buttons.len().saturating_sub(1) as f32 * ui.spacing().item_spacing.x;
+    let row_width = gaps
+        + buttons
+            .iter()
+            .map(|(label, _)| {
+                ui.painter()
+                    .layout_no_wrap(label.to_string(), font.clone(), egui::Color32::WHITE)
+                    .size()
+                    .x
+                    + padding
+            })
+            .sum::<f32>();
+
+    let mut clicked = None;
+    ui.horizontal(|ui| {
+        ui.add_space(((ui.available_width() - row_width) / 2.0).max(0.0));
+        for (idx, (label, enabled)) in buttons.iter().enumerate() {
+            if ui.add_enabled(*enabled, egui::Button::new(*label)).clicked() {
+                clicked = Some(idx);
+            }
+        }
+    });
+    clicked
 }
