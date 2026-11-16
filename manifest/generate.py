@@ -24,6 +24,7 @@ SOURCES = [
             "_G350_": "G350",
             "_XUMINI_": "MagicX XU Mini M",
             "_RG353M_": "Anbernic RG353M",
+            "_E5PLUS_": "GameMT E5 Plus",
         },
         "aliases": {"_RGB30_": {"_RGB20SX_": "Powkiddy RGB20SX"}},
         "note": "Debian base for TF1; spruceOS goes on TF2",
