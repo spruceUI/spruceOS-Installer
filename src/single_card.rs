@@ -32,6 +32,16 @@ pub enum Placement {
     At(u64),
 }
 
+impl Placement {
+    /// Card bytes before SPRUCEOS; AfterRootfs allows 256 MiB for the partitions ahead of the rootfs.
+    pub fn bytes_before(&self) -> u64 {
+        match *self {
+            Placement::AfterRootfs(bytes) => bytes + (256 << 20),
+            Placement::At(sector) => sector * SECTOR,
+        }
+    }
+}
+
 pub struct SingleCard {
     pub spruce_dir: PathBuf,
     pub placement: Placement,

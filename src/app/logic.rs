@@ -1046,11 +1046,11 @@ impl InstallerApp {
                     #[cfg(not(target_os = "windows"))]
                     {
                         if let Some(card) = &single_card {
-                            let needed = (gib << 30) + 256 * 1024 * 1024
+                            let needed = card.placement.bytes_before()
                                 + crate::single_card::space_needed(&card.spruce_dir).unwrap_or(0);
                             if drive.size_bytes < needed {
                                 log(&format!(
-                                    "This card is too small for dArkMoss and spruceOS together: {:.1} GB needed",
+                                    "This card is too small for the base image and spruceOS together: {:.1} GB needed",
                                     needed as f64 / 1e9
                                 ));
                                 for path in download_files.iter().chain(&spruce_files) {
