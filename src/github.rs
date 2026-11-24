@@ -46,11 +46,26 @@ pub struct Asset {
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub single_card_rootfs_gib: Option<u64>,
 
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub single_card_start_mib: Option<u64>,
+
     /// Volumes of a multi-part archive, in order. Empty for an ordinary
     /// single-file asset. Never present in a GitHub API response or a
     /// manifest -- `group_multipart_assets` fills this in after filtering.
     #[serde(skip)]
     pub volumes: Vec<AssetVolume>,
+}
+
+impl Asset {
+    /// Where spruce goes on a single-slot device's card, if this is one.
+    pub fn single_card_placement(&self) -> Option<crate::single_card::Placement> {
+        use crate::single_card::Placement;
+        match (self.single_card_start_mib, self.single_card_rootfs_gib) {
+            (Some(mib), _) => Some(Placement::At(mib << 11)),
+            (None, Some(gib)) => Some(Placement::AfterRootfs(gib << 30)),
+            (None, None) => None,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -165,6 +180,7 @@ impl From<crate::manifest::ManifestAsset> for Asset {
             display_name: manifest_asset.display_name,
             devices: manifest_asset.devices,
             single_card_rootfs_gib: manifest_asset.single_card_rootfs_gib,
+            single_card_start_mib: manifest_asset.single_card_start_mib,
             volumes: Vec::new(),
         }
     }
@@ -318,6 +334,7 @@ pub async fn download_asset_group(
             display_name: None,
             devices: None,
             single_card_rootfs_gib: None,
+            single_card_start_mib: None,
             volumes: Vec::new(),
         };
 

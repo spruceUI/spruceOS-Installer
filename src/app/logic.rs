@@ -194,6 +194,7 @@ impl InstallerApp {
                 display_name: first.display_name.clone(),
                 devices: first.devices.clone(),
                 single_card_rootfs_gib: first.single_card_rootfs_gib,
+                single_card_start_mib: first.single_card_start_mib,
                 volumes: parts
                     .iter()
                     .map(|(_, a)| crate::github::AssetVolume {
@@ -511,7 +512,7 @@ impl InstallerApp {
             let is_raw_image = Self::is_raw_image_asset(&asset.name);
 
             // Single-slot device: the latest spruceOS goes on the same card.
-            let spruce_for_card = if asset.single_card_rootfs_gib.is_some() {
+            let spruce_for_card = if asset.single_card_placement().is_some() {
                 match latest_spruce_asset().await {
                     Ok(found) => Some(found),
                     Err(e) => {
@@ -1010,12 +1011,12 @@ impl InstallerApp {
                 // card is touched, then written into its own partition by the burn.
                 let mut single_card = None;
                 let mut spruce_files: Vec<PathBuf> = Vec::new();
-                if let (Some(gib), Some((tag, spruce))) = (asset.single_card_rootfs_gib, spruce_for_card) {
+                if let (Some(placement), Some((tag, spruce))) = (asset.single_card_placement(), spruce_for_card) {
                     log("This device has one card slot: spruceOS goes on the same card");
                     match fetch_spruce_for_single_card(tag, spruce, &temp_dir, progress.clone(), ctx_clone.clone(), cancel_token_clone.clone(), pause_token_clone.clone()).await {
                         Ok((dir, files)) => {
                             spruce_files = files;
-                            single_card = Some(SingleCard { spruce_dir: dir, rootfs_bytes: gib << 30 });
+                            single_card = Some(SingleCard { spruce_dir: dir, placement });
                         }
                         Err(e) => {
                             if e.contains("paused") {
@@ -1045,11 +1046,11 @@ impl InstallerApp {
                     #[cfg(not(target_os = "windows"))]
                     {
                         if let Some(card) = &single_card {
-                            let needed = (gib << 30) + 256 * 1024 * 1024
+                            let needed = card.placement.bytes_before()
                                 + crate::single_card::space_needed(&card.spruce_dir).unwrap_or(0);
                             if drive.size_bytes < needed {
                                 log(&format!(
-                                    "This card is too small for dArkMoss and spruceOS together: {:.1} GB needed",
+                                    "This card is too small for the base image and spruceOS together: {:.1} GB needed",
                                     needed as f64 / 1e9
                                 ));
                                 for path in download_files.iter().chain(&spruce_files) {

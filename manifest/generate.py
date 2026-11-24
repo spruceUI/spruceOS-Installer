@@ -59,8 +59,17 @@ SOURCES = [
         "repo": "spruceUI/oakMOSS",
         "os": "oakMOSS",
         "match": r"-sd1\.img\.xz$",
-        "devices": {"-zero28-": "MagicX Zero 28", "-zero40-": "MagicX Zero 40", "-xu20-": "MagicX XU20"},
+        "devices": {
+            "-zero28-": "MagicX Zero 28",
+            "-zero40-": "MagicX Zero 40",
+            "-xu20-": "MagicX XU20",
+            "-brick-": "TrimUI Brick (oakMOSS)",
+        },
         "note": "SD1 base image; the spruce card goes in SD2",
+        # One card slot: oakMOSS's first boot keeps a SPRUCEOS partition that
+        # starts 2 GiB into the card (oakMOSS docs/cards.md).
+        "single_card_start_mib": {"-brick-": 2048},
+        "single_card_note": "installer 2.0.5 or newer adds spruceOS to this card. Older installers: do a first boot, then copy spruceOS to the SPRUCEOS partition",
     },
 ]
 
@@ -91,7 +100,8 @@ def main():
                 if key in name:
                     entries += [(name.replace(key, alias), label) for alias, label in aliases.items()]
             rootfs_gib = source.get("single_card", {}).get(match_key)
-            if rootfs_gib:
+            start_mib = source.get("single_card_start_mib", {}).get(match_key)
+            if rootfs_gib or start_mib:
                 note = source["single_card_note"]
             for entry_name, label in entries:
                 entry = {
@@ -103,6 +113,8 @@ def main():
                 }
                 if rootfs_gib:
                     entry["single_card_rootfs_gib"] = rootfs_gib
+                if start_mib:
+                    entry["single_card_start_mib"] = start_mib
                 assets.append(entry)
     assets.sort(key=lambda a: (a["display_name"], a["name"]))
     manifest = {"version": "1.0", "display_name": "TF1 image", "assets": assets}
