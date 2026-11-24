@@ -46,4 +46,10 @@ pub struct ManifestAsset {
     /// behind a rootfs of this many GiB (where the image's firstboot expects it)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub single_card_rootfs_gib: Option<u64>,
+
+    /// Single-slot device whose first boot keeps a SPRUCEOS partition starting
+    /// at this many MiB into the card (oakMOSS: 2048). Takes the place of
+    /// single_card_rootfs_gib
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub single_card_start_mib: Option<u64>,
 }

@@ -4,8 +4,8 @@
 // Single-slot devices: after the base image is burned, add a FAT32 SPRUCEOS
 // partition behind the rootfs and copy spruce into it, all through the raw
 // device handle the burn already holds. The partition sits where the image's
-// firstboot would put it (rootfs start + rootfs size, 1 MiB aligned); firstboot
-// then grows the rootfs up to it and leaves it alone.
+// first boot expects it and leaves it alone: dArkMoss grows its rootfs up to
+// rootfs start + rootfs size (1 MiB aligned), oakMOSS keeps one at 2 GiB.
 
 use std::collections::HashMap;
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -25,9 +25,16 @@ const GPT_BASIC_DATA: [u8; 16] = [
     0xA2, 0xA0, 0xD0, 0xEB, 0xE5, 0xB9, 0x33, 0x44, 0x87, 0xC0, 0x68, 0xB6, 0xB7, 0x26, 0x99, 0xC7,
 ];
 
+pub enum Placement {
+    /// This many bytes past the start of the last partition (the rootfs)
+    AfterRootfs(u64),
+    /// This sector, which every partition of the image must end before
+    At(u64),
+}
+
 pub struct SingleCard {
     pub spruce_dir: PathBuf,
-    pub rootfs_bytes: u64,
+    pub placement: Placement,
 }
 
 fn read_at<D: Read + Seek>(dev: &mut D, offset: u64, len: usize) -> io::Result<Vec<u8>> {
@@ -54,6 +61,15 @@ fn align_up(sector: u64) -> u64 {
     (sector + ALIGN_SECTORS - 1) / ALIGN_SECTORS * ALIGN_SECTORS
 }
 
+/// Start sector of SPRUCEOS, given the last partition's first and last sector.
+fn place(placement: &Placement, last_first: u64, last_end: u64) -> Result<u64, String> {
+    match *placement {
+        Placement::AfterRootfs(bytes) => Ok(align_up(last_first + bytes / SECTOR)),
+        Placement::At(sector) if sector > last_end => Ok(sector),
+        Placement::At(_) => Err("The burned image reaches past where spruceOS goes".to_string()),
+    }
+}
+
 /// The burned partition table and where the new partition goes.
 enum Table {
     Mbr { mbr: Vec<u8>, slot: usize },
@@ -66,7 +82,7 @@ struct Plan {
     end: u64, // exclusive
 }
 
-fn plan<D: Read + Seek>(dev: &mut D, disk_sectors: u64, rootfs_bytes: u64) -> Result<Plan, String> {
+fn plan<D: Read + Seek>(dev: &mut D, disk_sectors: u64, placement: &Placement) -> Result<Plan, String> {
     let read_err = |e: io::Error| format!("Failed to read the partition table: {}", e);
     let mbr = read_at(dev, 0, SECTOR as usize).map_err(read_err)?;
     if mbr[510] != 0x55 || mbr[511] != 0xAA {
@@ -85,9 +101,9 @@ fn plan<D: Read + Seek>(dev: &mut D, disk_sectors: u64, rootfs_bytes: u64) -> Re
                 last = Some((start, size));
             }
         }
-        let (rootfs_start, _) = last.ok_or("The burned image has no partitions")?;
+        let (rootfs_start, rootfs_size) = last.ok_or("The burned image has no partitions")?;
         let slot = slot.ok_or("The burned image has no free partition slot")?;
-        let start = align_up(rootfs_start + rootfs_bytes / SECTOR);
+        let start = place(placement, rootfs_start, rootfs_start + rootfs_size - 1)?;
         let end = disk_sectors.min(u32::MAX as u64);
         return Ok(Plan { table: Table::Mbr { mbr, slot }, start, end });
     }
@@ -115,9 +131,9 @@ fn plan<D: Read + Seek>(dev: &mut D, disk_sectors: u64, rootfs_bytes: u64) -> Re
             }
         }
     }
-    let (rootfs_start, _) = last.ok_or("The burned image has no partitions")?;
+    let (rootfs_start, rootfs_last) = last.ok_or("The burned image has no partitions")?;
     let slot = slot.ok_or("The burned image has no free partition slot")?;
-    let start = align_up(rootfs_start + rootfs_bytes / SECTOR);
+    let start = place(placement, rootfs_start, rootfs_last)?;
     // Room for the backup entries and header at the end of the card.
     let end = disk_sectors - entries_len / SECTOR - 1;
     Ok(Plan { table: Table::Gpt { mbr, header, entries, slot }, start, end })
@@ -349,7 +365,7 @@ pub fn install<D: Read + Write + Seek>(
 ) -> Result<(), String> {
     crate::debug::log_section("Single-card spruce partition");
     let disk_sectors = disk_bytes / SECTOR;
-    let plan = plan(dev, disk_sectors, card.rootfs_bytes)?;
+    let plan = plan(dev, disk_sectors, &card.placement)?;
     let part_bytes = plan.end.saturating_sub(plan.start) * SECTOR;
     crate::debug::log(&format!(
         "Disk {} sectors; SPRUCEOS at sector {}..{} ({} MB)",
